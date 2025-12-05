@@ -148,3 +148,36 @@ button { font-weight: 700; cursor: pointer; border: none; }
 .status { color: var(--muted); font-size: 13px; }
 @media (max-width: 900px) { .app-layout { grid-template-columns: 1fr; } .sidebar { order: 2; } .content { order: 1; } .panel-grid { grid-template-columns: 1fr; } .content-head { flex-direction: column; } .profile-card { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .auth-card { padding: 22px 18px 0; } .footer-bar { margin: 0 -18px; } }
+/* SIGPAC Integration Styles */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.sigpac-status.success {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.sigpac-status.error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecdd3;
+}
+
+.sigpac-status.info {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+}
+
+.sigpac-badge {
+  display: inline-block;
+  font-size: 12px;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-top: 4px;
+}

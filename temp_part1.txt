@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="es">
 
 <head>
@@ -21,7 +21,7 @@
                 <img src="images/logo-soto.png" alt="Soto del Prior" class="logo" onerror="this.style.display='none'">
                 <h1 class="auth-title">Acceso a Granjas</h1>
                 <div class="tabs">
-                    <button id="loginTab" class="tab active">Iniciar sesiÃ³n</button>
+                    <button id="loginTab" class="tab active">Iniciar sesión</button>
                     <button id="registerTab" class="tab">Crear cuenta</button>
                 </div>
                 <form id="loginForm" class="auth-form">
@@ -30,24 +30,24 @@
                     <label>Usuario
                         <input type="text" id="loginUser" placeholder="gerencia@sotodelprior.com" required>
                     </label>
-                    <label>ContraseÃ±a
+                    <label>Contraseña
                         <input type="password" id="loginPass" placeholder="******" required>
                     </label>
                     <button type="submit" class="primary full">Acceder</button>
                     <label class="remember">
                         <input type="checkbox" id="rememberCheck">
-                        <span>Recordarme (guardar usuario y contraseÃ±a en este navegador)</span>
+                        <span>Recordarme (guardar usuario y contraseña en este navegador)</span>
                     </label>
-                    <a class="link" href="#" onclick="return false;">Â¿Olvidaste la contraseÃ±a?</a>
+                    <a class="link" href="#" onclick="return false;">¿Olvidaste la contraseña?</a>
                 </form>
                 <form id="registerForm" class="auth-form hidden">
                     <label>Usuario
                         <input type="text" id="regUser" placeholder="nuevo usuario" required>
                     </label>
-                    <label>Correo electrÃ³nico
+                    <label>Correo electrónico
                         <input type="email" id="regEmail" placeholder="tu@correo.com" required>
                     </label>
-                    <label>ContraseÃ±a
+                    <label>Contraseña
                         <input type="password" id="regPass" placeholder="crea una clave" required>
                     </label>
                     <button type="submit" class="primary full">Registrarse</button>
@@ -69,16 +69,16 @@
                         </div>
                     </div>
                     <nav class="nav">
-                        <a href="#" class="nav-link active" data-target="home">ðŸ  Inicio</a>
-                        <a href="#" class="nav-link" data-target="animals">ðŸ„ Animales</a>
-                        <a href="#" class="nav-link" data-target="events">ðŸ“… Eventos</a>
-                        <a href="#" class="nav-link" data-target="fcr">ðŸ“Š Calculadora FCR</a>
-                        <a href="#" class="nav-link" data-target="farms">ðŸŒ¾ Fincas</a>
-                        <a href="#" class="nav-link" data-target="reports">ðŸ“„ Reportes</a>
+                        <a href="#" class="nav-link active" data-target="home">🏠 Inicio</a>
+                        <a href="#" class="nav-link" data-target="animals">🐄 Animales</a>
+                        <a href="#" class="nav-link" data-target="events">📅 Eventos</a>
+                        <a href="#" class="nav-link" data-target="fcr">📊 Calculadora FCR</a>
+                        <a href="#" class="nav-link" data-target="farms">🌾 Fincas</a>
+                        <a href="#" class="nav-link" data-target="reports">📄 Reportes</a>
                     </nav>
                     <div class="sidebar-actions">
                         <button class="ghost full" id="profileBtn">Mi perfil</button>
-                        <button class="ghost full" id="logoutBtn">Cerrar sesiÃ³n</button>
+                        <button class="ghost full" id="logoutBtn">Cerrar sesión</button>
                     </div>
                 </aside>
 
@@ -90,7 +90,7 @@
                             <div>
                                 <p class="eyebrow">PANEL DE CONTROL</p>
                                 <h2>Resumen General</h2>
-                                <p class="lede">Vista general de tu operaciÃ³n ganadera</p>
+                                <p class="lede">Vista general de tu operación ganadera</p>
                             </div>
                         </div>
 
@@ -113,14 +113,14 @@
                             <div class="kpi">
                                 <p class="kpi-label">FCR Promedio</p>
                                 <p class="kpi-value" id="stat-fcr">-</p>
-                                <p class="kpi-foot">Ãndice de conversiÃ³n</p>
+                                <p class="kpi-foot">Índice de conversión</p>
                             </div>
                         </div>
 
                         <div class="panel-grid">
                             <div class="card panel-chart">
                                 <div class="card-head">
-                                    <h3>DistribuciÃ³n de Animales</h3>
+                                    <h3>Distribución de Animales</h3>
                                 </div>
                                 <div class="bars">
                                     <div class="bar">
@@ -160,12 +160,12 @@
                         </div>
 
                         <div class="actions-card">
-                            <h3>Acciones RÃ¡pidas</h3>
+                            <h3>Acciones Rápidas</h3>
                             <div class="action-list">
-                                <button class="action-btn" data-action="add-animal">âž• Registrar nuevo animal</button>
-                                <button class="action-btn" data-action="add-event">ðŸ“… Registrar evento</button>
-                                <button class="action-btn" data-action="calc-fcr">ðŸ“Š Calcular FCR</button>
-                                <button class="action-btn" id="action-report">ðŸ“„ Generar reporte</button>
+                                <button class="action-btn" data-action="add-animal">➕ Registrar nuevo animal</button>
+                                <button class="action-btn" data-action="add-event">📅 Registrar evento</button>
+                                <button class="action-btn" data-action="calc-fcr">📊 Calcular FCR</button>
+                                <button class="action-btn" id="action-report">📄 Generar reporte</button>
                             </div>
                         </div>
                     </div>
@@ -174,11 +174,11 @@
                     <div id="animals" class="section hidden">
                         <div class="content-head">
                             <div>
-                                <p class="eyebrow">GESTIÃ“N DE ANIMALES</p>
+                                <p class="eyebrow">GESTIÓN DE ANIMALES</p>
                                 <h2>Inventario de Animales</h2>
                                 <p class="lede">Registro y seguimiento individual</p>
                             </div>
-                            <button class="primary" id="toggleAnimalForm">âž• Nuevo Animal</button>
+                            <button class="primary" id="toggleAnimalForm">➕ Nuevo Animal</button>
                         </div>
 
                         <div class="card farm-card hidden" id="animalFormCard">
@@ -198,7 +198,7 @@
                                 <label>Raza
                                     <select id="animalBreed" required>
                                         <option value="">Selecciona raza</option>
-                                        <option value="AvileÃ±a-Negra IbÃ©rica">AvileÃ±a-Negra IbÃ©rica</option>
+                                        <option value="Avileña-Negra Ibérica">Avileña-Negra Ibérica</option>
                                         <option value="Retinta">Retinta</option>
                                         <option value="Morucha">Morucha</option>
                                         <option value="Lidia">Lidia</option>
@@ -222,7 +222,7 @@
                                     <input type="number" id="animalWeight" placeholder="Ej: 250" step="0.1" required>
                                 </label>
                                 <label>Notas
-                                    <input type="text" id="animalNotes" placeholder="InformaciÃ³n adicional">
+                                    <input type="text" id="animalNotes" placeholder="Información adicional">
                                 </label>
                                 <div class="profile-actions">
                                     <button type="submit" class="primary">Guardar Animal</button>
@@ -271,11 +271,11 @@
                     <div id="events" class="section hidden">
                         <div class="content-head">
                             <div>
-                                <p class="eyebrow">GESTIÃ“N DE EVENTOS</p>
+                                <p class="eyebrow">GESTIÓN DE EVENTOS</p>
                                 <h2>Registro de Eventos</h2>
-                                <p class="lede">Vacunaciones, tratamientos y mÃ¡s</p>
+                                <p class="lede">Vacunaciones, tratamientos y más</p>
                             </div>
-                            <button class="primary" id="toggleEventForm">âž• Nuevo Evento</button>
+                            <button class="primary" id="toggleEventForm">➕ Nuevo Evento</button>
                         </div>
 
                         <div class="card farm-card hidden" id="eventFormCard">
@@ -284,12 +284,12 @@
                                 <label>Tipo de Evento
                                     <select id="eventType" required>
                                         <option value="">Selecciona tipo</option>
-                                        <option value="VacunaciÃ³n">ðŸ’‰ VacunaciÃ³n</option>
-                                        <option value="Tratamiento">ðŸ’Š Tratamiento</option>
-                                        <option value="Parto">ðŸ® Parto</option>
-                                        <option value="Destete">ðŸ¼ Destete</option>
-                                        <option value="Pesaje">âš–ï¸ Pesaje</option>
-                                        <option value="Otro">ðŸ“ Otro</option>
+                                        <option value="Vacunación">💉 Vacunación</option>
+                                        <option value="Tratamiento">💊 Tratamiento</option>
+                                        <option value="Parto">🐮 Parto</option>
+                                        <option value="Destete">🍼 Destete</option>
+                                        <option value="Pesaje">⚖️ Pesaje</option>
+                                        <option value="Otro">📝 Otro</option>
                                     </select>
                                 </label>
                                 <label>Animal
@@ -300,13 +300,13 @@
                                 <label>Fecha
                                     <input type="date" id="eventDate" required>
                                 </label>
-                                <label>DescripciÃ³n
+                                <label>Descripción
                                     <input type="text" id="eventDesc" placeholder="Detalles del evento" required>
                                 </label>
-                                <label>Costo (â‚¬, opcional)
+                                <label>Costo (€, opcional)
                                     <input type="number" id="eventCost" placeholder="0.00" step="0.01">
                                 </label>
-                                <label>PrÃ³xima Fecha (opcional)
+                                <label>Próxima Fecha (opcional)
                                     <input type="date" id="eventNext" placeholder="Para seguimiento">
                                 </label>
                                 <div class="profile-actions">
@@ -324,7 +324,7 @@
                                 <label>Tipo
                                     <select id="filterEventType">
                                         <option value="">Todos los tipos</option>
-                                        <option value="VacunaciÃ³n">VacunaciÃ³n</option>
+                                        <option value="Vacunación">Vacunación</option>
                                         <option value="Tratamiento">Tratamiento</option>
                                         <option value="Parto">Parto</option>
                                         <option value="Destete">Destete</option>
@@ -353,8 +353,8 @@
                         <div class="content-head">
                             <div>
                                 <p class="eyebrow">CALCULADORA</p>
-                                <h2>Ãndice de ConversiÃ³n Alimenticia (FCR)</h2>
-                                <p class="lede">Calcula la eficiencia de conversiÃ³n de alimento</p>
+                                <h2>Índice de Conversión Alimenticia (FCR)</h2>
+                                <p class="lede">Calcula la eficiencia de conversión de alimento</p>
                             </div>
                         </div>
 
@@ -364,7 +364,7 @@
                                 <form id="fcrForm" class="farm-form">
                                     <label>Animal (opcional)
                                         <select id="fcrAnimal">
-                                            <option value="">CÃ¡lculo general</option>
+                                            <option value="">Cálculo general</option>
                                         </select>
                                     </label>
                                     <label>Peso Inicial (kg)
@@ -378,7 +378,7 @@
                                     <label>Alimento Consumido (kg)
                                         <input type="number" id="fcrFeed" placeholder="Ej: 1500" step="0.1" required>
                                     </label>
-                                    <label>DÃ­as de Engorde
+                                    <label>Días de Engorde
                                         <input type="number" id="fcrDays" placeholder="Ej: 180" required>
                                     </label>
                                     <button type="submit" class="primary full">Calcular</button>
@@ -401,7 +401,7 @@
                                     <div class="kpi card-soft">
                                         <p class="kpi-label">Ganancia Diaria Promedio</p>
                                         <p class="kpi-value" id="result-adg">-</p>
-                                        <p class="kpi-foot">kg/dÃ­a</p>
+                                        <p class="kpi-foot">kg/día</p>
                                     </div>
                                     <div class="kpi card-soft">
                                         <p class="kpi-label">Eficiencia</p>
@@ -413,9 +413,9 @@
                         </div>
 
                         <div class="farm-list">
-                            <h3>Historial de CÃ¡lculos (<span id="fcrHistoryCount">0</span>)</h3>
+                            <h3>Historial de Cálculos (<span id="fcrHistoryCount">0</span>)</h3>
                             <div id="fcrHistory" class="farms">
-                                <p class="status">No hay cÃ¡lculos guardados</p>
+                                <p class="status">No hay cálculos guardados</p>
                             </div>
                         </div>
                     </div>
@@ -424,7 +424,7 @@
                     <div id="farms" class="section hidden">
                         <div class="content-head">
                             <div>
-                                <p class="eyebrow">GESTIÃ“N DE FINCAS</p>
+                                <p class="eyebrow">GESTIÓN DE FINCAS</p>
                                 <h2>Mis Fincas</h2>
                                 <p class="lede">Administra tus explotaciones ganaderas</p>
                             </div>
@@ -434,157 +434,3 @@
                             <h3 id="farmFormTitle">Registrar Nueva Finca</h3>
                             <form id="farmForm" class="farm-form">
                                 <input type="hidden" id="farmEditId">
-                                
-                                <!-- SIGPAC SEARCH -->
-                                <div style="background: linear-gradient(135deg, #e7f7ee, #f8fafc); border: 2px solid #bbebd1; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
-                                    <h4 style="margin: 0 0 8px; color: #15803d;">🔍 Buscar en SIGPAC</h4>
-                                    <p style="margin: 0 0 12px; font-size: 13px; color: #6b7280;">Introduce la referencia catastral para autocompletar datos</p>
-                                    <div style="display: grid; grid-template-columns: 1fr auto; gap: 8px;">
-                                        <label style="margin: 0;">Referencia Catastral
-                                            <input type="text" id="sigpacRef" placeholder="Ej: 37900A00100001">
-                                        </label>
-                                        <button type="button" class="primary" id="searchSigpacBtn" style="align-self: end;">🔍 Buscar</button>
-                                    </div>
-                                    <div id="sigpacLoading" class="hidden" style="margin-top: 12px; display: flex; align-items: center; gap: 8px; color: #6b7280;">
-                                        <div style="width: 16px; height: 16px; border: 2px solid #22c55e; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                                        <span>Consultando SIGPAC...</span>
-                                    </div>
-                                    <div id="sigpacStatus" class="hidden" style="margin-top: 12px; padding: 10px; border-radius: 8px; font-size: 14px;"></div>
-                                </div>
-
-                                <label>Nombre de la finca
-                                    <input type="text" id="farmName" placeholder="Ej: Finca El Roble" required>
-                                </label>
-                                <label>UbicaciÃ³n
-                                    <input type="text" id="farmLocation" placeholder="Ej: Salamanca, EspaÃ±a" required>
-                                </label>
-                                <label>TamaÃ±o (hectÃ¡reas)
-                                    <input type="number" id="farmSize" placeholder="Ej: 150" step="0.1" required>
-                                </label>
-                                <label>Tipo de suelo
-                                    <select id="farmSoil" required>
-                                        <option value="">Selecciona tipo</option>
-                                        <option value="Arcilloso">Arcilloso</option>
-                                        <option value="Arenoso">Arenoso</option>
-                                        <option value="Franco">Franco</option>
-                                        <option value="Limoso">Limoso</option>
-                                        <option value="Pedregoso">Pedregoso</option>
-                                    </select>
-                                </label>
-                                <label>Licencia ganadera
-                                    <input type="text" id="farmLicense" placeholder="Ej: ES-37-12345" required>
-                                </label>
-                                <label>NÃºmero de animales
-                                    <input type="number" id="farmAnimals" placeholder="Ej: 50" required>
-                                </label>
-                                <label>Sistema de manejo
-                                    <select id="farmManagement" required>
-                                        <option value="">Selecciona sistema</option>
-                                        <option value="Extensivo">Extensivo</option>
-                                        <option value="Semi-extensivo">Semi-extensivo</option>
-                                        <option value="Intensivo">Intensivo</option>
-                                    </select>
-                                </label>
-                                <label>AlimentaciÃ³n principal
-                                    <select id="farmFeed" required>
-                                        <option value="">Selecciona tipo</option>
-                                        <option value="Pasto natural">Pasto natural</option>
-                                        <option value="Pasto + Suplemento">Pasto + Suplemento</option>
-                                        <option value="Forraje">Forraje</option>
-                                        <option value="Mixta">Mixta</option>
-                                    </select>
-                                </label>
-                                <div class="profile-actions">
-                                    <button type="submit" class="primary" id="farmSubmitBtn">Guardar Finca</button>
-                                    <button type="button" class="ghost" id="cancelFarmEdit"
-                                        style="display: none;">Cancelar</button>
-                                </div>
-                            </form>
-                        </div>
-
-                        <div class="farm-list">
-                            <h3>Fincas Registradas</h3>
-                            <div id="fincasList" class="farms">
-                                <p class="status">No hay fincas registradas</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- REPORTS SECTION -->
-                    <div id="reports" class="section hidden">
-                        <div class="content-head">
-                            <div>
-                                <p class="eyebrow">REPORTES Y EXPORTACIÃ“N</p>
-                                <h2>Generar Reportes</h2>
-                                <p class="lede">Exporta tus datos en diferentes formatos</p>
-                            </div>
-                        </div>
-
-                        <div class="panel-grid">
-                            <div class="card">
-                                <h3>Tipo de Reporte</h3>
-                                <div class="action-list">
-                                    <button class="action-btn" data-report="inventory">ðŸ“¦ Inventario de
-                                        Animales</button>
-                                    <button class="action-btn" data-report="events">ðŸ“… Historial de Eventos</button>
-                                    <button class="action-btn" data-report="fcr">ðŸ“Š AnÃ¡lisis FCR</button>
-                                    <button class="action-btn" data-report="farms">ðŸŒ¾ Resumen de Fincas</button>
-                                    <button class="action-btn" data-report="complete">ðŸ“‹ Reporte Completo</button>
-                                </div>
-                            </div>
-
-                            <div class="card">
-                                <h3>Formato de ExportaciÃ³n</h3>
-                                <div class="action-list">
-                                    <button class="action-btn" id="exportCSV">ðŸ“„ Exportar a CSV</button>
-                                    <button class="action-btn" id="exportPDF">ðŸ“• Exportar a PDF</button>
-                                </div>
-                                <div style="margin-top: 16px;">
-                                    <p class="status">Selecciona un tipo de reporte arriba</p>
-                                    <p class="status" id="reportStatus"></p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- PROFILE SECTION -->
-                    <div id="profile" class="section hidden">
-                        <div class="content-head">
-                            <div>
-                                <p class="eyebrow">MI CUENTA</p>
-                                <h2>Perfil de Usuario</h2>
-                                <p class="lede">Gestiona tu informaciÃ³n personal</p>
-                            </div>
-                        </div>
-
-                        <div class="card profile-card">
-                            <div class="profile-avatar-wrap">
-                                <div class="avatar large" id="profileAvatar">U</div>
-                                <label class="upload-btn">
-                                    Subir foto
-                                    <input type="file" id="avatarInput" accept="image/*">
-                                </label>
-                                <button class="ghost small" id="avatarRemove">Eliminar</button>
-                            </div>
-                            <form id="profileForm" class="profile-form">
-                                <label>Nombre completo
-                                    <input type="text" id="profileName" placeholder="Tu nombre">
-                                </label>
-                                <label>Correo electrÃ³nico
-                                    <input type="email" id="profileEmail" placeholder="tu@correo.com">
-                                </label>
-                                <div class="profile-actions">
-                                    <button type="submit" class="primary">Guardar cambios</button>
-                                    <button type="button" class="ghost" id="profileCancel">Cancelar</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-    <script src="app.js"></script>
-</body>
-
-</html>
