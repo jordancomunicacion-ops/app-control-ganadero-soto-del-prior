@@ -341,7 +341,7 @@ avatarRemove?.addEventListener('click', () => {
 
 document.addEventListener('DOMContentLoaded', loadSession);
 
-// SIGPAC INTEGRATION - Fixed API endpoints
+// SIGPAC INTEGRATION - Dynamic Dropdowns
 const sigpacProvInput = qs('#sigpacProv');
 const sigpacMuniInput = qs('#sigpacMuni');
 const sigpacPoliInput = qs('#sigpacPoli');
@@ -352,24 +352,45 @@ const sigpacLoading = qs('#sigpacLoading');
 const locationBadge = qs('#locationBadge');
 const sizeBadge = qs('#sizeBadge');
 
-// SIGPAC API - Using correct query service
+// SIGPAC API Endpoints
 const SIGPAC_QUERY_BASE = 'https://sigpac-hubcloud.es/servicioconsultassigpac/query';
+const SIGPAC_CODES_BASE = 'https://sigpac-hubcloud.es/codigossigpac';
+
+async function fetchMunicipalities(provCode) {
+    if (!provCode) return [];
+    const url = SIGPAC_CODES_BASE + '/municipio' + provCode + '.json';
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Error al cargar municipios');
+    const data = await response.json();
+    // data.codigos is the array of municipalities
+    return data.codigos || [];
+}
 
 async function searchSIGPAC(provincia, municipio, poligono, parcela) {
-    // For SIGPAC query service, we need: pr/mu/ag/zo/po/pa/re
-    // ag (agregado), zo (zona), re (recinto) default to 0 if not provided
     const pr = provincia || '00';
     const mu = municipio || '000';
-    const ag = '0'; // agregado - usually 0
-    const zo = '0'; // zona - usually 0
+    const ag = '0'; // agregado
+    const zo = '0'; // zona
     const po = poligono || '0';
     const pa = parcela || '0';
-    const re = '0'; // recinto - we'll get the first one
+    const re = '0'; // recinto - we'll query for recinto 0 initially or handle first valid
 
-    const url = SIGPAC_QUERY_BASE + '/recinfo/' + pr + '/' + mu + '/' + ag + '/' + zo + '/' + po + '/' + pa + '/' + re + '.json';
+    // We actually need to query the parcel or enclosure. 
+    // Let's try querying "recinfo" which gives enclosure info. 
+    // Note: recinto '0' is usually not valid, we might need to iterate or find a way to list enclosures.
+    // Actually, standard usage usually requires a recinto number. 
+    // But let's try querying for recinto 1 if 0 fails, or use a different endpoint if needed.
+    // The user only gives pol/parc. Usually parcel has recintos 1, 2, 3...
+    // Let's try recinto 1 by default if regular query fails, or handle the list.
+
+    // Improvement: query Recinto 1 by default as it's most common for simple parcels.
+    const url = SIGPAC_QUERY_BASE + '/recinfo/' + pr + '/' + mu + '/' + ag + '/' + zo + '/' + po + '/' + pa + '/1.json';
 
     const response = await fetch(url);
-    if (!response.ok) throw new Error('Error HTTP: ' + response.status);
+    if (!response.ok) {
+        // fallback to recinto 0?
+        throw new Error('No se encontr?? la parcela (o recinto 1)');
+    }
     return await response.json();
 }
 
@@ -397,7 +418,7 @@ function fillFarmFormFromSIGPAC(parsed) {
         farmSizeInput.value = parsed.superficie.toFixed(2);
         if (sizeBadge) sizeBadge.classList.remove('hidden');
     }
-    showSigpacStatus('success', 'Datos cargados: ' + parsed.superficie.toFixed(2) + ' ha en ' + parsed.location + ' (Pol: ' + parsed.poligono + ', Parc: ' + parsed.parcela + ')');
+    showSigpacStatus('success', 'Datos cargados: ' + parsed.superficie.toFixed(2) + ' ha en ' + parsed.location);
 }
 
 function showSigpacStatus(type, message) {
@@ -408,38 +429,83 @@ function showSigpacStatus(type, message) {
     setTimeout(function () { if (sigpacStatus) sigpacStatus.classList.add('hidden'); }, 10000);
 }
 
-function setSigpacLoading(loading) {
+function setSigpacLoading(loading, message) {
     if (!sigpacLoading) return;
     if (loading) {
         sigpacLoading.classList.remove('hidden');
+        if (message) {
+            const span = sigpacLoading.querySelector('span');
+            if (span) span.textContent = message;
+        }
     } else {
         sigpacLoading.classList.add('hidden');
     }
     if (searchSigpacBtn) searchSigpacBtn.disabled = loading;
 }
 
+// Event Listeners
+
+// Province Change -> Load Municipalities
+if (sigpacProvInput) {
+    sigpacProvInput.addEventListener('change', async function () {
+        const provCode = this.value;
+        const muniSelect = sigpacMuniInput;
+
+        if (!muniSelect) return;
+
+        // Reset municipality dropdown
+        muniSelect.innerHTML = '<option value="">Municipios...</option>';
+        muniSelect.disabled = true;
+
+        if (!provCode) return;
+
+        try {
+            setSigpacLoading(true, 'Cargando municipios...');
+            const municipios = await fetchMunicipalities(provCode);
+
+            // Populate dropdown
+            // municipios is array of { codigo: "001", descripcion: "Nombre" }
+            municipios.sort((a, b) => a.descripcion.localeCompare(b.descripcion));
+
+            municipios.forEach(m => {
+                const option = document.createElement('option');
+                option.value = m.codigo;
+                option.textContent = m.descripcion; // Only name as requested
+                muniSelect.appendChild(option);
+            });
+
+            muniSelect.disabled = false;
+        } catch (error) {
+            console.error(error);
+            showSigpacStatus('error', 'Error al cargar municipios');
+        } finally {
+            setSigpacLoading(false, 'Consultando SIGPAC...');
+        }
+    });
+}
+
 async function handleSigpacSearch() {
-    const provincia = sigpacProvInput ? sigpacProvInput.value.trim() : '';
-    const municipio = sigpacMuniInput ? sigpacMuniInput.value.trim() : '';
+    const provincia = sigpacProvInput ? sigpacProvInput.value : '';
+    const municipio = sigpacMuniInput ? sigpacMuniInput.value : '';
     const poligono = sigpacPoliInput ? sigpacPoliInput.value.trim() : '';
     const parcela = sigpacParcInput ? sigpacParcInput.value.trim() : '';
 
     if (!provincia || !municipio || !poligono || !parcela) {
-        showSigpacStatus('error', 'Introduce provincia, municipio, poligono y parcela');
+        showSigpacStatus('error', 'Por favor selecciona todos los campos');
         return;
     }
 
     try {
-        setSigpacLoading(true);
+        setSigpacLoading(true, 'Buscando parcela...');
         const data = await searchSIGPAC(provincia, municipio, poligono, parcela);
         const parsed = parseSIGPACData(data);
         if (!parsed) {
-            showSigpacStatus('error', 'No se encontro ninguna parcela con esos datos');
+            showSigpacStatus('error', 'No se encontr?? la parcela');
             return;
         }
         fillFarmFormFromSIGPAC(parsed);
     } catch (error) {
-        showSigpacStatus('error', 'Error: ' + error.message + '. Verifica que los datos sean correctos (provincia debe ser codigo de 2 digitos)');
+        showSigpacStatus('error', 'Error: ' + error.message + ' (Verifica Pol??gono/Parcela)');
     } finally {
         setSigpacLoading(false);
     }
@@ -447,27 +513,4 @@ async function handleSigpacSearch() {
 
 if (searchSigpacBtn) {
     searchSigpacBtn.addEventListener('click', handleSigpacSearch);
-}
-
-var sigpacInputs = [sigpacProvInput, sigpacMuniInput, sigpacPoliInput, sigpacParcInput];
-for (var i = 0; i < sigpacInputs.length; i++) {
-    if (sigpacInputs[i]) {
-        sigpacInputs[i].addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                handleSigpacSearch();
-            }
-        });
-    }
-}
-
-if (farmLocationInput) {
-    farmLocationInput.addEventListener('input', function () {
-        if (locationBadge) locationBadge.classList.add('hidden');
-    });
-}
-if (farmSizeInput) {
-    farmSizeInput.addEventListener('input', function () {
-        if (sizeBadge) sizeBadge.classList.add('hidden');
-    });
 }

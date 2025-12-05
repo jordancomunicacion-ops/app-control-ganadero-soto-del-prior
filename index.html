@@ -440,219 +440,152 @@
                                     style="background: linear-gradient(135deg, #e7f7ee, #f8fafc); border: 2px solid #bbebd1; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
                                     <h4 style="margin: 0 0 8px; color: #15803d;">🔍 Buscar en SIGPAC</h4>
                                     <p style="margin: 0 0 12px; font-size: 13px; color: #6b7280;">Introduce los datos de
-                                        la parcela para autocompletar</p>
-                                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-                                        <label style="margin: 0;">Provincia
-                                            <select id="sigpacProv">
-                                                <option value="">Selecciona provincia</option>
-                                                <option value="15">A Coruña (15)</option>
-                                                <option value="01">Álava (01)</option>
-                                                <option value="02">Albacete (02)</option>
-                                                <option value="03">Alicante (03)</option>
-                                                <option value="04">Almería (04)</option>
-                                                <option value="33">Asturias (33)</option>
-                                                <option value="05">Ávila (05)</option>
-                                                <option value="06">Badajoz (06)</option>
-                                                <option value="07">Baleares (07)</option>
-                                                <option value="08">Barcelona (08)</option>
-                                                <option value="09">Burgos (09)</option>
-                                                <option value="10">Cáceres (10)</option>
-                                                <option value="11">Cádiz (11)</option>
-                                                <option value="39">Cantabria (39)</option>
-                                                <option value="12">Castellón (12)</option>
-                                                <option value="51">Ceuta (51)</option>
-                                                <option value="13">Ciudad Real (13)</option>
-                                                <option value="14">Córdoba (14)</option>
-                                                <option value="16">Cuenca (16)</option>
-                                                <option value="17">Girona (17)</option>
-                                                <option value="18">Granada (18)</option>
-                                                <option value="19">Guadalajara (19)</option>
-                                                <option value="20">Guipúzcoa (20)</option>
-                                                <option value="21">Huelva (21)</option>
-                                                <option value="22">Huesca (22)</option>
-                                                <option value="23">Jaén (23)</option>
-                                                <option value="24">León (24)</option>
-                                                <option value="25">Lleida (25)</option>
-                                                <option value="27">Lugo (27)</option>
-                                                <option value="28">Madrid (28)</option>
-                                                <option value="29">Málaga (29)</option>
-                                                <option value="52">Melilla (52)</option>
-                                                <option value="30">Murcia (30)</option>
-                                                <option value="31">Navarra (31)</option>
-                                                <option value="32">Ourense (32)</option>
-                                                <option value="34">Palencia (34)</option>
-                                                <option value="35">Las Palmas (35)</option>
-                                                <option value="36">Pontevedra (36)</option>
-                                                <option value="26">La Rioja (26)</option>
-                                                <option value="37">Salamanca (37)</option>
-                                                <option value="38">S.C. Tenerife (38)</option>
-                                                <option value="40">Segovia (40)</option>
-                                                <option value="41">Sevilla (41)</option>
-                                                <option value="42">Soria (42)</option>
-                                                <option value="43">Tarragona (43)</option>
-                                                <option value="44">Teruel (44)</option>
-                                                <option value="45">Toledo (45)</option>
-                                                <option value="46">Valencia (46)</option>
-                                                <option value="47">Valladolid (47)</option>
-                                                <option value="48">Vizcaya (48)</option>
-                                                <option value="49">Zamora (49)</option>
-                                                <option value="50">Zaragoza (50)</option>
-                                            </select>
                                         </label>
-                                        <label style="margin: 0;">Municipio
-                                            <input type="text" id="sigpacMuni" placeholder="Ej: 900 o nombre">
-                                        </label>
-                                        <label style="margin: 0;">Polígono
-                                            <input type="text" id="sigpacPoli" placeholder="Ej: 1">
-                                        </label>
-                                        <label style="margin: 0;">Parcela
-                                            <input type="text" id="sigpacParc" placeholder="Ej: 1">
-                                        </label>
-                                    </div>
-                                    <button type="button" class="primary full" id="searchSigpacBtn"
-                                        style="margin-top: 8px;">🔍 Buscar en SIGPAC</button>
-                                    <div id="sigpacLoading" class="hidden"
-                                        style="margin-top: 12px; display: flex; align-items: center; gap: 8px; color: #6b7280;">
-                                        <div
-                                            style="width: 16px; height: 16px; border: 2px solid #22c55e; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;">
-                                        </div>
-                                        <span>Consultando SIGPAC...</span>
-                                    </div>
-                                    <div id="sigpacStatus" class="hidden"
-                                        style="margin-top: 12px; padding: 10px; border-radius: 8px; font-size: 14px;">
-                                    </div>
                                 </div>
-
-                                <label>Nombre de la finca
-                                    <input type="text" id="farmName" placeholder="Ej: Finca El Roble" required>
-                                </label>
-                                <label>UbicaciÃ³n
-                                    <input type="text" id="farmLocation" placeholder="Ej: Salamanca, EspaÃ±a" required>
-                                </label>
-                                <label>TamaÃ±o (hectÃ¡reas)
-                                    <input type="number" id="farmSize" placeholder="Ej: 150" step="0.1" required>
-                                </label>
-                                <label>Tipo de suelo
-                                    <select id="farmSoil" required>
-                                        <option value="">Selecciona tipo</option>
-                                        <option value="Arcilloso">Arcilloso</option>
-                                        <option value="Arenoso">Arenoso</option>
-                                        <option value="Franco">Franco</option>
-                                        <option value="Limoso">Limoso</option>
-                                        <option value="Pedregoso">Pedregoso</option>
-                                    </select>
-                                </label>
-                                <label>Licencia ganadera
-                                    <input type="text" id="farmLicense" placeholder="Ej: ES-37-12345" required>
-                                </label>
-                                <label>NÃºmero de animales
-                                    <input type="number" id="farmAnimals" placeholder="Ej: 50" required>
-                                </label>
-                                <label>Sistema de manejo
-                                    <select id="farmManagement" required>
-                                        <option value="">Selecciona sistema</option>
-                                        <option value="Extensivo">Extensivo</option>
-                                        <option value="Semi-extensivo">Semi-extensivo</option>
-                                        <option value="Intensivo">Intensivo</option>
-                                    </select>
-                                </label>
-                                <label>AlimentaciÃ³n principal
-                                    <select id="farmFeed" required>
-                                        <option value="">Selecciona tipo</option>
-                                        <option value="Pasto natural">Pasto natural</option>
-                                        <option value="Pasto + Suplemento">Pasto + Suplemento</option>
-                                        <option value="Forraje">Forraje</option>
-                                        <option value="Mixta">Mixta</option>
-                                    </select>
-                                </label>
-                                <div class="profile-actions">
-                                    <button type="submit" class="primary" id="farmSubmitBtn">Guardar Finca</button>
-                                    <button type="button" class="ghost" id="cancelFarmEdit"
-                                        style="display: none;">Cancelar</button>
+                                <button type="button" class="primary full" id="searchSigpacBtn"
+                                    style="margin-top: 8px;">🔍 Buscar en SIGPAC</button>
+                                <div id="sigpacLoading" class="hidden"
+                                    style="margin-top: 12px; display: flex; align-items: center; gap: 8px; color: #6b7280;">
+                                    <div
+                                        style="width: 16px; height: 16px; border: 2px solid #22c55e; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;">
+                                    </div>
+                                    <span>Consultando SIGPAC...</span>
                                 </div>
-                            </form>
+                                <div id="sigpacStatus" class="hidden"
+                                    style="margin-top: 12px; padding: 10px; border-radius: 8px; font-size: 14px;">
+                                </div>
                         </div>
 
-                        <div class="farm-list">
-                            <h3>Fincas Registradas</h3>
-                            <div id="fincasList" class="farms">
-                                <p class="status">No hay fincas registradas</p>
-                            </div>
+                        <label>Nombre de la finca
+                            <input type="text" id="farmName" placeholder="Ej: Finca El Roble" required>
+                        </label>
+                        <label>UbicaciÃ³n
+                            <input type="text" id="farmLocation" placeholder="Ej: Salamanca, EspaÃ±a" required>
+                        </label>
+                        <label>TamaÃ±o (hectÃ¡reas)
+                            <input type="number" id="farmSize" placeholder="Ej: 150" step="0.1" required>
+                        </label>
+                        <label>Tipo de suelo
+                            <select id="farmSoil" required>
+                                <option value="">Selecciona tipo</option>
+                                <option value="Arcilloso">Arcilloso</option>
+                                <option value="Arenoso">Arenoso</option>
+                                <option value="Franco">Franco</option>
+                                <option value="Limoso">Limoso</option>
+                                <option value="Pedregoso">Pedregoso</option>
+                            </select>
+                        </label>
+                        <label>Licencia ganadera
+                            <input type="text" id="farmLicense" placeholder="Ej: ES-37-12345" required>
+                        </label>
+                        <label>NÃºmero de animales
+                            <input type="number" id="farmAnimals" placeholder="Ej: 50" required>
+                        </label>
+                        <label>Sistema de manejo
+                            <select id="farmManagement" required>
+                                <option value="">Selecciona sistema</option>
+                                <option value="Extensivo">Extensivo</option>
+                                <option value="Semi-extensivo">Semi-extensivo</option>
+                                <option value="Intensivo">Intensivo</option>
+                            </select>
+                        </label>
+                        <label>AlimentaciÃ³n principal
+                            <select id="farmFeed" required>
+                                <option value="">Selecciona tipo</option>
+                                <option value="Pasto natural">Pasto natural</option>
+                                <option value="Pasto + Suplemento">Pasto + Suplemento</option>
+                                <option value="Forraje">Forraje</option>
+                                <option value="Mixta">Mixta</option>
+                            </select>
+                        </label>
+                        <div class="profile-actions">
+                            <button type="submit" class="primary" id="farmSubmitBtn">Guardar Finca</button>
+                            <button type="button" class="ghost" id="cancelFarmEdit"
+                                style="display: none;">Cancelar</button>
                         </div>
+                        </form>
                     </div>
 
-                    <!-- REPORTS SECTION -->
-                    <div id="reports" class="section hidden">
-                        <div class="content-head">
-                            <div>
-                                <p class="eyebrow">REPORTES Y EXPORTACIÃ“N</p>
-                                <h2>Generar Reportes</h2>
-                                <p class="lede">Exporta tus datos en diferentes formatos</p>
-                            </div>
-                        </div>
-
-                        <div class="panel-grid">
-                            <div class="card">
-                                <h3>Tipo de Reporte</h3>
-                                <div class="action-list">
-                                    <button class="action-btn" data-report="inventory">ðŸ“¦ Inventario de
-                                        Animales</button>
-                                    <button class="action-btn" data-report="events">ðŸ“… Historial de Eventos</button>
-                                    <button class="action-btn" data-report="fcr">ðŸ“Š AnÃ¡lisis FCR</button>
-                                    <button class="action-btn" data-report="farms">ðŸŒ¾ Resumen de Fincas</button>
-                                    <button class="action-btn" data-report="complete">ðŸ“‹ Reporte Completo</button>
-                                </div>
-                            </div>
-
-                            <div class="card">
-                                <h3>Formato de ExportaciÃ³n</h3>
-                                <div class="action-list">
-                                    <button class="action-btn" id="exportCSV">ðŸ“„ Exportar a CSV</button>
-                                    <button class="action-btn" id="exportPDF">ðŸ“• Exportar a PDF</button>
-                                </div>
-                                <div style="margin-top: 16px;">
-                                    <p class="status">Selecciona un tipo de reporte arriba</p>
-                                    <p class="status" id="reportStatus"></p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- PROFILE SECTION -->
-                    <div id="profile" class="section hidden">
-                        <div class="content-head">
-                            <div>
-                                <p class="eyebrow">MI CUENTA</p>
-                                <h2>Perfil de Usuario</h2>
-                                <p class="lede">Gestiona tu informaciÃ³n personal</p>
-                            </div>
-                        </div>
-
-                        <div class="card profile-card">
-                            <div class="profile-avatar-wrap">
-                                <div class="avatar large" id="profileAvatar">U</div>
-                                <label class="upload-btn">
-                                    Subir foto
-                                    <input type="file" id="avatarInput" accept="image/*">
-                                </label>
-                                <button class="ghost small" id="avatarRemove">Eliminar</button>
-                            </div>
-                            <form id="profileForm" class="profile-form">
-                                <label>Nombre completo
-                                    <input type="text" id="profileName" placeholder="Tu nombre">
-                                </label>
-                                <label>Correo electrÃ³nico
-                                    <input type="email" id="profileEmail" placeholder="tu@correo.com">
-                                </label>
-                                <div class="profile-actions">
-                                    <button type="submit" class="primary">Guardar cambios</button>
-                                    <button type="button" class="ghost" id="profileCancel">Cancelar</button>
-                                </div>
-                            </form>
+                    <div class="farm-list">
+                        <h3>Fincas Registradas</h3>
+                        <div id="fincasList" class="farms">
+                            <p class="status">No hay fincas registradas</p>
                         </div>
                     </div>
                 </div>
+
+                <!-- REPORTS SECTION -->
+                <div id="reports" class="section hidden">
+                    <div class="content-head">
+                        <div>
+                            <p class="eyebrow">REPORTES Y EXPORTACIÃ“N</p>
+                            <h2>Generar Reportes</h2>
+                            <p class="lede">Exporta tus datos en diferentes formatos</p>
+                        </div>
+                    </div>
+
+                    <div class="panel-grid">
+                        <div class="card">
+                            <h3>Tipo de Reporte</h3>
+                            <div class="action-list">
+                                <button class="action-btn" data-report="inventory">ðŸ“¦ Inventario de
+                                    Animales</button>
+                                <button class="action-btn" data-report="events">ðŸ“… Historial de Eventos</button>
+                                <button class="action-btn" data-report="fcr">ðŸ“Š AnÃ¡lisis FCR</button>
+                                <button class="action-btn" data-report="farms">ðŸŒ¾ Resumen de Fincas</button>
+                                <button class="action-btn" data-report="complete">ðŸ“‹ Reporte Completo</button>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <h3>Formato de ExportaciÃ³n</h3>
+                            <div class="action-list">
+                                <button class="action-btn" id="exportCSV">ðŸ“„ Exportar a CSV</button>
+                                <button class="action-btn" id="exportPDF">ðŸ“• Exportar a PDF</button>
+                            </div>
+                            <div style="margin-top: 16px;">
+                                <p class="status">Selecciona un tipo de reporte arriba</p>
+                                <p class="status" id="reportStatus"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PROFILE SECTION -->
+                <div id="profile" class="section hidden">
+                    <div class="content-head">
+                        <div>
+                            <p class="eyebrow">MI CUENTA</p>
+                            <h2>Perfil de Usuario</h2>
+                            <p class="lede">Gestiona tu informaciÃ³n personal</p>
+                        </div>
+                    </div>
+
+                    <div class="card profile-card">
+                        <div class="profile-avatar-wrap">
+                            <div class="avatar large" id="profileAvatar">U</div>
+                            <label class="upload-btn">
+                                Subir foto
+                                <input type="file" id="avatarInput" accept="image/*">
+                            </label>
+                            <button class="ghost small" id="avatarRemove">Eliminar</button>
+                        </div>
+                        <form id="profileForm" class="profile-form">
+                            <label>Nombre completo
+                                <input type="text" id="profileName" placeholder="Tu nombre">
+                            </label>
+                            <label>Correo electrÃ³nico
+                                <input type="email" id="profileEmail" placeholder="tu@correo.com">
+                            </label>
+                            <div class="profile-actions">
+                                <button type="submit" class="primary">Guardar cambios</button>
+                                <button type="button" class="ghost" id="profileCancel">Cancelar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
+        </div>
         </div>
     </main>
     <script src="app.js"></script>
