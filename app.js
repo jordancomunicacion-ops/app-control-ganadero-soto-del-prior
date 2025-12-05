@@ -410,20 +410,39 @@ async function searchSIGPAC(prov, muni, poli, parc) {
 }
 
 function parseSIGPACData(data) {
-  if (!data || !data.properties) return null;
-  const props = data.properties;
+  let item = null;
 
-  const muniName = props.dn_muni || props.municipio || '';
-  const provName = props.dn_prov || props.provincia || '';
+  // Check if it's an array (Standard recinfo response)
+  if (Array.isArray(data) && data.length > 0) {
+    item = data[0];
+  }
+  // Check if it's GeoJSON properties (Fallback/Legacy)
+  else if (data && data.properties) {
+    item = data.properties;
+  }
+
+  if (!item) return null;
+
+  // Get human-readable names from the dropdowns if available
+  let muniName = item.dn_muni || item.municipio;
+  let provName = item.dn_prov || item.provincia;
+
+  // Try to get text from dropdowns
+  if (sigpacMuniInput && sigpacMuniInput.options[sigpacMuniInput.selectedIndex]) {
+    muniName = sigpacMuniInput.options[sigpacMuniInput.selectedIndex].text;
+  }
+  if (sigpacProvInput && sigpacProvInput.options[sigpacProvInput.selectedIndex]) {
+    provName = sigpacProvInput.options[sigpacProvInput.selectedIndex].text;
+  }
 
   return {
     location: `${muniName}, ${provName}`,
-    superficie: props.superficie || 0,
-    uso: props.uso_sigpac || props.uso || '',
-    provincia: props.dn_prov || props.provincia || '',
-    municipio: props.dn_muni || props.municipio || '',
-    poligono: props.poligono || '',
-    parcela: props.parcela || ''
+    superficie: item.superficie || 0,
+    uso: item.uso_sigpac || item.uso || '',
+    provincia: item.provincia || '',
+    municipio: item.municipio || '',
+    poligono: item.poligono || '',
+    parcela: item.parcela || ''
   };
 }
 
