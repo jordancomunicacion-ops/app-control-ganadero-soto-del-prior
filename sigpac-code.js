@@ -53,12 +53,25 @@ async function searchSIGPAC(provincia, municipio, poligono, parcela) {
 }
 
 function parseSIGPACData(data) {
-    if (!data || !data.properties) return null;
-    const props = data.properties;
+    if (!data) return null;
+
+    let props = null;
+
+    // Handle Array response (standard for some regions/endpoints)
+    if (Array.isArray(data) && data.length > 0) {
+        props = data[0];
+    }
+    // Handle GeoJSON-like response (if applicable)
+    else if (data.properties) {
+        props = data.properties;
+    }
+
+    if (!props) return null;
+
     return {
         location: (props.dn_muni || props.municipio || '') + ', ' + (props.dn_prov || props.provincia || ''),
         superficie: props.superficie || 0,
-        uso: props.uso_sigpac || props.uso || '',
+        uso: props.uso_sigpac || props.uso_sigpac || props.uso || '', // Added props.uso_sigpac check if needed from array
         provincia: props.dn_prov || props.provincia || '',
         municipio: props.dn_muni || props.municipio || '',
         poligono: props.poligono || '',
