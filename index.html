@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -18,36 +19,36 @@
         <!-- AUTH SECTION -->
         <section id="auth" class="auth-shell">
             <div class="auth-card">
-                <img src="images/logo-soto.png" alt="Soto del Prior" class="logo" onerror="this.style.display='none'">
+                <img src="images/logo-soto.svg" alt="Soto del Prior" class="logo" style="height: 60px;">
                 <h1 class="auth-title">Acceso a Granjas</h1>
                 <div class="tabs">
-                    <button id="loginTab" class="tab active">Iniciar sesiÃ³n</button>
+                    <button id="loginTab" class="tab active">Iniciar sesión</button>
                     <button id="registerTab" class="tab">Crear cuenta</button>
                 </div>
                 <form id="loginForm" class="auth-form">
                     <div class="alert hidden" id="loginAlert">Estas credenciales no coinciden con nuestros registros.
                     </div>
                     <label>Usuario
-                        <input type="text" id="loginUser" placeholder="gerencia@sotodelprior.com" required>
+                        <input type="text" id="loginUser" placeholder="usuario@email.com" required>
                     </label>
-                    <label>ContraseÃ±a
+                    <label>Contraseña
                         <input type="password" id="loginPass" placeholder="******" required>
                     </label>
                     <button type="submit" class="primary full">Acceder</button>
                     <label class="remember">
                         <input type="checkbox" id="rememberCheck">
-                        <span>Recordarme (guardar usuario y contraseÃ±a en este navegador)</span>
+                        <span>Recordarme (guardar usuario y contraseña en este navegador)</span>
                     </label>
-                    <a class="link" href="#" onclick="return false;">Â¿Olvidaste la contraseÃ±a?</a>
+                    <a class="link" href="#" onclick="return false;">¿Olvidaste la contraseña?</a>
                 </form>
                 <form id="registerForm" class="auth-form hidden">
                     <label>Usuario
                         <input type="text" id="regUser" placeholder="nuevo usuario" required>
                     </label>
-                    <label>Correo electrÃ³nico
+                    <label>Correo electrónico
                         <input type="email" id="regEmail" placeholder="tu@correo.com" required>
                     </label>
-                    <label>ContraseÃ±a
+                    <label>Contraseña
                         <input type="password" id="regPass" placeholder="crea una clave" required>
                     </label>
                     <button type="submit" class="primary full">Registrarse</button>
@@ -65,20 +66,21 @@
                         <div class="avatar" id="sidebarAvatar">U</div>
                         <div>
                             <p class="profile-name" id="sidebarName">Usuario</p>
-                            <p class="profile-role">Administrador</p>
+                            <p class="profile-role">Usuario</p>
                         </div>
                     </div>
                     <nav class="nav">
-                        <a href="#" class="nav-link active" data-target="home">ðŸ  Inicio</a>
-                        <a href="#" class="nav-link" data-target="animals">ðŸ„ Animales</a>
-                        <a href="#" class="nav-link" data-target="events">ðŸ“… Eventos</a>
-                        <a href="#" class="nav-link" data-target="fcr">ðŸ“Š Calculadora FCR</a>
-                        <a href="#" class="nav-link" data-target="farms">ðŸŒ¾ Fincas</a>
-                        <a href="#" class="nav-link" data-target="reports">ðŸ“„ Reportes</a>
+                        <a href="#" class="nav-link active" data-target="home">Inicio</a>
+                        <a href="#" class="nav-link" data-target="farms">Fincas</a>
+                        <a href="#" class="nav-link" data-target="animals">Animales</a>
+                        <a href="#" class="nav-link" data-target="events">Eventos</a>
+                        <a href="#" class="nav-link" data-target="reports">Reportes</a>
+                        <a href="#" class="nav-link" data-target="fcr">Calculadora FCR</a>
+                        <a href="#" class="nav-link" id="nav-data" data-target="data">Datos</a>
                     </nav>
                     <div class="sidebar-actions">
                         <button class="ghost full" id="profileBtn">Mi perfil</button>
-                        <button class="ghost full" id="logoutBtn">Cerrar sesiÃ³n</button>
+                        <button class="ghost full" id="logoutBtn">Cerrar sesión</button>
                     </div>
                 </aside>
 
@@ -90,82 +92,138 @@
                             <div>
                                 <p class="eyebrow">PANEL DE CONTROL</p>
                                 <h2>Resumen General</h2>
-                                <p class="lede">Vista general de tu operaciÃ³n ganadera</p>
+                                <p class="lede">Vista general de tu operación ganadera</p>
                             </div>
                         </div>
 
                         <div class="kpi-row">
-                            <div class="kpi">
-                                <p class="kpi-label">Total Fincas</p>
-                                <p class="kpi-value" id="stat-fincas">0</p>
-                                <p class="kpi-foot">Registradas</p>
-                            </div>
-                            <div class="kpi">
-                                <p class="kpi-label">Total Animales</p>
-                                <p class="kpi-value" id="stat-animales">0</p>
-                                <p class="kpi-foot">En inventario</p>
-                            </div>
-                            <div class="kpi">
-                                <p class="kpi-label">Eventos del Mes</p>
-                                <p class="kpi-value" id="stat-eventos">0</p>
-                                <p class="kpi-foot">Registrados</p>
-                            </div>
-                            <div class="kpi">
-                                <p class="kpi-label">FCR Promedio</p>
-                                <p class="kpi-value" id="stat-fcr">-</p>
-                                <p class="kpi-foot">Ãndice de conversiÃ³n</p>
+                            <div class="kpi" id="weather-card"
+                                style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; display: none; grid-column: 1 / -1;">
+                                <div
+                                    style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 8px;">
+                                    <div>
+                                        <p class="kpi-label" style="color: white; opacity: 0.9;">Clima en Finca</p>
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            <p class="kpi-value" id="weather-temp" style="margin:0;">--°C</p>
+                                            <div id="rain-alert" class="hidden"
+                                                style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.5); padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 5px;">
+                                                ☔ Alerta Lluvia
+                                            </div>
+                                        </div>
+                                        <div
+                                            style="display: flex; gap: 12px; font-size: 14px; opacity: 0.9; margin-top: 8px;">
+                                            <span id="weather-hum">--%</span>
+                                            <span id="weather-wind">-- km/h</span>
+                                        </div>
+                                    </div>
+                                    <div id="weather-forecast"
+                                        style="text-align: right; font-size: 13px; display: flex; flex-direction: column; gap: 4px;">
+                                        <!-- Populated by JS -->
+                                    </div>
+                                </div>
+
+                                <div style="margin-top: 15px;">
+                                    <p style="font-size: 12px; margin-bottom: 5px; opacity: 0.9;">Radar de Lluvia (En
+                                        vivo)</p>
+                                    <iframe id="rain-radar-frame" src=""
+                                        style="width: 100%; height: 250px; border: 0; border-radius: 8px; background: rgba(0,0,0,0.2);"></iframe>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="panel-grid">
-                            <div class="card panel-chart">
-                                <div class="card-head">
-                                    <h3>DistribuciÃ³n de Animales</h3>
+                        <!-- DISTRIBUTION (TOP) -->
+                        <div class="card panel-chart" style="margin-bottom: 20px;">
+                            <div class="card-head">
+                                <h3>Distribución de Animales</h3>
+                            </div>
+                            <div class="distribution-grid"
+                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                <div>
+                                    <h4 style="margin: 0 0 10px; color: #3b82f6;">Machos</h4>
+                                    <table class="dist-table">
+                                        <tr>
+                                            <td>Bueyes</td>
+                                            <td id="count-bueyes" class="text-right">0</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Toros</td>
+                                            <td id="count-toros" class="text-right">0</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Utreros</td>
+                                            <td id="count-utreros" class="text-right">0</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Novillos</td>
+                                            <td id="count-novillos" class="text-right">0</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Añojos</td>
+                                            <td id="count-anojos" class="text-right">0</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Terneros</td>
+                                            <td id="count-terneros-m" class="text-right">0</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Becerros</td>
+                                            <td id="count-becerros" class="text-right">0</td>
+                                        </tr>
+                                    </table>
                                 </div>
-                                <div class="bars">
-                                    <div class="bar">
-                                        <div class="bar-fill" id="bar-vacas" style="height: 60%; background: #22c55e;">
-                                        </div>
-                                        <span>Vacas</span>
-                                    </div>
-                                    <div class="bar">
-                                        <div class="bar-fill" id="bar-toros" style="height: 30%; background: #3b82f6;">
-                                        </div>
-                                        <span>Toros</span>
-                                    </div>
-                                    <div class="bar">
-                                        <div class="bar-fill" id="bar-terneros"
-                                            style="height: 45%; background: #f59e0b;"></div>
-                                        <span>Terneros</span>
-                                    </div>
-                                    <div class="bar">
-                                        <div class="bar-fill" id="bar-otros" style="height: 20%; background: #6b7280;">
-                                        </div>
-                                        <span>Otros</span>
-                                    </div>
+                                <div>
+                                    <h4 style="margin: 0 0 10px; color: #ec4899;">Hembras</h4>
+                                    <table class="dist-table">
+                                        <tr>
+                                            <td>Nodrizas</td>
+                                            <td id="count-nodrizas" class="text-right">0</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Vacas</td>
+                                            <td id="count-vacas" class="text-right">0</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Novillas</td>
+                                            <td id="count-novillas" class="text-right">0</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Añojas</td>
+                                            <td id="count-anojas" class="text-right">0</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Terneras</td>
+                                            <td id="count-terneras-h" class="text-right">0</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Becerras</td>
+                                            <td id="count-becerras" class="text-right">0</td>
+                                        </tr>
+                                    </table>
                                 </div>
                             </div>
+                        </div>
 
+                        <!-- ALERTS & ACTIONS (BOTTOM GRID) -->
+                        <div class="panel-grid">
                             <div class="card panel-quality">
                                 <div class="card-head">
-                                    <h3>Alertas Recientes</h3>
+                                    <h3>Próximos Eventos</h3>
                                 </div>
                                 <ul class="quality-list" id="alertsList">
                                     <li>
-                                        <span><span class="dot green"></span> Sistema operativo</span>
-                                        <span class="pill">OK</span>
+                                        <span>No hay eventos próximos</span>
                                     </li>
                                 </ul>
                             </div>
-                        </div>
 
-                        <div class="actions-card">
-                            <h3>Acciones RÃ¡pidas</h3>
-                            <div class="action-list">
-                                <button class="action-btn" data-action="add-animal">âž• Registrar nuevo animal</button>
-                                <button class="action-btn" data-action="add-event">ðŸ“… Registrar evento</button>
-                                <button class="action-btn" data-action="calc-fcr">ðŸ“Š Calcular FCR</button>
-                                <button class="action-btn" id="action-report">ðŸ“„ Generar reporte</button>
+                            <div class="card actions-card">
+                                <h3>Acciones Rápidas</h3>
+                                <div class="action-list">
+                                    <button class="action-btn" data-action="add-animal">Registrar nuevo animal</button>
+                                    <button class="action-btn" data-action="add-event">Registrar evento</button>
+                                    <button class="action-btn" data-action="calc-fcr">Calcular FCR</button>
+                                    <button class="action-btn" id="action-report">Generar reporte</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -174,18 +232,26 @@
                     <div id="animals" class="section hidden">
                         <div class="content-head">
                             <div>
-                                <p class="eyebrow">GESTIÃ“N DE ANIMALES</p>
+                                <p class="eyebrow">GESTIÓN DE ANIMALES</p>
                                 <h2>Inventario de Animales</h2>
                                 <p class="lede">Registro y seguimiento individual</p>
                             </div>
-                            <button class="primary" id="toggleAnimalForm">âž• Nuevo Animal</button>
+                            <div style="display: flex; gap: 10px;">
+                                <button class="ghost" onclick="downloadAnimalTemplate()"
+                                    title="Descargar plantilla CSV">Plantilla</button>
+                                <button class="ghost" onclick="document.getElementById('animalBatchInput').click()"
+                                    title="Importar animales desde CSV">Cargar CSV</button>
+                                <input type="file" id="animalBatchInput" accept=".csv" class="hidden"
+                                    onchange="handleAnimalBatchImport(event)">
+                                <button class="primary" id="toggleAnimalForm">Nuevo Animal</button>
+                            </div>
                         </div>
 
                         <div class="card farm-card hidden" id="animalFormCard">
                             <h3>Registrar Nuevo Animal</h3>
                             <form id="animalForm" class="farm-form">
-                                <label>ID / Etiqueta
-                                    <input type="text" id="animalId" placeholder="Ej: A-001" required>
+                                <label>Crotal
+                                    <input type="text" id="animalId" placeholder="Ej: ES000000000000" required>
                                 </label>
                                 <label>Nombre (opcional)
                                     <input type="text" id="animalName" placeholder="Ej: Lola">
@@ -198,7 +264,7 @@
                                 <label>Raza
                                     <select id="animalBreed" required>
                                         <option value="">Selecciona raza</option>
-                                        <option value="AvileÃ±a-Negra IbÃ©rica">AvileÃ±a-Negra IbÃ©rica</option>
+                                        <option value="Avileña-Negra Ibérica">Avileña-Negra Ibérica</option>
                                         <option value="Retinta">Retinta</option>
                                         <option value="Morucha">Morucha</option>
                                         <option value="Lidia">Lidia</option>
@@ -215,14 +281,27 @@
                                         <option value="Macho">Macho</option>
                                     </select>
                                 </label>
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                                    <label style="margin: 0;">Padre (Crotal)
+                                        <input type="text" id="animalFather" placeholder="Opcional">
+                                    </label>
+                                    <label style="margin: 0;">Madre (Crotal)
+                                        <input type="text" id="animalMother" placeholder="Opcional">
+                                    </label>
+                                </div>
                                 <label>Fecha de Nacimiento
                                     <input type="date" id="animalBirth" required>
                                 </label>
-                                <label>Peso Inicial (kg)
-                                    <input type="number" id="animalWeight" placeholder="Ej: 250" step="0.1" required>
-                                </label>
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                                    <label style="margin: 0;">Peso Nacimiento (kg)
+                                        <input type="number" id="animalBirthWeight" placeholder="Ej: 35" step="0.1">
+                                    </label>
+                                    <label style="margin: 0;">Peso Actual (kg)
+                                        <input type="number" id="animalWeight" placeholder="Ej: 200" step="0.1"
+                                            required>
+                                </div>
                                 <label>Notas
-                                    <input type="text" id="animalNotes" placeholder="InformaciÃ³n adicional">
+                                    <input type="text" id="animalNotes" placeholder="Información adicional">
                                 </label>
                                 <div class="profile-actions">
                                     <button type="submit" class="primary">Guardar Animal</button>
@@ -237,7 +316,8 @@
                             </div>
                             <div class="farm-form" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
                                 <label>Buscar
-                                    <input type="text" id="searchAnimal" placeholder="ID, nombre...">
+                                    <input type="text" id="searchAnimal" list="animal-ids" placeholder="ID, nombre...">
+                                    <datalist id="animal-ids"></datalist>
                                 </label>
                                 <label>Finca
                                     <select id="filterFarm">
@@ -256,11 +336,15 @@
                                         <option value="Macho">Macho</option>
                                     </select>
                                 </label>
+                                <label>Edad / Tipo
+                                    <select id="filterAge">
+                                        <option value="">Todos</option>
+                                    </select>
+                                </label>
                             </div>
                         </div>
 
                         <div class="farm-list">
-                            <h3>Listado de Animales (<span id="animalCount">0</span>)</h3>
                             <div id="animalsList" class="farms">
                                 <p class="status">No hay animales registrados</p>
                             </div>
@@ -271,11 +355,11 @@
                     <div id="events" class="section hidden">
                         <div class="content-head">
                             <div>
-                                <p class="eyebrow">GESTIÃ“N DE EVENTOS</p>
+                                <p class="eyebrow">GESTIÓN DE EVENTOS</p>
                                 <h2>Registro de Eventos</h2>
-                                <p class="lede">Vacunaciones, tratamientos y mÃ¡s</p>
+                                <p class="lede">Vacunaciones, tratamientos y más</p>
                             </div>
-                            <button class="primary" id="toggleEventForm">âž• Nuevo Evento</button>
+                            <button class="primary" id="toggleEventForm">Nuevo Evento</button>
                         </div>
 
                         <div class="card farm-card hidden" id="eventFormCard">
@@ -284,29 +368,51 @@
                                 <label>Tipo de Evento
                                     <select id="eventType" required>
                                         <option value="">Selecciona tipo</option>
-                                        <option value="VacunaciÃ³n">ðŸ’‰ VacunaciÃ³n</option>
-                                        <option value="Tratamiento">ðŸ’Š Tratamiento</option>
-                                        <option value="Parto">ðŸ® Parto</option>
-                                        <option value="Destete">ðŸ¼ Destete</option>
-                                        <option value="Pesaje">âš–ï¸ Pesaje</option>
-                                        <option value="Otro">ðŸ“ Otro</option>
+                                        <option value="Vacunación">Vacunación</option>
+                                        <option value="Tratamiento">Tratamiento</option>
+                                        <option value="Parto">Parto</option>
+                                        <option value="Destete">Destete</option>
+                                        <option value="Pesaje">Pesaje</option>
+                                        <option value="Otro">Otro</option>
                                     </select>
                                 </label>
-                                <label>Animal
-                                    <select id="eventAnimal" required>
-                                        <option value="">Selecciona animal</option>
+                                <label style="position:relative;">Animal
+                                    <input type="text" id="eventAnimal"
+                                        placeholder="Buscar por Crotal (últimos 4 dígitos)" autocomplete="off">
+                                    <ul id="eventAnimalSuggestions" class="suggestions-list hidden"></ul>
+                                </label>
+
+                                <!-- Parto Specific Fields -->
+                                <label id="partoFields" class="hidden"
+                                    style="color:#15803d; font-weight:600; margin-top:8px;">Datos de la Cría</label>
+                                <label class="parto-field hidden">Crotal Cría
+                                    <input type="text" id="eventCalfCrotal" placeholder="Nuevo Crotal">
+                                </label>
+                                <label class="parto-field hidden">Sexo
+                                    <select id="eventSex">
+                                        <option value="">Selecciona sexo</option>
+                                        <option value="Macho">Macho</option>
+                                        <option value="Hembra">Hembra</option>
                                     </select>
                                 </label>
-                                <label>Fecha
-                                    <input type="date" id="eventDate" required>
+                                <label class="parto-field hidden" style="position:relative;">Padre (Opcional)
+                                    <input type="text" id="eventFather" placeholder="Crotal Padre" autocomplete="off">
+                                    <ul id="eventFatherSuggestions" class="suggestions-list hidden"></ul>
                                 </label>
-                                <label>DescripciÃ³n
-                                    <input type="text" id="eventDesc" placeholder="Detalles del evento" required>
+
+                                <label style="display:none;">Fecha
+                                    <input type="date" id="eventDate" required readonly>
                                 </label>
-                                <label>Costo (â‚¬, opcional)
+                                <label>Descripción
+                                    <input type="text" id="eventDesc" placeholder="Ej: Vacunación anual">
+                                </label>
+                                <label>Costo (€, opcional)
                                     <input type="number" id="eventCost" placeholder="0.00" step="0.01">
                                 </label>
-                                <label>PrÃ³xima Fecha (opcional)
+                                <label id="eventWeightLabel" class="hidden">Peso Registrado (kg)
+                                    <input type="number" id="eventWeight" placeholder="Ej: 250.1234" step="0.0001">
+                                </label>
+                                <label>Próxima Fecha (opcional)
                                     <input type="date" id="eventNext" placeholder="Para seguimiento">
                                 </label>
                                 <div class="profile-actions">
@@ -324,7 +430,7 @@
                                 <label>Tipo
                                     <select id="filterEventType">
                                         <option value="">Todos los tipos</option>
-                                        <option value="VacunaciÃ³n">VacunaciÃ³n</option>
+                                        <option value="Vacunación">Vacunación</option>
                                         <option value="Tratamiento">Tratamiento</option>
                                         <option value="Parto">Parto</option>
                                         <option value="Destete">Destete</option>
@@ -353,8 +459,8 @@
                         <div class="content-head">
                             <div>
                                 <p class="eyebrow">CALCULADORA</p>
-                                <h2>Ãndice de ConversiÃ³n Alimenticia (FCR)</h2>
-                                <p class="lede">Calcula la eficiencia de conversiÃ³n de alimento</p>
+                                <h2>Índice de Conversión Alimenticia (FCR)</h2>
+                                <p class="lede">Calcula la eficiencia de conversión de alimento</p>
                             </div>
                         </div>
 
@@ -364,7 +470,7 @@
                                 <form id="fcrForm" class="farm-form">
                                     <label>Animal (opcional)
                                         <select id="fcrAnimal">
-                                            <option value="">CÃ¡lculo general</option>
+                                            <option value="">Cálculo general</option>
                                         </select>
                                     </label>
                                     <label>Peso Inicial (kg)
@@ -378,7 +484,7 @@
                                     <label>Alimento Consumido (kg)
                                         <input type="number" id="fcrFeed" placeholder="Ej: 1500" step="0.1" required>
                                     </label>
-                                    <label>DÃ­as de Engorde
+                                    <label>Días de Engorde
                                         <input type="number" id="fcrDays" placeholder="Ej: 180" required>
                                     </label>
                                     <button type="submit" class="primary full">Calcular</button>
@@ -401,7 +507,7 @@
                                     <div class="kpi card-soft">
                                         <p class="kpi-label">Ganancia Diaria Promedio</p>
                                         <p class="kpi-value" id="result-adg">-</p>
-                                        <p class="kpi-foot">kg/dÃ­a</p>
+                                        <p class="kpi-foot">kg/día</p>
                                     </div>
                                     <div class="kpi card-soft">
                                         <p class="kpi-label">Eficiencia</p>
@@ -413,9 +519,9 @@
                         </div>
 
                         <div class="farm-list">
-                            <h3>Historial de CÃ¡lculos (<span id="fcrHistoryCount">0</span>)</h3>
+                            <h3>Historial de Cálculos (<span id="fcrHistoryCount">0</span>)</h3>
                             <div id="fcrHistory" class="farms">
-                                <p class="status">No hay cÃ¡lculos guardados</p>
+                                <p class="status">No hay cálculos guardados</p>
                             </div>
                         </div>
                     </div>
@@ -424,21 +530,48 @@
                     <div id="farms" class="section hidden">
                         <div class="content-head">
                             <div>
-                                <p class="eyebrow">GESTIÃ“N DE FINCAS</p>
+                                <p class="eyebrow">GESTIÓN DE FINCAS</p>
                                 <h2>Mis Fincas</h2>
                                 <p class="lede">Administra tus explotaciones ganaderas</p>
                             </div>
+                            <div>
+                                <button class="primary" id="toggleFarmForm">Nueva Finca</button>
+                            </div>
                         </div>
 
+                        <!-- FILTERS CARD -->
                         <div class="card farm-card">
+                            <div class="card-head">
+                                <h3>Filtros</h3>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 10px;">
+                                <label style="margin:0">Buscar
+                                    <input type="text" id="searchFarm" placeholder="Nombre, ubicación...">
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- FORM CARD (Hidden by default) -->
+                        <div class="card farm-card hidden" id="farmFormCard">
                             <h3 id="farmFormTitle">Registrar Nueva Finca</h3>
-                            <form id="farmForm" class="farm-form">
+                            <form id="farmForm" class="farm-form" style="border:none; padding:0; background:none;">
                                 <input type="hidden" id="farmEditId">
+                                <div
+                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                                    <label>Latitud
+                                        <input type="number" id="farmLat" step="any" placeholder="Ej: 40.41" readonly
+                                            style="background: #f3f4f6; cursor: not-allowed;">
+                                    </label>
+                                    <label>Longitud
+                                        <input type="number" id="farmLon" step="any" placeholder="Ej: -3.70" readonly
+                                            style="background: #f3f4f6; cursor: not-allowed;">
+                                    </label>
+                                </div>
 
                                 <!-- SIGPAC SEARCH -->
-                                <div
+                                <div class="sigpac-container"
                                     style="background: linear-gradient(135deg, #e7f7ee, #f8fafc); border: 2px solid #bbebd1; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
-                                    <h4 style="margin: 0 0 8px; color: #15803d;">🔍 Buscar en SIGPAC</h4>
+                                    <h4 style="margin: 0 0 8px; color: #15803d;">Buscar en SIGPAC</h4>
                                     <p style="margin: 0 0 12px; font-size: 13px; color: #6b7280;">Introduce los datos de
                                         la parcela para autocompletar</p>
                                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
@@ -512,7 +645,8 @@
                                         </label>
                                     </div>
                                     <button type="button" class="primary full" id="searchSigpacBtn"
-                                        style="margin-top: 8px;">🔍 Buscar en SIGPAC</button>
+                                        style="margin-top: 8px;">
+                                        Buscar en SIGPAC</button>
                                     <div id="sigpacLoading" class="hidden"
                                         style="margin-top: 12px; display: flex; align-items: center; gap: 8px; color: #6b7280;">
                                         <div
@@ -526,13 +660,24 @@
                                 </div>
 
                                 <label>Nombre de la finca
-                                    <input type="text" id="farmName" placeholder="Ej: Finca El Roble" required>
+                                    <input type="text" id="farmName" placeholder="Ej: Finca El Roble">
                                 </label>
-                                <label>UbicaciÃ³n
-                                    <input type="text" id="farmLocation" placeholder="Ej: Salamanca, EspaÃ±a" required>
+                                <label>Ubicación
+                                    <input type="text" id="farmLocation" placeholder="Ej: Salamanca, España" required>
                                 </label>
-                                <label>TamaÃ±o (hectÃ¡reas)
-                                    <input type="number" id="farmSize" placeholder="Ej: 150" step="0.1" required>
+                                <label>Tamaño (hectáreas)
+                                    <input type="number" id="farmSize" placeholder="Ej: 150" step="any" required>
+                                </label>
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                                    <label style="margin: 0;">Pendiente Media (%)
+                                        <input type="number" id="farmSlope" placeholder="Ej: 5.4" step="0.1">
+                                    </label>
+                                    <label style="margin: 0;">Coef. Regadío (%)
+                                        <input type="number" id="farmIrrigation" placeholder="Ej: 0" step="1">
+                                    </label>
+                                </div>
+                                <label>Uso SIGPAC
+                                    <input type="text" id="farmSigpacUse" placeholder="Ej: ZU, TA...">
                                 </label>
                                 <label>Tipo de suelo
                                     <select id="farmSoil" required>
@@ -547,26 +692,46 @@
                                 <label>Licencia ganadera
                                     <input type="text" id="farmLicense" placeholder="Ej: ES-37-12345" required>
                                 </label>
-                                <label>NÃºmero de animales
+                                <label>Número de animales
                                     <input type="number" id="farmAnimals" placeholder="Ej: 50" required>
                                 </label>
                                 <label>Sistema de manejo
                                     <select id="farmManagement" required>
                                         <option value="">Selecciona sistema</option>
-                                        <option value="Extensivo">Extensivo</option>
-                                        <option value="Semi-extensivo">Semi-extensivo</option>
                                         <option value="Intensivo">Intensivo</option>
+                                        <option value="Semi-intensivo">Semi-intensivo</option>
+                                        <option value="Extensivo">Extensivo</option>
                                     </select>
                                 </label>
-                                <label>AlimentaciÃ³n principal
-                                    <select id="farmFeed" required>
-                                        <option value="">Selecciona tipo</option>
-                                        <option value="Pasto natural">Pasto natural</option>
-                                        <option value="Pasto + Suplemento">Pasto + Suplemento</option>
-                                        <option value="Forraje">Forraje</option>
-                                        <option value="Mixta">Mixta</option>
-                                    </select>
-                                </label>
+                                <label class="section-label"
+                                    style="margin-top: 20px; font-weight: 600; color: #4b5563;">Control
+                                    Climático</label>
+                                <div
+                                    style="background: #f9fafb; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb; margin-bottom: 20px;">
+                                    <label
+                                        style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-weight: normal;">
+                                        <input type="radio" name="weatherSource" value="public" checked
+                                            onchange="toggleWeatherConfig()">
+                                        <span>🌐 Estación Pública (Open-Meteo)</span>
+                                    </label>
+                                    <label
+                                        style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-weight: normal;">
+                                        <input type="radio" name="weatherSource" value="private"
+                                            onchange="toggleWeatherConfig()">
+                                        <span>📡 Estación Meteorológica Propia</span>
+                                    </label>
+
+                                    <div id="weatherStationConfig" class="hidden"
+                                        style="margin-left: 24px; border-left: 2px solid #e5e7eb; padding-left: 12px;">
+                                        <label style="font-size: 0.9em; color: #6b7280;">ID de Estación / API Key
+                                            <input type="text" id="farmWeatherId" placeholder="Ej: STATION_001_SOTO"
+                                                style="font-size: 0.9em;">
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 12px; color: #6b7280; margin-top: 8px;">
+                                        ℹ️ La opción pública usa la ubicación de la finca para obtener datos gratuitos.
+                                    </p>
+                                </div>
                                 <div class="profile-actions">
                                     <button type="submit" class="primary" id="farmSubmitBtn">Guardar Finca</button>
                                     <button type="button" class="ghost" id="cancelFarmEdit"
@@ -575,9 +740,9 @@
                             </form>
                         </div>
 
-                        <div class="farm-list">
-                            <h3>Fincas Registradas</h3>
-                            <div id="fincasList" class="farms">
+                        <!-- LIST CARD -->
+                        <div class="card farm-list">
+                            <div id="fincasList" class="farms" style="margin-top: 12px;">
                                 <p class="status">No hay fincas registradas</p>
                             </div>
                         </div>
@@ -587,7 +752,7 @@
                     <div id="reports" class="section hidden">
                         <div class="content-head">
                             <div>
-                                <p class="eyebrow">REPORTES Y EXPORTACIÃ“N</p>
+                                <p class="eyebrow">REPORTES Y EXPORTACIÓN</p>
                                 <h2>Generar Reportes</h2>
                                 <p class="lede">Exporta tus datos en diferentes formatos</p>
                             </div>
@@ -595,22 +760,38 @@
 
                         <div class="panel-grid">
                             <div class="card">
-                                <h3>Tipo de Reporte</h3>
-                                <div class="action-list">
-                                    <button class="action-btn" data-report="inventory">ðŸ“¦ Inventario de
-                                        Animales</button>
-                                    <button class="action-btn" data-report="events">ðŸ“… Historial de Eventos</button>
-                                    <button class="action-btn" data-report="fcr">ðŸ“Š AnÃ¡lisis FCR</button>
-                                    <button class="action-btn" data-report="farms">ðŸŒ¾ Resumen de Fincas</button>
-                                    <button class="action-btn" data-report="complete">ðŸ“‹ Reporte Completo</button>
+                                <h3>Fecha del Reporte</h3>
+                                <div class="farm-form"
+                                    style="grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 0;">
+                                    <label>Desde
+                                        <input type="date" id="reportStartDate">
+                                    </label>
+                                    <label>Hasta
+                                        <input type="date" id="reportEndDate">
+                                    </label>
                                 </div>
                             </div>
 
                             <div class="card">
-                                <h3>Formato de ExportaciÃ³n</h3>
+                                <h3>Tipo de Reporte</h3>
                                 <div class="action-list">
-                                    <button class="action-btn" id="exportCSV">ðŸ“„ Exportar a CSV</button>
-                                    <button class="action-btn" id="exportPDF">ðŸ“• Exportar a PDF</button>
+                                    <button class="action-btn" data-report="inventory">Inventario de
+                                        Animales</button>
+                                    <button class="action-btn" data-report="events">Historial de Eventos</button>
+                                    <button class="action-btn" data-report="weights">Historial de Pesos</button>
+                                    <button class="action-btn" data-report="fcr">Análisis FCR</button>
+                                    <button class="action-btn" data-report="farms">Resumen de Fincas</button>
+                                    <button class="action-btn" data-report="weather_history">Historial
+                                        Climatológico</button>
+                                    <button class="action-btn" data-report="complete">Reporte Completo</button>
+                                </div>
+                            </div>
+
+                            <div class="card">
+                                <h3>Formato de Exportación</h3>
+                                <div class="action-list">
+                                    <button class="action-btn" id="exportCSV">Exportar a CSV</button>
+                                    <button class="action-btn" id="exportPDF">Exportar a PDF</button>
                                 </div>
                                 <div style="margin-top: 16px;">
                                     <p class="status">Selecciona un tipo de reporte arriba</p>
@@ -626,7 +807,7 @@
                             <div>
                                 <p class="eyebrow">MI CUENTA</p>
                                 <h2>Perfil de Usuario</h2>
-                                <p class="lede">Gestiona tu informaciÃ³n personal</p>
+                                <p class="lede">Gestiona tu información personal</p>
                             </div>
                         </div>
 
@@ -643,7 +824,7 @@
                                 <label>Nombre completo
                                     <input type="text" id="profileName" placeholder="Tu nombre">
                                 </label>
-                                <label>Correo electrÃ³nico
+                                <label>Correo electrónico
                                     <input type="email" id="profileEmail" placeholder="tu@correo.com">
                                 </label>
                                 <div class="profile-actions">
@@ -653,11 +834,299 @@
                             </form>
                         </div>
                     </div>
+
+                    <!-- DATOS SECTION (Admin Only) -->
+                    <div id="data" class="section hidden">
+                        <div class="content-head">
+                            <div>
+                                <p class="eyebrow">CONFIGURACIÓN</p>
+                                <h2>Datos de Razas</h2>
+                                <p class="lede">Gestión de información de razas bovinas</p>
+                            </div>
+                        </div>
+
+                        <!-- CSV Upload Card -->
+                        <div class="card" style="margin-bottom: 20px;">
+                            <h3>Importar/Actualizar Razas desde CSV</h3>
+                            <div class="farm-form" style="grid-template-columns: 1fr;">
+                                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                    <input type="file" id="breedCSVInput" accept=".csv"
+                                        style="flex: 1; min-width: 200px;">
+                                    <button class="primary" id="uploadBreedCSV">Cargar CSV</button>
+                                    <button class="ghost" id="downloadBreedTemplate">Descargar Plantilla</button>
+                                </div>
+                                <div id="csvUploadStatus" class="hidden"
+                                    style="padding: 10px; border-radius: 4px; margin-top: 10px;"></div>
+                                <p style="font-size: 13px; color: #666; margin-top: 8px;">
+                                    📋 Sube un archivo CSV con las columnas: raza_id, raza, subespecie,
+                                    peso_macho_adulto_kg, peso_hembra_adulta_kg, edad_sacrificio_meses,
+                                    ADG_feedlot_kg_dia, FCR, termotolerancia etc.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Breed Data Table -->
+                        <div class="card">
+                            <div class="card-head">
+                                <h3>Razas Registradas (<span id="breedCount">0</span>)</h3>
+                            </div>
+                            <div style="overflow-x: auto;">
+                                <table id="breedTable" style="width: 100%; border-collapse: collapse;">
+                                    <thead>
+                                        <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">ID</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">Raza</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">Subespecie
+                                            </th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">Peso ♂ (kg)
+                                            </th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">Peso ♀ (kg)
+                                            </th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">Edad
+                                                Sacrificio (meses)</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">ADG Feedlot
+                                                (kg/dia)</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">ADG Pastoreo
+                                                (kg/dia)</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">FCR</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">
+                                                Termotolerancia</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">Marmoleo</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">Facilidad
+                                                Parto</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Feed Data Section -->
+                        <h2 style="margin-top: 40px; margin-bottom: 20px;">Gestión de Alimentos</h2>
+
+                        <!-- CSV Upload Card for Feeds -->
+                        <div class="card" style="margin-bottom: 20px;">
+                            <h3>Importar/Actualizar Alimentos desde CSV</h3>
+                            <div class="farm-form" style="grid-template-columns: 1fr;">
+                                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                    <input type="file" id="feedCSVInput" accept=".csv"
+                                        style="flex: 1; min-width: 200px;">
+                                    <button class="primary" id="uploadFeedCSV">Cargar CSV</button>
+                                    <button class="ghost" id="downloadFeedTemplate">Descargar Plantilla</button>
+                                </div>
+                                <div id="feedUploadStatus" class="hidden"
+                                    style="padding: 10px; border-radius: 4px; margin-top: 10px;"></div>
+                                <p style="font-size: 13px; color: #666; margin-top: 8px;">
+                                    Sube un archivo CSV con las columnas: Feed Type, Example, DM %, CP %, NDF %, ADF %,
+                                    Notes, Breed Interaction
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Feed Data Table -->
+                        <div class="card">
+                            <div class="card-head">
+                                <h3>Alimentos Registrados (<span id="feedCount">0</span>)</h3>
+                            </div>
+                            <div style="overflow-x: auto;">
+                                <table id="feedTable" style="width: 100%; border-collapse: collapse;">
+                                    <thead>
+                                        <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">Tipo</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">Nombre</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">% MS</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">% PB</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">% FDN</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">% ADF</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">Energía Neta
+                                                (Mcal/kg)</th>
+                                            <th style="padding: 12px; text-align: left; font-weight: 600;">Uso
+                                                Recomendado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Soil Data Section (NEW) -->
+                        <h2 style="margin-top: 40px; margin-bottom: 20px;">Gestión de Suelos y Cultivos</h2>
+                        <div class="card">
+                            <div class="card-head">
+                                <h3>Matriz Suelo-Cultivo</h3>
+                                <div style="display:flex; gap:10px; align-items:center;">
+                                    <input type="file" id="soilCSVInput" accept=".csv" style="display:none;">
+                                    <button class="ghost small" id="btnImportSoils"
+                                        onclick="document.getElementById('soilCSVInput').click()">Importar CSV
+                                        Suelos</button>
+                                    <button class="ghost small" id="downloadSoilTemplate">Descargar Plantilla</button>
+                                </div>
+                            </div>
+                            <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
+                                Define qué cultivos forrajeros son aptos para cada tipo de suelo. Usado para
+                                recomendaciones automáticas.
+                            </p>
+                            <div style="overflow-x: auto;">
+                                <table id="soilTable" style="width: 100%; border-collapse: collapse;">
+                                    <thead>
+                                        <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                                            <th style="padding: 12px; text-align: left;">Cultivo</th>
+                                            <th style="padding: 12px; text-align: left;">Textura Ideal</th>
+                                            <th style="padding: 12px; text-align: left;">pH Ideal</th>
+                                            <th style="padding: 12px; text-align: left;">Mat. Orgánica</th>
+                                            <th style="padding: 12px; text-align: left;">Drenaje Req.</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="soilTableBody">
+                                        <!-- Populated by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
+        </div>
+        </div>
+        </div>
     </main>
+
+    <!-- Animal Detail Modal (Moved to root) -->
+    <div id="animalDetailModal" class="modal hidden">
+        <div class="modal-content card">
+            <span class="close-modal" id="closeAnimalDetail">&times;</span>
+            <div class="detail-header">
+                <h2 id="detailCrotal">ESXXXXX</h2>
+                <span class="tag" id="detailStatus">Activo</span>
+            </div>
+
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <span class="label">Raza</span>
+                    <span class="value" id="detailBreed">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Sexo</span>
+                    <span class="value" id="detailSex">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Nacimiento</span>
+                    <span class="value" id="detailBirth">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Finca</span>
+                    <span class="value" id="detailFarm">-</span>
+                </div>
+            </div>
+
+            <h4 style="margin: 0 0 10px;">Pesos (kg)</h4>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <span class="label">Al Nacer</span>
+                    <span class="value" id="detailBirthWeight">0</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Actual</span>
+                    <span class="value" id="detailWeight">0</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Ganancia Total</span>
+                    <span class="value" id="detailGain">0</span>
+                </div>
+            </div>
+
+            <h4 style="margin: 0 0 10px;">Genealogía</h4>
+            <div class="detail-grid" style="margin-bottom: 20px;">
+                <div class="detail-item">
+                    <span class="label">Padre</span>
+                    <span class="value" id="detailFather">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Madre</span>
+                    <span class="value" id="detailMother">-</span>
+                </div>
+            </div>
+
+            <h4 style="margin: 0 0 10px;">Descendencia</h4>
+            <ul id="detailOffspring"
+                style="padding-left: 20px; margin: 0 0 20px 0; font-size: 14px; color: var(--text);">
+                <!-- Populated via JS -->
+            </ul>
+
+            <h4 style="margin: 0 0 10px;">Notas</h4>
+            <p id="detailNotes" style="font-size: 14px; color: var(--muted); margin: 0;">-</p>
+
+            <div class="modal-actions" style="margin-top: 15px; display: flex; justify-content: flex-end;">
+                <button class="ghost" id="closeDetailBtn">Cerrar</button>
+            </div>
+        </div>
+    </div>
+    </div>
+    <!-- Farm Detail Modal [NEW] -->
+    <div id="farmDetailModal" class="modal hidden">
+        <div class="modal-content card" style="max-width: 600px;">
+            <span class="close-modal" id="closeFarmDetail">&times;</span>
+            <div class="detail-header">
+                <h2 id="detailFarmName">Finca</h2>
+                <span class="tag" id="detailFarmSize">0 ha</span>
+            </div>
+
+            <div style="margin-top: 10px; padding: 10px; background: #f8fafc; border-radius: 6px;">
+                <strong>📍 Ubicación:</strong> <span id="detailFarmLocation">-</span>
+                <br>
+                <span style="font-size: 0.9em; color: #64748b;">Lat: <span id="detailFarmLat">-</span>, Lon: <span
+                        id="detailFarmLon">-</span></span>
+            </div>
+
+            <h4 style="margin-top: 20px; border-bottom: 1px solid #eee; padding-bottom: 5px;">Datos SIGPAC</h4>
+            <div class="detail-grid" style="grid-template-columns: repeat(2, 1fr);">
+                <div class="detail-item"><strong>Pendiente:</strong> <span id="detailFarmSlope">-</span>%</div>
+                <div class="detail-item"><strong>Regadío:</strong> <span id="detailFarmIrrigation">-</span>%</div>
+                <div class="detail-item"><strong>Uso:</strong> <span id="detailFarmUse">-</span></div>
+                <div class="detail-item"><strong>Suelo:</strong> <span id="detailFarmSoil">-</span></div>
+            </div>
+
+            <h4 style="margin-top: 20px; border-bottom: 1px solid #eee; padding-bottom: 5px;">Producción</h4>
+            <div class="detail-grid" style="grid-template-columns: repeat(2, 1fr);">
+                <div class="detail-item"><strong>Licencia:</strong> <span id="detailFarmLicense">-</span></div>
+                <div class="detail-item"><strong>Animales:</strong> <span id="detailFarmAnimals">-</span></div>
+                <div class="detail-item"><strong>Manejo:</strong> <span id="detailFarmManagement">-</span></div>
+                <div class="detail-item"><strong>Alimentación:</strong> <span id="detailFarmFeed">-</span></div>
+            </div>
+
+            <h4 style="margin-top: 20px; border-bottom: 1px solid #eee; padding-bottom: 5px;">Clima (Tiempo Real)</h4>
+            <div id="detailFarmWeather"
+                style="background: #f0f9ff; padding: 15px; border-radius: 8px; margin-top: 10px; min-height: 60px; display: flex; align-items: center; justify-content: center;">
+                ⏳ Cargando datos climáticos...
+            </div>
+
+            <!-- Nutrition Engine Output -->
+            <h4 style="margin-top: 20px; border-bottom: 1px solid #eee; padding-bottom: 5px; color: #7c2d12;">🌱 Suelos
+                y Cultivos</h4>
+            <div id="detailFarmCrops" style="font-size: 0.9em; margin-top: 10px; color: #4b5563;">
+                Calculando compatibilidad edafológica...
+            </div>
+
+            <div class="detail-actions" style="margin-top: 25px; display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="ghost" id="btnDeleteFarmModal" style="color: #ef4444;">Eliminar Finca</button>
+                <button class="primary" id="btnEditFarmModal">Editar Finca</button>
+            </div>
+        </div>
+    </div>
+    </main>
+    <script src="breed-manager.js"></script>
+    <script src="breeding-engine.js"></script>
+    <script src="feed-manager.js"></script>
+    <script src="soil-manager.js"></script>
+    <script src="nutrition-engine.js"></script>
+    <script src="csv-download-fix.js"></script>
+    <script src="feed-csv-handler.js"></script>
+    <script src="farm-feed-manager.js"></script>
+    <script src="weather-service.js"></script>
+    <script src="app-sigpac.js"></script>
     <script src="app.js"></script>
+    <script src="app-reports.js"></script>
 </body>
 
 </html>

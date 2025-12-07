@@ -55,41 +55,92 @@ async function searchSIGPAC(provincia, municipio, poligono, parcela) {
 function parseSIGPACData(data) {
     if (!data) return null;
 
-    let props = null;
+    let item = null;
 
     // Handle Array response (standard for some regions/endpoints)
     if (Array.isArray(data) && data.length > 0) {
-        props = data[0];
+        item = data[0];
     }
     // Handle GeoJSON-like response (if applicable)
     else if (data.properties) {
-        props = data.properties;
+        item = data.properties;
     }
 
-    if (!props) return null;
+    if (!item) return null;
+
+    const muniName = item.dn_muni || item.municipio || '';
+    const provName = item.dn_prov || item.provincia || '';
+
+    // Extract coordinates from WKT -> "POLYGON((lon lat, ...))"
+    let lat = 0, lon = 0;
+    if (item.wkt) {
+        try {
+            // Simple regex to get first point: space separated numbers
+            const match = /([\-\d\.]+)\s+([\-\d\.]+)/.exec(item.wkt);
+            if (match) {
+                lon = parseFloat(match[1]);
+                lat = parseFloat(match[2]);
+            }
+        } catch (e) { console.error('Error parsing WKT', e); }
+    }
 
     return {
-        location: (props.dn_muni || props.municipio || '') + ', ' + (props.dn_prov || props.provincia || ''),
-        superficie: props.superficie || 0,
-        uso: props.uso_sigpac || props.uso_sigpac || props.uso || '', // Added props.uso_sigpac check if needed from array
-        provincia: props.dn_prov || props.provincia || '',
-        municipio: props.dn_muni || props.municipio || '',
-        poligono: props.poligono || '',
-        parcela: props.parcela || ''
+        location: `${muniName}, ${provName}`,
+        superficie: item.superficie || 0,
+        uso: item.uso_sigpac || item.uso || '',
+        pendiente: item.pendiente_media || 0,
+        regadio: item.coef_regadio || 0,
+        provincia: item.provincia || '',
+        municipio: item.municipio || '',
+        poligono: item.poligono || '',
+        parcela: item.parcela || '',
+        lat: lat,
+        lon: lon
     };
 }
 
 function fillFarmFormFromSIGPAC(parsed) {
     if (!parsed) return;
+
+    // Globals assumed: farmLocationInput, farmSizeInput, locationBadge, sizeBadge
+    // But they might not be defined in this file scope if they are from app.js or querySelectors at top
+    // The top of file has qs('#locationBadge') etc.
+
+    // Important: check if farmLocationInput is defined in this file. 
+    // It is NOT defined at the top of this file in the current view (lines 1-12).
+    // However, app.js might be relying on global scope or they should be defined here. 
+    // Looking at previous valid code (Step 191 log shows lines 1-165), farmLocationInput is NOT defined at top.
+    // It might have been defined in previous versions or I missed it.
+    // app.js defines them. 
+    // BUT, this file seems to treat them as globals or they are missing.
+    // Let's use `qs` locally if they are not defined, or assume they are global if that's how the app works.
+    // Checking lines 3-11: only sigpac inputs are defined.
+    // I should probably safer query them here or use what was there before.
+    // The broken code at line 55 used `farmSizeInput`.
+
+    const farmLocationInput = qs('#farmLocation');
+    const farmSizeInput = qs('#farmSize');
+
     if (parsed.location && farmLocationInput) {
         farmLocationInput.value = parsed.location;
         if (locationBadge) locationBadge.classList.remove('hidden');
     }
-    if (parsed.superficie && farmSizeInput) {
-        farmSizeInput.value = parsed.superficie.toFixed(2);
+    if (parsed.superficie !== undefined && farmSizeInput) {
+        farmSizeInput.value = parsed.superficie;
         if (sizeBadge) sizeBadge.classList.remove('hidden');
     }
-    showSigpacStatus('success', 'Datos cargados: ' + parsed.superficie.toFixed(2) + ' ha en ' + parsed.location);
+
+    // Fill new fields
+    const slopeInput = qs('#farmSlope');
+    if (slopeInput && parsed.pendiente !== undefined) slopeInput.value = parsed.pendiente;
+
+    const useInput = qs('#farmSigpacUse');
+    if (useInput && parsed.uso) useInput.value = parsed.uso;
+
+    const irrigationInput = qs('#farmIrrigation');
+    if (irrigationInput && parsed.regadio !== undefined) irrigationInput.value = parsed.regadio;
+
+    showSigpacStatus('success', 'Datos cargados: ' + parsed.superficie + ' ha en ' + parsed.location);
 }
 
 function showSigpacStatus(type, message) {

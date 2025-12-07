@@ -1,0 +1,13 @@
+Crotal,Nombre,Finca,Raza,Sexo,FechaNacimiento,Peso,Padre,Madre,Notas
+ES999999990001,Test1,Soto del Prior,,Hembra,2024-01-01,40,,,Mestiza (Sin padres)
+ES999999990002,Test2,Soto del Prior,,Macho,2024-01-02,42,,,Mestiza (Sin padres)
+ES999999990003,Test3,Soto del Prior,,Hembra,2024-01-03,38,,,Mestiza (Sin padres)
+ES999999990004,Test4,Soto del Prior,,Hembra,2024-01-04,39,,,Mestiza (Sin padres)
+ES999999990005,Test5,Soto del Prior,,Macho,2024-01-05,45,,,Mestiza (Sin padres)
+ES999999990006,Test6,Soto del Prior,Limousin,Hembra,2024-01-06,40,,,Raza Explicita
+ES999999990007,F1-A,Soto del Prior,,Macho,2024-02-01,42,ES071402954198,1047,Padre Lim x Madre Pirenaica (F1 Auto)
+ES999999990008,F1-B,Soto del Prior,,Hembra,2024-02-02,38,ES071402954198,8767,Padre Lim x Madre Betizu (F1 Auto)
+ES999999990009,F1-C,Soto del Prior,,Macho,2024-02-03,43,ES071402954198,1047,Padre Lim x Madre Pirenaica (F1 Auto)
+ES999999990010,F1-D,Soto del Prior,,Hembra,2024-02-04,39,ES071402954198,8767,Padre Lim x Madre Betizu (F1 Auto)
+ES999999990011,Test11,Soto del Prior,,Macho,2024-03-01,41,,,Mestiza (Sin padres)
+ES999999990012,Test12,Soto del Prior,,Hembra,2024-03-02,37,,,Mestiza (Sin padres)
