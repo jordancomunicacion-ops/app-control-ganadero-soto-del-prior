@@ -88,7 +88,9 @@ window.reloadBreedData = async function () {
 };
 
 // FEED_DATA will be loaded dynamically from CSV
+// FEED_DATA will be loaded dynamically from CSV
 let FEED_DATA = {};
+window.FEED_DATA = FEED_DATA; // Explicitly expose for external modules
 
 // Load feed data from CSV on startup
 async function initializeFeedData() {
@@ -102,6 +104,7 @@ async function initializeFeedData() {
       if (typeof renderFeedData === 'function') {
         renderFeedData();
       }
+      window.FEED_DATA = FEED_DATA; // Update global ref
       console.log('Loaded', Object.keys(FEED_DATA).length, 'feeds');
     }
   } catch (error) {
@@ -237,8 +240,83 @@ function showApp(user) {
   updateWeather();
   activateSection('home');
 
+  // Load Animals
+  if (typeof renderAnimals === 'function') renderAnimals();
+
   // Load Profile Data properly
   loadProfile(user);
+}
+
+// --- Helper: Reproductive Status Calculation ---
+function getReproductiveStatus(animal, events) {
+  if (!animal) return { status: 'Desconocido', isFertile: false, reason: 'No animal' };
+
+  // 1. Initial Checks (Sex, Age)
+  if (animal.sex !== 'Hembra') return { status: 'Macho', isFertile: false, reason: 'Solo hembras' };
+
+  const ageMonths = calculateAgeMonths(animal.birthDate);
+  if (ageMonths < 14) return { status: 'Inmadura', isFertile: false, reason: 'Menor de 14 meses' };
+
+  // 2. Analyze Event History
+  // Filter events for this animal and sort by date (ascending)
+  const history = events
+    .filter(e => e.animalId === animal.id || e.animalCrotal === animal.crotal) // Handle both ID/Crotal links
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  let status = 'Vacía'; // Default assume fertile if adult female
+  let reason = 'Apta para reproducción';
+  let isFertile = true;
+
+  let lastPartoDate = null;
+  let lastInsemDate = null;
+
+  history.forEach(ev => {
+    const d = new Date(ev.date);
+    if (ev.type === 'Parto') {
+      lastPartoDate = d;
+      status = 'Postparto';
+      isFertile = false;
+      reason = 'Recién parida';
+    } else if (ev.type === 'Inseminación' || (ev.type === 'Protocolo' && ev.desc.includes('IATF'))) {
+      if (lastPartoDate && d < lastPartoDate) return; // Ignore events before last birth
+      lastInsemDate = d;
+      status = 'Cubierta'; // Waiting for diagnosis
+      isFertile = false;
+      reason = 'Inseminada, pendiente diagnóstico';
+    } else if (ev.type === 'Revisión' && (ev.desc.includes('Diagnóstico') || ev.desc.includes('Ecografía'))) {
+      if (lastInsemDate && d > lastInsemDate) {
+        // Logic to parse result from description if possible, or assume user manages it manually?
+        // For now, let's assume if "Diagnóstico Gestación" -> result is in notes? 
+        // Implementation Detail: Use specific text in Desc or a new field?
+        // Simplification: If Desc contains 'Pregnada' or 'Gestante' -> Gestante.
+        // If Desc contains 'Vacía' or 'Negativo' -> Vacía.
+        const desc = (ev.desc || '').toLowerCase();
+        if (desc.includes('gestante') || desc.includes('preñada') || desc.includes('positiv')) {
+          status = 'Gestante';
+          isFertile = false;
+          reason = 'Confirmada gestante';
+        } else if (desc.includes('vacía') || desc.includes('vacia') || desc.includes('negativ')) {
+          status = 'Vacía';
+          isFertile = true;
+          reason = 'Diagnóstico negativo (Vacía)';
+        }
+      }
+    }
+  });
+
+  // 3. Postparto Time Check
+  if (status === 'Postparto' && lastPartoDate) {
+    const daysSince = (new Date() - lastPartoDate) / (1000 * 60 * 60 * 24);
+    if (daysSince >= 45) {
+      status = 'Vacía';
+      isFertile = true;
+      reason = 'Periodo voluntario de espera cumplido';
+    } else {
+      reason = `Postparto (${Math.floor(daysSince)} días). Mínimo 45.`;
+    }
+  }
+
+  return { status, isFertile, reason };
 }
 
 function loadSession() {
@@ -1207,244 +1285,7 @@ async function updateWeather() {
   }
 }
 
-// ==========================================
-// SIGPAC INTEGRATION (Fixed & Robust)
-// ==========================================
-
-const sigpacProvInput = qs('#sigpacProv');
-const sigpacMuniInput = qs('#sigpacMuni');
-const sigpacPoliInput = qs('#sigpacPoli');
-const sigpacParcInput = qs('#sigpacParc');
-const searchSigpacBtn = qs('#searchSigpacBtn');
-const sigpacStatus = qs('#sigpacStatus');
-const sigpacLoading = qs('#sigpacLoading');
-
-const locationBadge = qs('#locationBadge');
-const sizeBadge = qs('#sizeBadge');
-
-
-const SIGPAC_QUERY_BASE = 'https://sigpac-hubcloud.es/servicioconsultassigpac/query';
-const SIGPAC_CODES_BASE = 'https://sigpac-hubcloud.es/codigossigpac';
-
-function pad(num, size) {
-  let s = String(num);
-  while (s.length < size) s = "0" + s;
-  return s;
-}
-
-async function fetchMunicipalities(provCode) {
-  if (!provCode) return [];
-  // Ensure provCode is 2 chars just in case
-  const p = pad(provCode, 2);
-  const url = `${SIGPAC_CODES_BASE}/municipio${p}.json`;
-
-  try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    // data.codigos: array of { codigo: number, descripcion: string }
-    return data.codigos || [];
-  } catch (err) {
-    console.error('Error fetching municipalities:', err);
-    throw err;
-  }
-}
-
-async function searchSIGPAC(prov, muni, poli, parc) {
-  // Standard SIGPAC structure: 
-  // Prov(2) / Muni(3) / Ag(1) / Zone(1) / Poly(3) / Parc(5) / Rec(1)
-
-  const pr = pad(prov || 0, 2);
-  const mu = pad(muni || 0, 3);
-  const ag = '0';
-  const zo = '0';
-  const po = pad(poli || 0, 3);
-  const pa = pad(parc || 0, 5);
-
-  // We try querying Recinto 1. If it fails, we might need a different strategy,
-  // but Recinto 1 exists for almost all declared parcels.
-  const re = '1';
-
-  const url = `${SIGPAC_QUERY_BASE}/recinfo/${pr}/${mu}/${ag}/${zo}/${po}/${pa}/${re}.json`;
-
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Parcela no encontrada (HTTP ${response.status})`);
-  }
-  return await response.json();
-}
-
-function parseSIGPACData(data) {
-  let item = null;
-
-  // Check if it's an array (Standard recinfo response)
-  if (Array.isArray(data) && data.length > 0) {
-    item = data[0];
-  }
-  // Check if it's GeoJSON properties (Fallback/Legacy)
-  else if (data && data.properties) {
-    item = data.properties;
-  }
-
-  if (!item) return null;
-
-  // Get human-readable names from the dropdowns if available
-  let muniName = item.dn_muni || item.municipio;
-  let provName = item.dn_prov || item.provincia;
-
-  // Try to get text from dropdowns
-  if (sigpacMuniInput && sigpacMuniInput.options[sigpacMuniInput.selectedIndex]) {
-    muniName = sigpacMuniInput.options[sigpacMuniInput.selectedIndex].text;
-  }
-  if (sigpacProvInput && sigpacProvInput.options[sigpacProvInput.selectedIndex]) {
-    provName = sigpacProvInput.options[sigpacProvInput.selectedIndex].text;
-  }
-
-  return {
-    location: `${muniName}, ${provName}`,
-    superficie: item.superficie || 0,
-    uso: item.uso_sigpac || item.uso || '',
-    provincia: item.provincia || '',
-    municipio: item.municipio || '',
-    poligono: item.poligono || '',
-    parcela: item.parcela || ''
-  };
-}
-
-function fillFarmFormFromSIGPAC(parsed) {
-  if (!parsed) return;
-
-  if (parsed.location && farmLocationInput) {
-    farmLocationInput.value = parsed.location;
-    // Trigger input event to update visual state if needed
-    farmLocationInput.dispatchEvent(new Event('input'));
-  }
-
-  if (parsed.superficie && farmSizeInput) {
-    farmSizeInput.value = parsed.superficie.toFixed(2);
-    farmSizeInput.dispatchEvent(new Event('input'));
-  }
-
-  if (farmLatInput) farmLatInput.value = parsed.lat || '';
-  if (farmLonInput) farmLonInput.value = parsed.lon || '';
-
-  const coordsMsg = (parsed.lat && parsed.lon) ? '(Con coordenadas)' : '(Sin coordenadas)';
-  showSigpacStatus('success', `Datos cargados: ${parsed.superficie.toFixed(2)} ha en ${parsed.location} ${coordsMsg}`);
-}
-
-function showSigpacStatus(type, message) {
-  if (!sigpacStatus) return;
-
-  if (type === 'error') {
-    sigpacStatus.style.background = '#fef2f2';
-    sigpacStatus.style.color = '#991b1b';
-    sigpacStatus.style.border = '1px solid #fecaca';
-  } else {
-    sigpacStatus.style.background = '#f0fdf4';
-    sigpacStatus.style.color = '#166534';
-    sigpacStatus.style.border = '1px solid #bbf7d0';
-  }
-
-  sigpacStatus.classList.remove('hidden');
-  sigpacStatus.textContent = message;
-
-  // Auto-hide after 5 seconds
-  setTimeout(() => {
-    if (sigpacStatus) sigpacStatus.classList.add('hidden');
-  }, 5000);
-}
-
-function setSigpacLoading(loading, text) {
-  if (!sigpacLoading) return;
-
-  if (loading) {
-    sigpacLoading.classList.remove('hidden');
-    const span = sigpacLoading.querySelector('span');
-    if (span && text) span.textContent = text;
-  } else {
-    sigpacLoading.classList.add('hidden');
-  }
-
-  if (searchSigpacBtn) searchSigpacBtn.disabled = loading;
-}
-
-// === Event Listeners ===
-
-if (sigpacProvInput) {
-  sigpacProvInput.addEventListener('change', async function () {
-    const isoCode = this.value; // e.g. "31"
-    const muniSelect = sigpacMuniInput;
-
-    if (!muniSelect) return;
-
-    // Reset
-    muniSelect.innerHTML = '<option value="">Cargando...</option>';
-    muniSelect.disabled = true;
-
-    if (!isoCode) {
-      muniSelect.innerHTML = '<option value="">Selecciona provincia primero</option>';
-      return;
-    }
-
-    try {
-      setSigpacLoading(true, 'Cargando municipios...');
-      const municipios = await fetchMunicipalities(isoCode);
-
-      // Sort alphabetically
-      municipios.sort((a, b) => a.descripcion.localeCompare(b.descripcion));
-
-      // Populate
-      muniSelect.innerHTML = '<option value="">Selecciona municipio</option>';
-      municipios.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m.codigo; // e.g. 1 (number)
-        opt.textContent = m.descripcion;
-        muniSelect.appendChild(opt);
-      });
-
-      muniSelect.disabled = false;
-
-    } catch (err) {
-      showSigpacStatus('error', 'Error al cargar municipios. Inténtalo de nuevo.');
-      muniSelect.innerHTML = '<option value="">Error carga</option>';
-    } finally {
-      setSigpacLoading(false);
-    }
-  });
-}
-
-if (searchSigpacBtn) {
-  searchSigpacBtn.addEventListener('click', async function () {
-    // Collect values
-    const prov = sigpacProvInput ? sigpacProvInput.value : '';
-    const muni = sigpacMuniInput ? sigpacMuniInput.value : '';
-    const poli = sigpacPoliInput ? sigpacPoliInput.value.trim() : '';
-    const parc = sigpacParcInput ? sigpacParcInput.value.trim() : '';
-
-    if (!prov || !muni || !poli || !parc) {
-      showSigpacStatus('error', 'Faltan datos. Selecciona provincia, municipio e introduce polígono y parcela.');
-      return;
-    }
-
-    try {
-      setSigpacLoading(true, 'Consultando SIGPAC...');
-      const data = await searchSIGPAC(prov, muni, poli, parc);
-      const parsed = parseSIGPACData(data);
-
-      if (!parsed) {
-        showSigpacStatus('error', 'Respuesta inesperada del servidor.');
-        return;
-      }
-
-      fillFarmFormFromSIGPAC(parsed);
-
-    } catch (err) {
-      showSigpacStatus('error', 'Error: ' + err.message);
-    } finally {
-      setSigpacLoading(false);
-    }
-  });
-}
+// SIGPAC logic removed (See app-sigpac.js)
 
 // Button Event Listeners
 if (logoutBtn) {
@@ -1840,6 +1681,29 @@ function openAnimalDetails(id) {
   if (detailFarm) detailFarm.textContent = farm ? farm.name : 'Desconocida';
 
   if (detailNotes) detailNotes.textContent = animal.notes || 'Sin notas';
+
+  // --- Lifecycle & Nutrition Integration ---
+  if (window.NutritionEngine) {
+    // 1. Calculate Status
+    const events = storage.read('events', []);
+    const repro = getReproductiveStatus(animal, events);
+    const isPregnant = repro.status === 'Gestante' || repro.status === 'Preñada';
+    const ageMonths = calculateAgeMonths(animal.birthDate);
+
+    // 2. Determine Stage
+    const stage = window.NutritionEngine.determineStage(ageMonths, animal.sex, isPregnant);
+
+    // 3. Update UI
+    const stageEl = qs('#detailStage');
+    if (stageEl) {
+      stageEl.textContent = stage ? stage.name : 'N/A';
+    }
+
+    const lifecycleDiv = qs('#detailLifecycle');
+    if (lifecycleDiv) {
+      lifecycleDiv.innerHTML = window.NutritionEngine.getStageHtml(stage);
+    }
+  }
 
   if (animalDetailModal) animalDetailModal.classList.remove('hidden');
 }
@@ -2282,6 +2146,13 @@ function setupAutocomplete(input, list, getFilterFn) {
 setupAutocomplete(qs('#eventAnimal'), qs('#eventAnimalSuggestions'), () => {
   const type = qs('#eventType').value;
   if (type === 'Parto') return (a) => a.sex === 'Hembra';
+  if (type === 'Inseminación') {
+    const events = storage.read('events', []);
+    return (a) => {
+      const status = getReproductiveStatus(a, events);
+      return status.isFertile; // Strict filtering: Only Fertile Females
+    };
+  }
   return null;
 });
 
@@ -2337,8 +2208,7 @@ if (eventTypeInput) {
       eventWeightInput.required = isPesaje;
     }
 
-    // STRICT UI: Hide other fields for Pesaje
-    // We target the labels containing the inputs
+    // STRICT UI: Hide other fields for Pesaje OR Inseminación
     const descLabel = qs('#eventDesc').parentElement;
     const costLabel = qs('#eventCost').parentElement;
     const nextDateLabel = qs('#eventNext').parentElement;
@@ -2348,15 +2218,26 @@ if (eventTypeInput) {
     const partoFields = document.querySelectorAll('.parto-field');
     const partoHeader = qs('#partoFields');
 
-    // Reset Parto Visibility
+    // Inseminación Fields
+    const bullBreedLabel = qs('#eventBullBreedLabel');
+    const bullBreedSelect = qs('#eventBullBreed');
+
+    // Reset All Visibility first
     partoHeader.classList.add('hidden');
     partoFields.forEach(el => el.classList.add('hidden'));
+    if (bullBreedLabel) bullBreedLabel.classList.add('hidden');
+
+    // Default: Show standard fields
+    descLabel.classList.remove('hidden');
+    costLabel.classList.remove('hidden');
+    nextDateLabel.classList.remove('hidden');
+    if (eventWeightLabel) eventWeightLabel.classList.add('hidden');
 
     if (isPesaje) {
       descLabel.classList.add('hidden');
       costLabel.classList.add('hidden');
       nextDateLabel.classList.add('hidden');
-      if (animalLabel) animalLabel.querySelector('span')?.remove(); // Clean up if modified
+      if (eventWeightLabel) eventWeightLabel.classList.remove('hidden');
     } else if (type === 'Parto') {
       // PARTO UI
       eventWeightLabel.classList.remove('hidden'); // Reuse for Birth Weight
@@ -2364,18 +2245,28 @@ if (eventTypeInput) {
       costLabel.classList.add('hidden');
       nextDateLabel.classList.add('hidden');
 
-      // Show Parto Specifics
       partoHeader.classList.remove('hidden');
       partoFields.forEach(el => el.classList.remove('hidden'));
+    } else if (type === 'Inseminación') {
+      // INSEMINATION UI
+      descLabel.classList.add('hidden'); // Auto-desc
+      costLabel.classList.add('hidden'); // Hide cost as per request
+      nextDateLabel.classList.add('hidden'); // Hide next date as per request
 
-      // Update labels for context
-      if (eventWeightLabel.firstChild) eventWeightLabel.firstChild.textContent = 'Peso Nacimiento (kg) ';
-    } else {
-      // STANDARD UI
-      descLabel.classList.remove('hidden');
-      costLabel.classList.remove('hidden');
-      nextDateLabel.classList.remove('hidden');
-      if (eventWeightLabel.firstChild) eventWeightLabel.firstChild.textContent = 'Peso Registrado (kg) ';
+      if (bullBreedLabel) {
+        bullBreedLabel.classList.remove('hidden');
+        // Populate Breeds
+        if (bullBreedSelect) {
+          bullBreedSelect.innerHTML = '<option value="">Selecciona raza</option>';
+          // Use global BREED_DATA
+          Object.values(BREED_DATA).forEach(b => {
+            const opt = document.createElement('option');
+            opt.value = b.name;
+            opt.textContent = b.name;
+            bullBreedSelect.appendChild(opt);
+          });
+        }
+      }
     }
   });
 }
@@ -2569,6 +2460,48 @@ if (eventForm) {
         };
         events.push(autoEvent);
         alert('✅ Peso actualizado y próxima revisión programada en 30 días.');
+      } else if (type === 'Inseminación') {
+        // PROTOCOL GENERATOR (Ovsynch + IATF)
+        // Day 0: Start (This Event) -> GnRH 1
+
+        let breedInfo = '';
+        const bullBreedSelect = qs('#eventBullBreed');
+        if (bullBreedSelect && bullBreedSelect.value) {
+          breedInfo = ` Toro: ${bullBreedSelect.value}.`;
+        }
+
+        // 1. Update THIS event description
+        newEvent.desc = `Inicio Protocolo IA (Día 0): Evaluación + GnRH 1.${breedInfo} ${desc}`;
+
+        // 2. Generate Future Events
+        const protocolSteps = [
+          { day: 7, type: 'Tratamiento', desc: 'Protocolo IA (Día 7): Prostaglandina (PGF2a)' },
+          { day: 9, type: 'Tratamiento', desc: 'Protocolo IA (Día 9): GnRH 2ª dosis' },
+          { day: 10, type: 'Inseminación', desc: `Protocolo IA (Día 10): IA a Tiempo Fijo (16-20h tras GnRH).${breedInfo}` }, // The actual IA
+          { day: 35, type: 'Revisión', desc: 'Protocolo IA (Día 35): Ecografía (Diagnóstico Gestación)' },
+          { day: 60, type: 'Revisión', desc: 'Protocolo IA (Día 60): Confirmación Viabilidad' }
+        ];
+
+        protocolSteps.forEach(step => {
+          const stepDate = new Date(date); // Clone start date
+          stepDate.setDate(stepDate.getDate() + step.day);
+
+          const autoEvent = {
+            id: generateUUID(),
+            type: step.type,
+            animalId,
+            animalCrotal,
+            date: stepDate.toISOString().split('T')[0], // YYYY-MM-DD
+            desc: step.desc,
+            cost: 0, // Costs can be added later
+            status: 'scheduled',
+            createdAt: new Date().toISOString()
+          };
+          events.push(autoEvent);
+        });
+
+        alert('✅ Protocolo de Inseminación iniciado. Se han programado 5 eventos futuros (Día 7, 9, 10, 35, 60).');
+
       } else {
         alert('Evento registrado correctamente.');
       }
@@ -2850,124 +2783,7 @@ if (downloadBreedTemplateBtn) {
   });
 }
 
-// --- Feed CSV Upload Handler ---
-const uploadFeedBtn = qs('#uploadFeedCSV');
-const feedInput = qs('#feedCSVInput');
-const feedStatus = qs('#feedUploadStatus');
-
-if (uploadFeedBtn && feedInput) {
-  uploadFeedBtn.addEventListener('click', () => {
-    const file = feedInput.files[0];
-    if (!file) {
-      alert('Selecciona un archivo CSV primero.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const text = e.target.result;
-        // Use the manager methods
-        const data = FeedDataManager.parseCSV(text); // Logic from manager
-        // We need a proper bulk import method in FeedDataManager or just overwrite cache
-        // Currently FeedDataManager.parseCSV returns the object.
-
-        // Simulating import count logic
-        const count = Object.keys(data).length;
-
-        // Save via manager (hacky as manager doesn't have public setter, but has saveToStorage equivalent implicitly via load calls?)
-        // Actually FeedDataManager doesn't expose a 'save(data)' method easily in the file I saw. 
-        // Let's assume we can cache it manually or add a method. 
-        // FeedDataManager.load() caches what it fetches. 
-        // Let's overwrite the cache directly for now as per the pattern seen elsewhere.
-        localStorage.setItem('FEED_DATA_CACHE', JSON.stringify(data));
-        localStorage.setItem('FEED_DATA_CACHE_TIME', Date.now().toString());
-
-        // Refresh Global Var
-        FEED_DATA = data;
-
-        if (feedStatus) {
-          feedStatus.textContent = `Éxito: ${count} alimentos cargados.`;
-          feedStatus.classList.remove('hidden');
-          feedStatus.style.color = 'green';
-        }
-        renderFeedData();
-
-      } catch (err) {
-        console.error(err);
-        alert('Error al procesar CSV de alimentos ' + err.message);
-      }
-    };
-    reader.readAsText(file);
-  });
-}
-
-// --- Soil CSV Upload Handler ---
-const soilInput = qs('#soilCSVInput');
-if (soilInput) {
-  soilInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const res = SoilDataManager.importCSV(evt.target.result);
-        if (res.success) {
-          SoilDataManager.saveToStorage(); // Persistence
-          renderSoilData(); // Refresh UI
-          alert(`Suelos importados: ${res.count} registros.`);
-        } else {
-          alert('Error: ' + res.message);
-        }
-      } catch (err) {
-        console.error(err);
-        alert('Error al importar suelos.');
-      }
-    };
-    reader.readAsText(file);
-  });
-}
-
-// --- Render Feed Data ---
-function renderFeedData() {
-  const tbody = qs('#feedTable tbody');
-  const feedCountSpan = qs('#feedCount');
-  if (!tbody || typeof FEED_DATA === 'undefined') return;
-
-  tbody.innerHTML = '';
-  // Convert object to array for display
-  const feeds = Object.entries(FEED_DATA).map(([key, val]) => {
-    // Handle legacy format where key is name vs internal name
-    // In new parser, val contains 'name' and 'type' correctly.
-    return { name: key, ...val };
-  });
-
-  const feedCount = feeds.length;
-  if (feedCountSpan) feedCountSpan.textContent = feedCount;
-
-  // Sort by Name
-  feeds.sort((a, b) => {
-    const nameA = a.name || '';
-    const nameB = b.name || '';
-    return nameA.localeCompare(nameB);
-  });
-
-  feeds.forEach((feed) => {
-    const row = document.createElement('tr');
-    row.style.borderBottom = '1px solid #e2e8f0';
-    row.innerHTML = `
-      <td style="padding: 12px;">${feed.type || '-'}</td>
-      <td style="padding: 12px; font-weight: 500;">${feed.name || '-'}</td>
-      <td style="padding: 12px;">${feed.dm_percent || '-'}%</td>
-      <td style="padding: 12px;">${feed.cp_percent || '-'}%</td>
-      <td style="padding: 12px;">${feed.ndf_percent || '-'}%</td>
-      <td style="padding: 12px;">${feed.adf_percent || '-'}%</td>
-      <td style="padding: 12px;">${feed.energia_neta_Mcal_kg || '-'}</td>
-      <td style="padding: 12px;">${feed.uso_recomendado || '-'}</td>
-    `;
-    tbody.appendChild(row);
-  });
-}
+// Feed CSV logic removed (See feed-csv-handler.js)
 
 // --- Soil Template Download ---
 const downloadSoilTemplateBtn = qs('#downloadSoilTemplate');
@@ -3149,3 +2965,5 @@ window.handleAnimalBatchImport = async function (event) {
   };
   reader.readAsText(file);
 };
+
+

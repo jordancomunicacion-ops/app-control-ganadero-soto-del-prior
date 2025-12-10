@@ -64,9 +64,6 @@ async function handleReportGeneration(type) {
                 }));
                 break;
 
-            case 'fcr':
-                alert('Reporte FCR aún no disponible en CSV. Use la calculadora.');
-                return;
 
             case 'weather_history':
                 const startDate = qs('#reportStartDate').value;

@@ -15,14 +15,18 @@ document.addEventListener('DOMContentLoaded', function () {
             const row = document.createElement('tr');
             row.style.borderBottom = '1px solid #e2e8f0';
             row.innerHTML = `
-        <td style="padding: 12px;">${name}</td>
+        <td style="padding: 12px;">${feed.id || '-'}</td>
         <td style="padding: 12px;">${feed.type || '-'}</td>
+        <td style="padding: 12px;">${name}</td>
         <td style="padding: 12px;">${feed.dm_percent || '-'}</td>
         <td style="padding: 12px;">${feed.cp_percent || '-'}</td>
         <td style="padding: 12px;">${feed.ndf_percent || '-'}</td>
         <td style="padding: 12px;">${feed.adf_percent || '-'}</td>
+        <td style="padding: 12px;">${feed.energia_neta_Mcal_kg || '-'}</td>
+        <td style="padding: 12px;">${feed.risk_level || '-'}</td>
+        <td style="padding: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${feed.uso_recomendado || '-'}</td>
         <td style="padding: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${feed.notes || '-'}</td>
-        <td style="padding: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${feed.breed_interaction || '-'}</td>
+        <td style="padding: 12px;">${feed.cost_eur_kg || '-'} €</td>
       `;
             tbody.appendChild(row);
         });
@@ -95,19 +99,23 @@ document.addEventListener('DOMContentLoaded', function () {
             console.log('Feed CSV Download clicked');
 
             try {
-                const headers = 'Feed Type,Example,DM %,CP %,NDF %,ADF %,Notes,Breed Interaction\n';
+                const headers = 'ID;Tipo;Nombre;Porcentaje_MS;Porcentaje_PB;Porcentaje_FDN;Porcentaje_ADF;Energia_Neta_Mcal_kg;Riesgo;Uso_Recomendado;Notas;Coste_Eur_kg\n';
 
                 const rows = Object.entries(FEED_DATA).map(([name, feed]) => {
                     return [
+                        feed.id || '',
+                        feed.type || 'Otro',
                         `"${name}"`,
-                        feed.example || '',
                         feed.dm_percent || '',
                         feed.cp_percent || '',
                         feed.ndf_percent || '',
                         feed.adf_percent || '',
+                        feed.energia_neta_Mcal_kg || '',
+                        feed.risk_level || 'Bajo',
+                        `"${(feed.uso_recomendado || '').replace(/"/g, '""')}"`,
                         `"${(feed.notes || '').replace(/"/g, '""')}"`,
-                        `"${(feed.breed_interaction || '').replace(/"/g, '""')}"`
-                    ].join(',');
+                        feed.cost_eur_kg || ''
+                    ].join(';');
                 }).join('\n');
 
                 const csv = '\uFEFF' + headers + rows;

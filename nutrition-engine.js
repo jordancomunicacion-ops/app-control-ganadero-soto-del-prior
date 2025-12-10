@@ -118,7 +118,68 @@ const NutritionEngine = {
         });
 
         return compatibleFeeds;
+    },
+    // Lifecycle Stages Data (User Provided)
+    LIFECYCLE_CONSTANTS: {
+        FEMALE: [
+            { id: 'lactancia', name: 'Lactancia', maxAgeMonths: 2, req: { pb: '18-20%', en: '1.6-1.8', fdn: '<10%', adg: '0.8-1.2 kg/d' }, diet: 'Leche + pasto tierno', risks: 'Diarreas' },
+            { id: 'pre_destete', name: 'Pre-destete', maxAgeMonths: 7, req: { pb: '16-18%', en: '1.4-1.6', fdn: '25-35%', adg: '0.7-1.0 kg/d' }, diet: 'Pasto joven + creep feeding', risks: 'Retraso ruminal' },
+            { id: 'backgrounding', name: 'Transición / Backgrounding', maxAgeMonths: 12, req: { pb: '13-15%', en: '1.3-1.5', fdn: '35-45%', adg: '0.8-1.0 kg/d' }, diet: 'Forraje medio + grano moderado', risks: 'Ruminitis' },
+            { id: 'reposicion', name: 'Reposición / Mantenimiento', maxAgeMonths: 999, req: { pb: '10-12%', en: '1.1-1.3', fdn: '45-55%', adg: '0.4-0.6 kg/d' }, diet: 'Pasto + mineral', risks: 'Engrasamiento' }
+        ],
+        MALE: [
+            { id: 'lactancia', name: 'Lactancia', maxAgeMonths: 2, req: { pb: '18-20%', en: '1.6-1.8', fdn: '<10%', adg: '0.8-1.2 kg/d' }, diet: 'Leche + preiniciador' },
+            { id: 'pre_destete', name: 'Pre-destete', maxAgeMonths: 7, req: { pb: '16-18%', en: '1.4-1.6', fdn: '25-35%', adg: '0.9-1.2 kg/d' }, diet: 'Pasto joven + creep' },
+            { id: 'backgrounding', name: 'Transición / Backgrounding', maxAgeMonths: 12, req: { pb: '13-15%', en: '1.3-1.5', fdn: '35-45%', adg: '0.9-1.1 kg/d' }, diet: 'Forraje + algo de grano' },
+            { id: 'engorde', name: 'Engorde / Cebo', maxAgeMonths: 999, req: { pb: '12-14%', en: '>2.0-2.2', fdn: '15-25%', adg: '1.2-1.5 kg/d' }, diet: 'Ración alta energía', risks: 'Acidosis' }
+        ],
+        SPECIAL: {
+            GESTACION: { id: 'gestacion', name: 'Gestación (Pre-parto)', req: { pb: '10-12%', en: '1.2-1.35', fdn: '45-55%' }, diet: 'Forraje + mineral', risks: 'Parto difícil' }
+        }
+    },
+
+    /**
+     * Determine Lifecycle Stage
+     */
+    determineStage(animalAgeMonths, sex, isPregnant = false) {
+        // 1. Special Case: Pregnant (Last Trimester ideally, but generic for now)
+        if (sex === 'Hembra' && isPregnant) {
+            return this.LIFECYCLE_CONSTANTS.SPECIAL.GESTACION;
+        }
+
+        // 2. Select List based on Sex
+        const list = (sex === 'Macho') ? this.LIFECYCLE_CONSTANTS.MALE : this.LIFECYCLE_CONSTANTS.FEMALE;
+
+        // 3. Find matching stage by age
+        // Find the first stage where age fits
+        const stage = list.find(s => animalAgeMonths <= s.maxAgeMonths) || list[list.length - 1];
+
+        return stage;
+    },
+
+    /**
+     * Get HTML Summary of Requirements
+     */
+    getStageHtml(stage) {
+        if (!stage) return '';
+        const r = stage.req;
+        return `
+            <div style="margin-top: 10px; padding: 10px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px;">
+                <h4 style="margin: 0 0 5px 0; color: #92400e;">📌 Etapa: ${stage.name}</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 0.9em;">
+                    <div><strong>Protein (PB):</strong> ${r.pb}</div>
+                    <div><strong>Energía (EN):</strong> ${r.en}</div>
+                    <div><strong>Fibra (FDN):</strong> ${r.fdn}</div>
+                    ${r.adg ? `<div><strong>ADG Meta:</strong> ${r.adg}</div>` : ''}
+                </div>
+                <div style="margin-top: 5px; font-style: italic; color: #666; font-size: 0.9em;">
+                    🍽️ <strong>Dieta:</strong> ${stage.diet}
+                    ${stage.risks ? `<br>⚠️ <strong>Riesgo:</strong> ${stage.risks}` : ''}
+                </div>
+            </div>
+        `;
     }
+
 };
 
 window.NutritionEngine = NutritionEngine;
