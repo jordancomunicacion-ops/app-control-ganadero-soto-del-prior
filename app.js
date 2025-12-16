@@ -1,35 +1,15 @@
-﻿// Soil Data
-let SOIL_DATA = [];
-
+// Soil Data Management
+// Logic delegated to soil-manager.js and soil-ui-handler.js
 async function initializeSoilData() {
   try {
     if (typeof SoilDataManager !== 'undefined') {
       await SoilDataManager.init();
-      renderSoilData();
+      // renderSoilTable is defined globally in soil-ui-handler.js
+      if (typeof renderSoilTable === 'function') {
+        renderSoilTable();
+      }
     }
   } catch (e) { console.error('Soil init error', e); }
-}
-
-function renderSoilData() {
-  const tbody = qs('#soilMatrixBody'); // needs a table with this ID
-  if (!tbody) return;
-
-  // Check if SoilDataManager exists
-  const data = typeof SoilDataManager !== 'undefined' ? SoilDataManager.getAll() : [];
-
-  tbody.innerHTML = '';
-  data.forEach(item => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-  < td > ${item.cultivo_forrajero}</td >
-            <td>${item.textura_ideal}</td>
-            <td>${item.pH_ideal}</td>
-            <td>${item.contenido_MO}</td>
-            <td>${item.retencion_agua}</td>
-            <td>${item.drenaje}</td>
-`;
-    tbody.appendChild(row);
-  });
 }
 const storage = {
   read(key, fallback) {
@@ -44,6 +24,14 @@ const storage = {
   write(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch (err) { console.error('No se pudo guardar', err); }
   }
+};
+
+// Global Z-Index Manager for Modals
+window.modalZIndexCounter = 1000;
+window.bringModalToFront = function (modalElement) {
+  if (!modalElement) return;
+  window.modalZIndexCounter += 10;
+  modalElement.style.zIndex = window.modalZIndexCounter;
 };
 
 
@@ -88,7 +76,6 @@ window.reloadBreedData = async function () {
 };
 
 // FEED_DATA will be loaded dynamically from CSV
-// FEED_DATA will be loaded dynamically from CSV
 let FEED_DATA = {};
 window.FEED_DATA = FEED_DATA; // Explicitly expose for external modules
 
@@ -100,6 +87,27 @@ async function initializeFeedData() {
       if (Object.keys(FEED_DATA).length === 0) {
         FEED_DATA = await FeedDataManager.reload();
       }
+
+      // --- INJECT SPECIAL BELLOTA FEED (User Definition) ---
+      // This ensures the specific scientific values are available even if not in CSV
+      const bellotaId = 'BELLHO_01'; // ID for Bellota Holm Oak
+      FEED_DATA[bellotaId] = {
+        id: bellotaId,
+        name: "Bellota de encina",
+        type: "Concentrado", // Technically Energy concentrate in this context
+        ms_percent: 55, // 55% DM
+        pb: 6.5,       // 6.5% CP
+        fdn: 26,       // 26% NDF
+        adf: 16,       // 16% ADF
+        en_mcal: 1.5,  // ~1.5 Mcal ENg (User said 1.4-1.6 ENg)
+        em_mcal: 2.35, // 2.35 Mcal EM
+        fat: 9.5,      // 9.5% Fat
+        oleic: 60,     // 60% Oleic Acid (User: 55-65%)
+        starch: 48,    // 48% Starch+Sugars
+        p_pct: 0.12,   // Estimated low P
+        ca_pct: 0.1    // Low Ca
+      };
+      // -----------------------------------------------------
 
       if (typeof renderFeedData === 'function') {
         renderFeedData();
@@ -151,12 +159,9 @@ const settingsBtn = qs('#profileBtn');
 
 
 const actionReport = qs('#action-report');
+const alertsList = qs('#alertsList');
 const navData = qs('#nav-data');
-// const barDes = qs('#bar-destete'); // Keeping commented or removing if not in HTML
-// const qualExc = qs('#qual-exc');
-// const qualBuena = qs('#qual-buena');
-// const qualMedia = qs('#qual-media');
-// const qualBaja = qs('#qual-baja');
+
 
 const sections = document.querySelectorAll('.section');
 const navLinks = document.querySelectorAll('.nav-link');
@@ -198,6 +203,14 @@ const cancelAnimalFormBtn = qs('#cancelAnimalForm');
 const toggleAnimalFormBtn = qs('#toggleAnimalForm');
 const animalFormCard = qs('#animalFormCard');
 
+// Animal List Selectors (Moved to top)
+const animalsList = qs('#animalsList');
+const searchAnimalInput = qs('#searchAnimal');
+const filterFarmSelect = qs('#filterFarm');
+const filterBreedSelect = qs('#filterBreed');
+const filterSexSelect = qs('#filterSex');
+const animalCountSpan = qs('#animalCount');
+
 // Utility: Robust UUID Generator (Polyfill for crypto.randomUUID)
 function generateUUID() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -234,6 +247,12 @@ function showApp(user) {
   if (loginUser) loginUser.value = user;
 
   // Admin Check removed: Data tab is now available for all users.
+  // Force visibility of all nav tabs to ensure no "hidden" class persists
+  document.querySelectorAll('.nav-link').forEach(el => {
+    el.classList.remove('hidden');
+    el.style.display = ''; // Reset inline display if any
+  });
+
   if (navData) navData.classList.remove('hidden');
 
   renderFincas();
@@ -248,7 +267,12 @@ function showApp(user) {
 }
 
 // --- Helper: Reproductive Status Calculation ---
-function getReproductiveStatus(animal, events) {
+// --- Helper: Reproductive Status Calculation ---
+window.getReproductiveStatus = function (animal, events) {
+  return calculateReproductiveStatus(animal, events);
+};
+
+function calculateReproductiveStatus(animal, events) {
   if (!animal) return { status: 'Desconocido', isFertile: false, reason: 'No animal' };
 
   // 1. Initial Checks (Sex, Age)
@@ -285,21 +309,43 @@ function getReproductiveStatus(animal, events) {
       reason = 'Inseminada, pendiente diagnóstico';
     } else if (ev.type === 'Revisión' && (ev.desc.includes('Diagnóstico') || ev.desc.includes('Ecografía'))) {
       if (lastInsemDate && d > lastInsemDate) {
-        // Logic to parse result from description if possible, or assume user manages it manually?
-        // For now, let's assume if "Diagnóstico Gestación" -> result is in notes? 
-        // Implementation Detail: Use specific text in Desc or a new field?
-        // Simplification: If Desc contains 'Pregnada' or 'Gestante' -> Gestante.
-        // If Desc contains 'Vacía' or 'Negativo' -> Vacía.
-        const desc = (ev.desc || '').toLowerCase();
-        if (desc.includes('gestante') || desc.includes('preñada') || desc.includes('positiv')) {
-          status = 'Gestante';
-          isFertile = false;
-          reason = 'Confirmada gestante';
-        } else if (desc.includes('vacía') || desc.includes('vacia') || desc.includes('negativ')) {
-          status = 'Vacía';
-          isFertile = true;
-          reason = 'Diagnóstico negativo (Vacía)';
+
+        // 1. Check for Structured Result (New Method)
+        if (ev.result) {
+          if (ev.result === 'Gestante' || ev.result === 'Preñada') {
+            status = 'Gestante';
+            isFertile = false;
+            reason = 'Confirmada gestante (Diagnóstico)';
+          } else if (ev.result === 'Vacía' || ev.result === 'Negativo') {
+            status = 'Vacía';
+            isFertile = true;
+            reason = 'Diagnóstico negativo (Vacía)';
+          }
         }
+        // 2. Fallback to Description Parser (Legacy)
+        else {
+          const desc = (ev.desc || '').toLowerCase();
+          if (desc.includes('gestante') || desc.includes('preñada') || desc.includes('positiv')) {
+            status = 'Gestante';
+            isFertile = false;
+            reason = 'Confirmada gestante';
+          } else if (desc.includes('vacía') || desc.includes('vacia') || desc.includes('negativ')) {
+            status = 'Vacía';
+            isFertile = true;
+            reason = 'Diagnóstico negativo (Vacía)';
+          }
+        }
+      }
+    } else if (ev.type === 'Aborto') {
+      // Logic: An abortion resets logic ONLY if we were in an active "potential pregnancy".
+      // That means: We have an Insemination AFTER the last birth.
+      // And this Abortion is AFTER that Insemination.
+      const activeInsemination = lastInsemDate && (!lastPartoDate || lastInsemDate > lastPartoDate);
+
+      if (activeInsemination && d > lastInsemDate) {
+        status = 'Vacía';
+        isFertile = true;
+        reason = 'Aborto registrado (Vuelta a mantenimiento)';
       }
     }
   });
@@ -348,31 +394,191 @@ function loadSession() {
   // Migration: Update existing animals with new Breed Stats & Farm assignment
   setTimeout(() => migrateExistingAnimals(), 1000);
 
-  // --- USER REQUEST: CLEAR FARMS for manual test ---
-  const wipeKey = 'FARMS_CLEARED_MANUAL_TEST';
-  if (!localStorage.getItem(wipeKey)) {
-    saveFincas([]); // Delete all
-    renderFincas();
-    localStorage.setItem(wipeKey, 'true');
-    console.log('All farms cleared per user request.');
-    // Optional visual feedback
-    setTimeout(() => alert('🗑️ Se han eliminado todas las fincas. Todo listo para empezar de cero.'), 500);
-  }
-
-  // --- USER REQUEST: CLEAR ANIMALS for manual test ---
-  const wipeAnimalsKey = 'ANIMALS_CLEARED_MANUAL_TEST';
-  if (!localStorage.getItem(wipeAnimalsKey)) {
-    if (currentUser) {
-      storage.write(`animals_${currentUser}`, []);
-      if (typeof renderAnimals === 'function') renderAnimals();
-      localStorage.setItem(wipeAnimalsKey, 'true');
-      console.log('All animals cleared per user request.');
-      setTimeout(() => alert('🗑️ Se han eliminado todos los animales.'), 600);
-    }
-  }
-
-
+  // --- AUTOMATED CHECKS: Lifecycle Transitions ---
+  setTimeout(() => runLifecycleChecks(), 2000); // Small delay to ensure data loaded
 }
+
+// Automated Lifecycle Checks
+function runLifecycleChecks() {
+  if (!currentUser || !window.NutritionEngine) return;
+
+  // Read fresh data
+  const animals = storage.read(`animals_${currentUser}`, []);
+  let events = storage.read('events', []);
+  let eventsChanged = false;
+  let newAlerts = 0;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Normalize today
+
+  // --- GLOBAL SEASON ALERTS (MONTANERA) ---
+  if (NutritionEngine && NutritionEngine.BELLOTA_PROTOCOL) {
+    const year = today.getFullYear();
+    const seasonStart = new Date(year, 8, 1); // Sept 1 (Trigger -30d for Oct 1) ? 
+    // Oct 1 is Month 9.
+    // Triggers: Sept 1 (-30), Sept 16 (-15), Sept 24 (-7).
+
+    // Helper to create system event
+    const checkAndCreateSeasonEvent = (targetDate, label, daysBefore) => {
+      const trigger = new Date(targetDate);
+      trigger.setDate(trigger.getDate() - daysBefore);
+
+      if (today.getTime() === trigger.getTime()) {
+        const desc = `🌰 AVISO MONTANERA: ${label} en ${daysBefore} días (${targetDate.toLocaleDateString()}). Preparar fincas/suplemento.`;
+        const exists = events.some(e => e.date === today.toISOString().split('T')[0] && e.desc === desc);
+        if (!exists) {
+          events.push({
+            id: generateUUID(),
+            type: 'Sistema',
+            animalId: 'SYSTEM',
+            animalCrotal: 'AVISO',
+            date: today.toISOString().split('T')[0],
+            desc: desc,
+            cost: 0,
+            status: 'pending',
+            actionRequired: 'Montanera',
+            createdAt: new Date().toISOString()
+          });
+          eventsChanged = true;
+          newAlerts++;
+        }
+      }
+    };
+
+    // Define Dates for Current Cycle
+    // We check relative to "Today".
+    // If Today is Sept -> Target is Oct this year.
+    // If Today is Jan -> Target is Jan this year.
+
+    const currentYearOct1 = new Date(year, 9, 1); // Oct 1
+    const currentYearJan31 = new Date(year, 0, 31); // Jan 31
+
+    // Check Start Triggers (Oct 1)
+    [30, 15, 7].forEach(d => checkAndCreateSeasonEvent(currentYearOct1, 'Comienzo Montanera', d));
+
+    // Check End Triggers (Jan 31)
+    [30, 15, 7].forEach(d => checkAndCreateSeasonEvent(currentYearJan31, 'Fin Montanera', d));
+
+    // DEBUG: FORCE ALERT FOR USER VERIFICATION IF REQUESTED
+    // If today is NOT a trigger date, we won't see anything.
+    // Let's add a "Manual Check" log or a one-time welcome alert if protocol is new?
+    // User asked "is it possible error or not the date?". 
+    // I will explain in message, but I can add a dedicated Check button in UI? 
+    // No, let's just make sure the Logic runs.
+    console.log('[App] Montanera Check Run. Today:', today.toISOString());
+  }
+
+  animals.forEach(animal => {
+    // Get expected transitions
+    const transitions = window.NutritionEngine.getTransitionEvents(animal);
+
+    transitions.forEach(t => {
+      const tDate = new Date(t.date);
+      tDate.setHours(0, 0, 0, 0);
+
+      // --- LOGIC: 7-Day Pre-Alert for DESTETE (Assuming 6-7 months logic) ---
+      // Male Transicion -> 6 months. Female Pre-destete -> 7 months. 
+      // We check if this transition is around that age.
+      const isWeaning = (t.ageMonths === 6 || t.ageMonths === 7);
+
+      // Determine Trigger Date
+      // If weaning/decision, 7 days before. Else, on the day.
+      const triggerDate = new Date(tDate);
+      if (isWeaning) {
+        triggerDate.setDate(triggerDate.getDate() - 7);
+      }
+
+      // Check if we passed the trigger date
+      if (today >= triggerDate) {
+
+        // CHECK 1: PRE-ALERT DESTETE (For All)
+        if (isWeaning) {
+          const alreadyExists = events.some(ev =>
+            ev.animalId === animal.id &&
+            (ev.actionRequired === 'Destete' || (ev.type === 'Manejo' && ev.desc.includes('AVISO DESTETE') && ev.desc.includes(`(${t.ageMonths} meses)`)))
+          );
+
+          if (!alreadyExists) {
+            events.push({
+              id: generateUUID(),
+              type: 'Manejo',
+              animalId: animal.id,
+              animalCrotal: animal.crotal,
+              date: today.toISOString().split('T')[0], // Alert date = Today (so it shows up top)
+              desc: `⚠️ AVISO DESTETE (${t.ageMonths} meses). Previsto para: ${t.date}.`,
+              cost: 0,
+              status: 'pending',
+              actionRequired: 'Destete', // CORE FLAG
+              plannedDate: t.date, // Store the real date
+              createdAt: new Date().toISOString()
+            });
+            eventsChanged = true;
+            newAlerts++;
+          }
+
+          // CHECK 2: ALERT DECISIÓN MACHO (For Males Only at 6 months)
+          if (animal.sex === 'Macho' && t.ageMonths === 6) {
+            const decisionExists = events.some(ev =>
+              ev.animalId === animal.id &&
+              (ev.actionRequired === 'DecisionMacho' || ev.desc.includes('DECISIÓN MACHO'))
+            );
+
+            if (!decisionExists) {
+              events.push({
+                id: generateUUID(),
+                type: 'Revisión', // Keep it as Revisión/Manejo
+                animalId: animal.id,
+                animalCrotal: animal.crotal,
+                date: today.toISOString().split('T')[0],
+                desc: `⚠️ DECISIÓN MACHO: ¿Castrar o Semental? (${t.ageMonths} meses).`,
+                cost: 0,
+                status: 'pending',
+                actionRequired: 'DecisionMacho', // CORE FLAG
+                createdAt: new Date().toISOString()
+              });
+              eventsChanged = true;
+              newAlerts++;
+            }
+          }
+
+        } else {
+          // START STANDARD LOGIC (NON-WEANING)
+          const alreadyExists = events.some(ev =>
+            ev.animalId === animal.id &&
+            ev.type === 'Manejo' &&
+            ev.desc.includes(`CAMBIO ETAPA`) &&
+            ev.desc.includes(`(${t.ageMonths} meses)`)
+          );
+
+          if (!alreadyExists) {
+            events.push({
+              id: generateUUID(),
+              type: 'Manejo',
+              animalId: animal.id,
+              animalCrotal: animal.crotal,
+              date: t.date,
+              desc: `⚠️ CAMBIO ETAPA (${t.ageMonths} meses) -> ${t.newStage}. Acción: Pesar y cambiar a dieta: ${t.diet}.`,
+              cost: 0,
+              status: 'pending',
+              createdAt: new Date().toISOString()
+            });
+            eventsChanged = true;
+            newAlerts++;
+          }
+        }
+      }
+    });
+  });
+
+  if (eventsChanged) {
+    storage.write('events', events);
+    console.log(`Generated ${newAlerts} lifecycle alerts.`);
+    if (typeof renderEvents === 'function') renderEvents();
+    // Optional: Toast notif
+    // showToast(`Se han generado ${newAlerts} alertas de cambio de etapa.`);
+  }
+}
+
 
 // Migration Logic
 function migrateExistingAnimals() {
@@ -514,7 +720,6 @@ navLinks.forEach((link) => {
   });
 });
 
-// farmForm listener moved to app-sigpac.js to avoid duplication and support new fields
 // Toggle Weather Config Visibility
 window.toggleWeatherConfig = function () {
   const privateRadio = qs('input[name="weatherSource"][value="private"]');
@@ -525,8 +730,45 @@ window.toggleWeatherConfig = function () {
     configDiv.classList.add('hidden');
   }
 };
+// --- Custom Corral Logic ---
+function updateCorralInputs(count, existingData = []) {
+  const container = qs('#corralInputs');
+  const wrapper = qs('#corralConfigContainer');
+  if (!container || !wrapper) return;
 
-// Farm Form Listener - Restored and Updated
+  if (count > 0) {
+    wrapper.classList.remove('hidden');
+  } else {
+    wrapper.classList.add('hidden');
+    return;
+  }
+
+  container.innerHTML = '';
+  for (let i = 1; i <= count; i++) {
+    const defaultName = existingData[i - 1]?.name || `Corral ${i}`;
+    const div = document.createElement('div');
+    div.innerHTML = `
+      <input type="text" class="corral-name-input" data-index="${i}" value="${defaultName}" placeholder="Nombre Corral ${i}" style="font-size:0.9em;">
+    `;
+    container.appendChild(div);
+  }
+}
+
+const farmCorralesInput = qs('#farmCorrales');
+if (farmCorralesInput) {
+  farmCorralesInput.addEventListener('input', (e) => {
+    const val = parseInt(e.target.value) || 0;
+    // We pass empty existing data because on fresh input change we usually just want defaults?
+    // Or we should try to preserve if user just increases number?
+    // Let's try to preserve current inputs values if possible.
+    const currentInputs = document.querySelectorAll('.corral-name-input');
+    const existing = Array.from(currentInputs).map((el, idx) => ({ id: idx + 1, name: el.value }));
+
+    updateCorralInputs(val, existing);
+  });
+}
+
+// Farm Form Listener
 farmForm?.addEventListener('submit', (e) => {
   e.preventDefault();
   if (!currentUser) {
@@ -550,6 +792,7 @@ farmForm?.addEventListener('submit', (e) => {
     soil: getValue('#farmSoil'),
     license: getValue('#farmLicense'),
     animals: parseInt(getValue('#farmAnimals'), 10) || 0,
+    numero_corrales: parseInt(getValue('#farmCorrales'), 10) || 1,
     management: getValue('#farmManagement'),
     feed: getValue('#farmFeed'), // Keeping generic feed field if it exists
 
@@ -562,8 +805,20 @@ farmForm?.addEventListener('submit', (e) => {
 
     // Weather Config
     weatherSource: weatherSource,
-    weatherStationId: weatherSource === 'private' ? getValue('#farmWeatherId') : ''
+    weatherStationId: weatherSource === 'private' ? getValue('#farmWeatherId') : '',
+
+    // Custom Corrales
+    corrales: []
   };
+
+  // Capture Corral Names
+  const corralInputs = document.querySelectorAll('.corral-name-input');
+  corralInputs.forEach((input, index) => {
+    finca.corrales.push({
+      id: index + 1, // Simple ID 1-based
+      name: input.value.trim() || `Corral ${index + 1}`
+    });
+  });
 
   // Validation
   if (!finca.name) {
@@ -662,7 +917,7 @@ function renderFincas() {
       <div class="farm-title">
         <div>
           <strong>${finca.name}</strong>
-          <div class="farm-meta">${finca.location} · ${finca.size} ha</div>
+          <div class="farm-meta">${finca.location} · ${finca.size} ha · ${finca.numero_corrales || 1} corr.</div>
         </div>
         <span class="tag">${finca.soil}</span>
       </div>
@@ -742,11 +997,61 @@ function openFarmDetail(id) {
   qs('#detailFarmIrrigation').textContent = finca.irrigation || '0';
   qs('#detailFarmUse').textContent = finca.sigpacUse || '-';
   qs('#detailFarmSoil').textContent = finca.soil || '-';
+  if (qs('#detailFarmCorrales')) qs('#detailFarmCorrales').textContent = finca.numero_corrales || 1;
 
-  qs('#detailFarmLicense').textContent = finca.license || '-';
-  qs('#detailFarmAnimals').textContent = finca.animals || '0';
-  qs('#detailFarmManagement').textContent = finca.management || '-';
-  qs('#detailFarmFeed').textContent = finca.feed || '-';
+  // Stats Calculate
+  const licenseLimit = parseInt(finca.animals || 0);
+
+  // 1. Get Live Inventory
+  // Note: currentUser is global
+  const allAnimals = storage.read(`animals_${currentUser}`, []);
+  const farmAnimals = allAnimals.filter(a => a.farmId === id);
+  const totalHeads = farmAnimals.length;
+
+  // 2. Calculate Productive (Cows/Bulls > 15 months)
+  const now = new Date();
+  const productiveHeads = farmAnimals.reduce((count, animal) => {
+    if (!animal.birthDate) return count;
+    const birth = new Date(animal.birthDate);
+    const ageMonths = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+    if (ageMonths >= 15) return count + 1;
+    return count;
+  }, 0);
+
+  // 3. Render Stats
+  qs('#detailFarmLimit').textContent = licenseLimit;
+  qs('#detailFarmTotal').textContent = totalHeads;
+  qs('#detailFarmProductive').textContent = productiveHeads;
+
+  // 4. Compliance Alert
+  const alertEl = qs('#detailFarmAlert');
+  if (alertEl) {
+    if (totalHeads > licenseLimit) {
+      // Red Alert
+      const diff = totalHeads - licenseLimit;
+      alertEl.style.display = 'block';
+      alertEl.style.backgroundColor = '#fee2e2';
+      alertEl.style.color = '#991b1b';
+      alertEl.style.border = '1px solid #fca5a5';
+      alertEl.textContent = `EXCESO DE CAPACIDAD: +${diff} animales sobre licencia.`;
+    } else {
+      // Green Alert
+      const remaining = licenseLimit - totalHeads;
+      alertEl.style.display = 'block';
+      alertEl.style.backgroundColor = '#dcfce7';
+      alertEl.style.color = '#166534';
+      alertEl.style.border = '1px solid #86efac';
+      alertEl.textContent = `En Regla: Capacidad para ${remaining} animales más.`;
+    }
+  }
+
+  // Populate Fields
+  if (qs('#detailFarmLicense')) qs('#detailFarmLicense').textContent = finca.license || '-';
+  if (qs('#detailFarmAnimals')) qs('#detailFarmAnimals').textContent = finca.animals || '-';
+  if (qs('#detailFarmManagement')) qs('#detailFarmManagement').textContent = finca.management || '-';
+  if (qs('#detailFarmFeed')) qs('#detailFarmFeed').textContent = finca.feed || '-';
+
+  recommendBreedsForFarm(finca);
 
   // Weather in Modal
   const weatherDiv = qs('#detailFarmWeather');
@@ -754,7 +1059,7 @@ function openFarmDetail(id) {
     weatherDiv.innerHTML = '⏳ Cargando datos climáticos...';
     if (finca.weatherSource === 'private') {
       weatherDiv.innerHTML = `
-  < div style = "text-align: center;" >
+  <div style="text-align: center;">
                     <div style="font-size: 1.5em; margin-bottom: 5px;">📡</div>
                     <strong>Estación Privada</strong><br>
                     ID: ${finca.weatherStationId || 'No configurado'}
@@ -763,7 +1068,7 @@ function openFarmDetail(id) {
       window.WeatherService.getWeather(finca.lat, finca.lon).then(data => {
         if (data) {
           weatherDiv.innerHTML = `
-  < div style = "display: flex; gap: 20px; align-items: center;" >
+  <div style="display: flex; gap: 20px; align-items: center;">
                             <div style="font-size: 3em;">${data.icon}</div>
                             <div>
                                 <div style="font-size: 1.5em; font-weight: bold;">${data.temp}ºC</div>
@@ -773,7 +1078,7 @@ function openFarmDetail(id) {
                                     💨 Viento: ${data.wind} km/h
                                 </div>
                             </div>
-                        </div >
+                        </div>
   `;
         } else {
           weatherDiv.innerHTML = '⚠️ No se pudo cargar el clima.';
@@ -799,15 +1104,15 @@ function openFarmDetail(id) {
 
     if (recs.length > 0) {
       cropDiv.innerHTML = `
-  < div style = "background: #ecfdf5; padding: 10px; border-radius: 6px; border: 1px solid #a7f3d0;" >
+              <div style="background: #ecfdf5; padding: 10px; border-radius: 6px; border: 1px solid #a7f3d0;">
                   <strong>✅ Cultivos Sugeridos:</strong>
                   <ul style="margin: 5px 0 0 20px; list-style-type: disc;">
                       ${recs.map(r => `<li>${r}</li>`).join('')}
                   </ul>
-              </div >
+              </div>
   `;
     } else {
-      cropDiv.innerHTML = `< em > No hay recomendaciones específicas para suelo ${soilType}, pero puedes probar cultivos tolerantes.</em > `;
+      cropDiv.innerHTML = `<em>No hay recomendaciones específicas para suelo ${soilType}, pero puedes probar cultivos tolerantes.</em>`;
     }
   }
 
@@ -834,25 +1139,76 @@ const btnEditFarm = qs('#btnEditFarmModal');
 const btnDeleteFarm = qs('#btnDeleteFarmModal');
 
 if (btnEditFarm) {
-  btnEditFarm.addEventListener('click', () => {
-    if (!window.currentFarmId) return;
-    // Load into form (simple way: reuse logic if possible, or just alert for now as full edit is complex to wiring)
-    // For now we will close modal and trigger the edit logic if we can access the form
-    const fincas = getFincas();
-    const finca = fincas.find(f => f.id === window.currentFarmId);
-    if (finca) {
-      // Populate form logic (need to manually populate fields)
-      if (farmFormCard) farmFormCard.classList.remove('hidden');
-      qs('#farmName').value = finca.name;
-      qs('#farmLocation').value = finca.location;
-      qs('#farmSize').value = finca.size;
-      // ... populate other fields ... 
-      // Ideally we should extract a 'fillFarmForm' function. 
-      // For this step I'll just alert that it's ready to edit.
-      farmModal.classList.add('hidden');
-      alert('Funcionalidad de edición completa pendiente de refactorizar fillForm. Por ahora usa el botón borrar y crea de nuevo.');
-    }
-  });
+  if (btnEditFarm) {
+    btnEditFarm.addEventListener('click', () => {
+      if (!window.currentFarmId) return;
+
+      const fincas = getFincas();
+      const finca = fincas.find(f => f.id === window.currentFarmId);
+
+      if (finca) {
+        if (farmFormCard) {
+          farmFormCard.classList.remove('hidden');
+          if (toggleFarmFormBtn) toggleFarmFormBtn.textContent = 'Cancelar';
+        }
+
+        // Populate fields
+        if (qs('#farmName')) qs('#farmName').value = finca.name || '';
+        if (qs('#farmLocation')) qs('#farmLocation').value = finca.location || '';
+        if (qs('#farmSize')) qs('#farmSize').value = finca.size || '';
+        if (qs('#farmSoil')) qs('#farmSoil').value = finca.soil || '';
+        if (qs('#farmSlope')) qs('#farmSlope').value = finca.slope || '';
+        if (qs('#farmIrrigation')) qs('#farmIrrigation').value = finca.irrigation || '';
+        if (qs('#farmSigpacUse')) qs('#farmSigpacUse').value = finca.sigpacUse || '';
+
+        if (qs('#farmLat')) qs('#farmLat').value = finca.lat || '';
+        if (qs('#farmLon')) qs('#farmLon').value = finca.lon || '';
+
+        if (qs('#farmLicense')) qs('#farmLicense').value = finca.license || '';
+        if (qs('#farmAnimals')) qs('#farmAnimals').value = finca.animals || '';
+        if (qs('#farmCorrales')) {
+          const num = finca.numero_corrales || 1;
+          qs('#farmCorrales').value = num;
+          // Trigger update for inputs
+          updateCorralInputs(num, finca.corrales || []);
+        }
+        if (qs('#farmManagement')) qs('#farmManagement').value = finca.management || '';
+        // feed field is named 'farmFeed' in form but not shown in old logic, let's check
+        // It seems it was removed from HTML shown previously? Using standard if exists.
+        // Actually checking line 608: 'feed' is saved.
+
+        // Weather Config
+        if (finca.weatherSource === 'private') {
+          const rad = qs('input[name="weatherSource"][value="private"]');
+          if (rad) rad.checked = true;
+          if (qs('#farmWeatherId')) qs('#farmWeatherId').value = finca.weatherStationId || '';
+          toggleWeatherConfig();
+        } else {
+          const rad = qs('input[name="weatherSource"][value="public"]');
+          if (rad) rad.checked = true;
+          toggleWeatherConfig();
+        }
+
+        // Set Edit ID
+        if (farmEditId) farmEditId.value = finca.id;
+
+        // Update Title/Button to indicate Mode
+        const formTitle = qs('#farmFormTitle'); // Add ID to h3 if needed or use logic
+        if (formTitle) formTitle.textContent = 'Editar Finca';
+
+        const submitBtn = farmForm.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.textContent = 'Guardar Cambios';
+
+        if (cancelFarmFormBtn) cancelFarmFormBtn.style.display = 'inline-block';
+
+        // Close modal
+        farmModal.classList.add('hidden');
+
+        // Ensure we are on the Farms tab (we likely are, but effectively scrolling/focusing)
+        farmFormCard.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  }
 }
 
 if (btnDeleteFarm) {
@@ -866,10 +1222,26 @@ if (btnDeleteFarm) {
 }
 
 function activateSection(sectionId) {
+  const targetSection = document.getElementById(sectionId);
+  if (!targetSection) {
+    console.error(`Section with ID '${sectionId}' not found.`);
+    alert(`Error: La sección '${sectionId}' no se encuentra en la página. Por favor recarga la página completamente.`);
+    return;
+  }
+
   sections.forEach((sec) => {
-    if (sec.id === sectionId) sec.classList.remove('hidden');
-    else sec.classList.add('hidden');
+    if (sec.id === sectionId) {
+      sec.classList.remove('hidden');
+      sec.style.removeProperty('display'); // Clear potential conflicts first
+      sec.style.setProperty('display', 'block', 'important'); // NUCLEAR OPTION
+      sec.style.opacity = '1';
+      sec.style.width = '100%';
+    } else {
+      sec.classList.add('hidden');
+      sec.style.display = 'none';
+    }
   });
+
   navLinks.forEach((link) => {
     if (link.dataset.target === sectionId) link.classList.add('active');
     else link.classList.remove('active');
@@ -889,6 +1261,10 @@ function activateSection(sectionId) {
     renderBreedData();
     if (typeof renderFeedData === 'function') renderFeedData();
     renderSoilData();
+  }
+  if (sectionId === 'reports') {
+    if (typeof populateFarmSelects === 'function') populateFarmSelects();
+    if (typeof renderAnimals === 'function') renderAnimals();
   }
 }
 
@@ -959,21 +1335,7 @@ function calculateAgeMonths(birthDate) {
 }
 
 // --- Helper: Categorize Animal ---
-// --- Helpers ---
-function getShortCrotal(crotal) {
-  if (!crotal) return '';
-  const str = String(crotal);
-  return str.length > 4 ? str.slice(-4) : str;
-}
 
-function formatCrotalHTML(crotal) {
-  if (!crotal) return '';
-  const str = String(crotal);
-  if (str.length <= 4) return `< strong > ${str}</strong > `;
-  const prefix = str.slice(0, -4);
-  const suffix = str.slice(-4);
-  return `< span style = "color:var(--muted)" > ${prefix}</span > <strong>${suffix}</strong>`;
-}
 
 function calculateAnimalType(animal) {
   const months = calculateAgeMonths(animal.birthDate);
@@ -997,49 +1359,35 @@ function calculateAnimalType(animal) {
   }
 }
 
-function updateStats(fincas = []) {
-  const animals = storage.read(`animals_${currentUser}`, []);
-  const total = animals.length;
 
-  if (qs('#stat-animales')) qs('#stat-animales').textContent = total;
-  if (qs('#stat-fincas')) qs('#stat-fincas').textContent = fincas.length;
-
-  // Distribution Counts
-  const counts = {
-    'Becerro': 0, 'Ternero': 0, 'Añojo': 0, 'Utrero': 0, 'Novillo': 0, 'Toro': 0, 'Buey': 0,
-    'Becerra': 0, 'Ternera': 0, 'Añoja': 0, 'Novilla': 0, 'Vaca': 0, 'Nodriza': 0
-  };
-
-  animals.forEach(a => {
-    const type = calculateAnimalType(a);
-    if (counts[type] !== undefined) counts[type]++;
-  });
-
-  // Update Table Cells
-  const mapIds = {
-    'count-bueyes': 'Buey', 'count-toros': 'Toro', 'count-utreros': 'Utrero',
-    'count-novillos': 'Novillo', 'count-anojos': 'Añojo', 'count-terneros-m': 'Ternero',
-    'count-becerros': 'Becerro',
-    'count-nodrizas': 'Nodriza', 'count-vacas': 'Vaca', 'count-novillas': 'Novilla',
-    'count-anojas': 'Añoja', 'count-terneras-h': 'Ternera', 'count-becerras': 'Becerra'
-  };
-
-  for (const [id, type] of Object.entries(mapIds)) {
-    const el = qs(`#${id}`);
-    if (el) el.textContent = counts[type];
-  }
-
-  const base = Math.max(1, total);
-  if (barSac) barSac.style.height = `${40 + Math.min(50, base * 5)}%`;
-  if (barDes) barDes.style.height = `${20 + Math.min(30, base * 3)}%`;
-  if (qualExc) qualExc.textContent = String(Math.max(0, total - 1));
-  if (qualBuena) qualBuena.textContent = String(Math.max(0, total));
-  if (qualMedia) qualMedia.textContent = '0';
-  if (qualBaja) qualBaja.textContent = '0';
-}
 
 function populateBreedSelects() {
-  const breeds = Object.values(BREED_DATA).sort((a, b) => a.name.localeCompare(b.name));
+  let breeds = Object.values(BREED_DATA).sort((a, b) => a.name.localeCompare(b.name));
+
+  // FALLBACK: If no breeds loaded, use valid defaults
+  if (breeds.length === 0) {
+    console.warn('BREED_DATA empty, using fallback defaults.');
+    const defaults = [
+      { name: 'Wagyu' },
+      { name: 'Angus' },
+      { name: 'Hereford' },
+      { name: 'Charolais' },
+      { name: 'Limousin' },
+      { name: 'Brahman' },
+      { name: 'Nelore' },
+      { name: 'Droughtmaster' },
+      { name: 'Retinta' },
+      { name: 'Morucha' },
+      { name: 'Pirenaica' },
+      { name: 'Betizú' },
+      { name: 'Berrenda' },
+      { name: 'Simmental' },
+      { name: "Blonde d'Aquitaine" },
+      { name: 'Azul Belga' }
+    ];
+    breeds = defaults.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   const filterSelect = qs('#filterBreed');
   const formSelect = qs('#animalBreed');
 
@@ -1211,8 +1559,16 @@ async function updateWeather() {
   // Update Radar Iframe
   const radarFrame = qs('#rain-radar-frame');
   if (radarFrame) {
-    // Windy.com Embed
+    // Windy.com Embed - Re-enabled by user request
     radarFrame.src = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&detailLat=${lat}&detailLon=${lon}&width=650&height=450&zoom=8&level=surface&overlay=rain&product=ecmwf&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1`;
+    radarFrame.style.display = 'block';
+
+    // Remove old error message if present
+    const parent = radarFrame.parentElement;
+    if (parent) {
+      const existingMsg = parent.querySelector('.radar-msg');
+      if (existingMsg) existingMsg.remove();
+    }
   }
 
   try {
@@ -1287,63 +1643,9 @@ async function updateWeather() {
 
 // SIGPAC logic removed (See app-sigpac.js)
 
-// Button Event Listeners
-if (logoutBtn) {
-  logoutBtn.addEventListener('click', () => {
-    logout();
-  });
-}
 
-if (settingsBtn) {
-  settingsBtn.addEventListener('click', () => {
-    activateSection('profile');
-  });
-}
 
-// Profile Form Actions
-if (profileForm) {
-  profileForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    // Save profile logic here
-    const name = profileNameInput?.value;
-    const email = profileEmailInput?.value;
-    if (name) {
-      const sidebarName = qs('#sidebarName');
-      if (sidebarName) sidebarName.textContent = name;
-      // Update current user profile
-      if (currentUser) {
-        const currentProfile = storage.read(getProfileKey(currentUser), defaultProfile(currentUser));
-        currentProfile.name = name;
-        currentProfile.email = email;
-        saveUser(currentProfile);
 
-        // Update UI immediately
-        if (sidebarName) sidebarName.textContent = name;
-      }
-      alert('Perfil actualizado');
-      activateSection('home');
-    }
-  });
-}
-
-if (profileCancel) {
-  profileCancel.addEventListener('click', () => {
-    activateSection('home');
-  });
-}
-
-// Helper to populate farms in select
-function populateFarmSelect() {
-  if (!animalFarmInput) return;
-  const fincas = getFincas();
-  animalFarmInput.innerHTML = '<option value="">Selecciona una finca</option>';
-  fincas.forEach(f => {
-    const opt = document.createElement('option');
-    opt.value = f.id;
-    opt.textContent = f.name;
-    animalFarmInput.appendChild(opt);
-  });
-}
 
 // Animal Management Logic
 if (toggleAnimalFormBtn) {
@@ -1351,7 +1653,7 @@ if (toggleAnimalFormBtn) {
     if (animalFormCard) {
       if (animalFormCard.classList.contains('hidden')) {
         // Refresh farm list before showing
-        populateFarmSelect();
+        populateFarmSelects();
         animalFormCard.classList.remove('hidden');
         toggleAnimalFormBtn.textContent = 'Cancelar';
       } else {
@@ -1366,14 +1668,19 @@ function populateFarmSelects() {
   const fincas = getFincas();
   const animalFarmSelect = qs('#animalFarm');
   const filterFarmSelect = qs('#filterFarm');
+  const eventFarmSelect = qs('#eventFarmKey');
+  const reportFarmSelect = qs('#reportFarm');
 
-  [animalFarmSelect, filterFarmSelect].forEach(select => {
+  [animalFarmSelect, filterFarmSelect, eventFarmSelect, reportFarmSelect].forEach(select => {
     if (!select) return;
     // Save current selection if possible
     const current = select.value;
-    select.innerHTML = select.id === 'filterFarm'
-      ? '<option value="">Todas las fincas</option>'
-      : '<option value="">Selecciona una finca</option>';
+
+    let placeholder = 'Selecciona una finca';
+    if (select.id === 'filterFarm' || select.id === 'reportFarm') placeholder = 'Todas las fincas';
+    if (select.id === 'eventFarmKey') placeholder = 'Selecciona finca (Saneamiento)';
+
+    select.innerHTML = `<option value="">${placeholder}</option>`;
 
     fincas.forEach(f => {
       const opt = document.createElement('option');
@@ -1382,13 +1689,96 @@ function populateFarmSelects() {
       select.appendChild(opt);
     });
     // Restore if still valid
-    if (fincas.find(f => f.id === current)) select.value = current;
+    if (fincas.find(f => f.id === current)) {
+      select.value = current;
+      // Trigger change event so dependent logic (like Corrales) runs
+      select.dispatchEvent(new Event('change'));
+    }
+  });
+}
+
+// Listener for Animal Form Farm Selection
+// Listener for Animal Form Farm Selection
+if (animalFarmInput) {
+  animalFarmInput.addEventListener('change', (e) => {
+    const farmId = e.target.value;
+    const corralSelect = qs('#animalCorral');
+    if (!corralSelect) return;
+
+    if (!farmId) {
+      corralSelect.innerHTML = '<option value="">Selecciona Finca primero</option>';
+      corralSelect.disabled = true;
+      return;
+    }
+
+    // Find Farm and Populate Corrals
+    const fincas = getFincas();
+    const farm = fincas.find(f => f.id === farmId);
+
+    corralSelect.innerHTML = '<option value="">Sin Asignar</option>';
+    corralSelect.disabled = false;
+
+    if (farm && farm.numero_corrales > 0) {
+      const corrales = farm.corrales || [];
+      // Default numbers if custom names missing or length mismatch
+      for (let i = 1; i <= farm.numero_corrales; i++) {
+        const custom = corrales.find(c => c.id === i);
+        const name = custom ? custom.name : `Corral ${i}`;
+        const opt = document.createElement('option');
+        opt.value = i; // Store ID
+        opt.textContent = name;
+        corralSelect.appendChild(opt);
+      }
+    }
   });
 }
 if (cancelAnimalFormBtn) {
   cancelAnimalFormBtn.addEventListener('click', () => {
     if (animalFormCard) animalFormCard.classList.add('hidden');
     if (toggleAnimalFormBtn) toggleAnimalFormBtn.textContent = '➕ Nuevo Animal';
+  });
+}
+
+// Listener for Report Farm Selection
+const reportFarmSelect = qs('#reportFarm');
+if (reportFarmSelect) {
+  reportFarmSelect.addEventListener('change', (e) => {
+    const farmId = e.target.value;
+    const corralSelect = qs('#reportCorral');
+    if (!corralSelect) return;
+
+    if (!farmId) {
+      corralSelect.innerHTML = '<option value="">Todos los corrales</option>';
+      corralSelect.disabled = true;
+      return;
+    }
+
+    const fincas = getFincas();
+    const farm = fincas.find(f => f.id === farmId);
+    if (!farm) {
+      corralSelect.innerHTML = '<option value="">Todos los corrales</option>';
+      corralSelect.disabled = true;
+      return;
+    }
+
+    corralSelect.innerHTML = '<option value="">Todos los corrales</option>';
+    corralSelect.disabled = false;
+
+    if (farm.corrales && farm.corrales.length > 0) {
+      farm.corrales.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        corralSelect.appendChild(opt);
+      });
+    } else {
+      for (let i = 1; i <= farm.numero_corrales; i++) {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = `Corral ${i}`;
+        corralSelect.appendChild(opt);
+      }
+    }
   });
 }
 
@@ -1450,6 +1840,7 @@ if (animalForm) {
       crotal: animalIdInput?.value.trim(),
       name: animalNameInput?.value.trim(),
       farmId: animalFarmInput?.value || '',
+      corral: parseInt(qs('#animalCorral')?.value) || null,
       breed: finalBreed,
       sex: animalSexInput?.value || '',
       birthDate: animalBirthInput?.value || '',
@@ -1605,7 +1996,7 @@ function updateStats(fincas = []) {
   if (typeof updateDashboardAlerts === 'function') updateDashboardAlerts();
 }
 
-function openAnimalDetails(id) {
+window.openAnimalDetails = function (id) {
   const animals = storage.read(`animals_${currentUser}`, []);
   const animal = animals.find(a => a.id === id);
   if (!animal) return;
@@ -1675,10 +2066,35 @@ function openAnimalDetails(id) {
     }
   }
 
-  // Farm
+  // Farm Lookup Logic (Robust)
   const fincas = getFincas();
-  const farm = fincas.find(f => f.id === animal.farmId);
+  let farm = fincas.find(f => String(f.id) === String(animal.farmId));
+
+  // Fallback: Try looking up by name if ID fails (for legacy data)
+  if (!farm && animal.farmName) {
+    farm = fincas.find(f => f.name.toLowerCase() === animal.farmName.toLowerCase());
+  }
+
+
   if (detailFarm) detailFarm.textContent = farm ? farm.name : 'Desconocida';
+
+  // Corral Display Logic
+  const detailCorralDisplay = qs('#detailCorralDisplay');
+  if (detailCorralDisplay) {
+    let corralName = 'Sin Asignar';
+    if (animal.corral) {
+      corralName = `Corral ${animal.corral}`; // Default
+
+      if (farm && farm.corrales) {
+        // Try to find custom name
+        const found = farm.corrales.find(c => String(c.id) === String(animal.corral));
+        if (found) corralName = found.name;
+      }
+    }
+    detailCorralDisplay.textContent = corralName;
+  }
+
+
 
   if (detailNotes) detailNotes.textContent = animal.notes || 'Sin notas';
 
@@ -1705,7 +2121,110 @@ function openAnimalDetails(id) {
     }
   }
 
-  if (animalDetailModal) animalDetailModal.classList.remove('hidden');
+  if (animalDetailModal) {
+    window.bringModalToFront(animalDetailModal);
+    animalDetailModal.classList.remove('hidden');
+  }
+};
+
+// ...
+
+// DASHBOARD ALERTS (Upcoming Events)
+// DASHBOARD ALERTS (Upcoming Events)
+function updateDashboardAlerts() {
+  if (!alertsList) return;
+
+  const events = storage.read('events', []);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const nextWeek = new Date(today);
+  nextWeek.setDate(today.getDate() + 7);
+
+  // Find events in range [Today, Today+7]
+  const upcoming = events.filter(ev => {
+    const d = new Date(ev.date);
+    return d >= today && d <= nextWeek;
+  });
+
+  upcoming.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  alertsList.innerHTML = '';
+  // Use grid gap/style adjustments for the list container to look like cards stack
+  alertsList.style.display = 'grid';
+  alertsList.style.gap = '10px';
+  alertsList.style.listStyle = 'none';
+  alertsList.style.padding = '0';
+
+  if (upcoming.length === 0) {
+    alertsList.innerHTML = '<li style="color:var(--muted); font-style:italic;">No hay eventos próximos (7 días)</li>';
+    return;
+  }
+
+  upcoming.forEach(ev => {
+    const li = document.createElement('li');
+    li.className = `event-card type-${ev.type}`;
+    li.style.cursor = 'pointer';
+    // Use flex layout to enable right-alignment of badge/arrow
+    li.style.display = 'flex';
+    li.style.alignItems = 'center';
+    li.style.gap = '16px';
+    li.style.padding = '12px 16px';
+
+    li.onclick = (e) => {
+      if (e.target.closest('button')) return;
+      if (window.openEventDetail) window.openEventDetail(ev.id);
+    };
+
+    const d = new Date(ev.date);
+    const day = d.getDate();
+    const monthShort = d.toLocaleString('es-ES', { month: 'short' }).replace('.', '').toUpperCase();
+
+    // Status Badge Logic
+    let statusText = ev.completed ? 'Completado' : (ev.status || 'Pendiente');
+    if (statusText === 'pending') statusText = 'Pendiente';
+
+    let badgeColor = '#f1f5f9';
+    let textColor = '#64748b';
+
+    // Logic for colors based on status/timing
+    if (ev.completed) {
+      badgeColor = '#dcfce7';
+      textColor = '#166534';
+    } else if (statusText === 'Pendiente') {
+      badgeColor = '#fef3c7';
+      textColor = '#b45309';
+    }
+
+    li.innerHTML = `
+      <div class="event-date-box">
+          <span class="event-day">${day}</span>
+          <span class="event-month">${monthShort}</span>
+      </div>
+      
+      <div class="event-content" style="flex: 1; min-width: 0;">
+          <div class="event-title">
+              <span>${ev.type}</span>
+          </div>
+          <div class="event-subtitle">${ev.animalCrotal}</div>
+          <div style="font-size:13px; color:#6b7280; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${ev.desc}
+          </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+           <span class="event-badge" style="background:${badgeColor}; color:${textColor}; margin:0;">${statusText}</span>
+           <div style="display:flex; gap:5px;">
+             ${ev.actionRequired === 'Destete' ?
+        `<button class="btn small" style="font-size:10px; padding:2px 6px; background:#eab308; color:#fff; border:none;" onclick="openDesteteForm('${ev.animalId}', '${ev.animalCrotal}')">Destetar</button>` : ''}
+             ${ev.actionRequired === 'DecisionMacho' ?
+        `<button class="btn small" style="font-size:10px; padding:2px 6px; background:#8b5cf6; color:#fff; border:none;" onclick="openDecisionMachoForm('${ev.animalId}', '${ev.animalCrotal}')">Decidir</button>` : ''}
+             <button class="ghost small" style="color:#9ca3af; padding: 4px 8px;">&gt;</button>
+           </div>
+      </div>
+    `;
+    alertsList.appendChild(li);
+  });
 }
 
 // Close Modal Logic
@@ -1715,13 +2234,7 @@ function openAnimalDetails(id) {
   });
 });
 
-// Animal Selectors
-const animalsList = qs('#animalsList');
-const searchAnimalInput = qs('#searchAnimal');
-const filterFarmSelect = qs('#filterFarm');
-const filterBreedSelect = qs('#filterBreed');
-const filterSexSelect = qs('#filterSex');
-const animalCountSpan = qs('#animalCount');
+// Animal Selectors (Moved to top)
 
 function renderAnimals() {
   if (!animalsList) return;
@@ -1852,6 +2365,18 @@ function renderAnimals() {
         `;
     animalsList.appendChild(el);
   });
+
+  // Populate Report Animals Datalist
+  const reportAnimalList = qs('#report-animal-list');
+  if (reportAnimalList) {
+    reportAnimalList.innerHTML = '';
+    animals.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.crotal; // Value to put in input
+      opt.textContent = `${a.crotal} ${a.name ? '(' + a.name + ')' : ''}`;
+      reportAnimalList.appendChild(opt);
+    });
+  }
 }
 
 window.deleteAnimal = function (id) {
@@ -1873,190 +2398,7 @@ function parseDate(dateStr) {
   return dateStr;
 }
 
-window.importBatchAnimals = function () {
-  const fincas = getFincas();
-  const targetFarm = fincas.find(f => f.name.toLowerCase().includes('soto del prior'));
 
-  if (!targetFarm) {
-    alert('No se encontró la finca "soto del prior".');
-    return;
-  }
-
-  // Set 1 (Previous)
-  const batchData1 = [
-    { id: '7390', raza: 'Mestiza', nac: '2015-04-20' },
-    { id: '7391', raza: 'Mestiza', nac: '2015-04-21' },
-    { id: '444', raza: 'Mestiza', nac: '2017-05-25' },
-    { id: '4991', raza: 'Mestiza', nac: '2017-07-12' },
-    { id: '4992', raza: 'Mestiza', nac: '2017-08-09' },
-    { id: '7318', raza: 'Mestiza', nac: '2017-12-07' },
-    { id: '8937', raza: 'Mestiza', nac: '2018-02-27' },
-    { id: '3796', raza: 'Betizu', nac: '2021-01-14' },
-    { id: '8767', raza: 'Betizu', nac: '2021-03-11' },
-    { id: '5243', raza: 'Betizu', nac: '2021-03-13' },
-    { id: '1047', raza: 'Pirenaica', nac: '2021-04-10' },
-    { id: '8396', raza: 'Betizu', nac: '2021-04-11' },
-    { id: '4792', raza: 'Betizu', nac: '2021-04-15' },
-    { id: '2238', raza: 'Betizu', nac: '2021-04-30' },
-    { id: '8896', raza: 'Mestiza', nac: '2022-03-28' },
-    { id: '8895', raza: 'Mestiza', nac: '2022-03-29' },
-    { id: '8888', raza: 'Mestiza', nac: '2022-04-11' },
-    { id: 'ES021402911052', raza: 'Pirenaica', nac: '2021-04-19' },
-    { id: 'ES011402911051', raza: 'Pirenaica', nac: '2021-04-16' },
-    { id: 'ES021402728886', raza: 'Betizu', nac: '2014-02-01' },
-    { id: 'ES011402728885', raza: 'Betizu', nac: '2014-02-07' },
-    { id: 'ES021402728900', raza: 'F1', nac: '2021-01-21', madre: '4992', padre: 'ES071402954198' },
-    { id: 'ES061530490444', raza: 'Holstein', nac: '2017-05-25' },
-    { id: 'ES071402954198', raza: 'Limousin', nac: '2018-04-12', sex: 'Macho' }
-  ];
-
-  // Set 2 (New Request)
-  // Format: crotal, nac(DD/MM/YYYY), madre, padre, Sexo(M/H), peso
-  const rawBatch2 = [
-    ['8885', '23/07/2021', '8902', '4198', 'M', '21'],
-    ['7390', '28/03/2022', '8896', '4198', 'H', '27'],
-    ['7391', '25/04/2022', '8889', '4198', 'M', '24'],
-    ['444', '29/03/2022', '8895', '', 'H', '28'],
-    ['4991', '28/03/2021', '8901', '4198', 'M', '23'],
-    ['4991', '27/04/2022', '8890', '4198', 'M', '25'],
-    ['4992', '21/01/2021', '8900', '4198', 'H', '23'],
-    ['4992', '11/04/2022', '8888', '4198', 'H', '24'],
-    ['7318', '10/04/2022', '8887', '4198', 'M', '23'],
-    ['8937', '24/07/2022', '8890', '4198', 'M', '24'],
-    ['8904', '25/06/2023', '8937', '4198', 'H', '22'],
-    ['xxxx', '24/05/2023', '4991', '4198', 'M', '26']
-  ];
-
-  const animals = storage.read(`animals_${currentUser}`, []);
-  let count = 0;
-
-  // Process Batch 1 (Legacy logic)
-  batchData1.forEach(item => {
-    if (animals.some(a => a.crotal === item.id)) return;
-    animals.push({
-      id: crypto.randomUUID(),
-      crotal: item.id,
-      name: '',
-      farmId: targetFarm.id,
-      breed: item.raza,
-      sex: item.sex || 'Hembra',
-      birthDate: item.nac,
-      birthWeight: 0,
-      currentWeight: 0,
-      notes: 'Importado lote 1',
-      father: item.padre || '',
-      mother: item.madre || '',
-      createdAt: new Date().toISOString()
-    });
-    count++;
-  });
-  // Deduplication Logic
-  window.removeDuplicates = function () {
-    if (!confirm('¿Analizar y eliminar duplicados manteniendo el más completo?')) return;
-
-    const animals = storage.read(`animals_${currentUser}`, []);
-    const groups = {};
-
-    // 1. Group by Normalized Crotal (remove -2, -3 suffixes if they look generated)
-    animals.forEach(a => {
-      // Regex matches "NUMBERS-DIGIT" or just "NUMBERS"
-      // Adjust regex based on your known suffixes. 
-      // Assuming suffixes are "-N".
-      const root = a.crotal.replace(/-\d+$/, '');
-      if (!groups[root]) groups[root] = [];
-      groups[root].push(a);
-    });
-
-    let removedCount = 0;
-    const cleanList = [];
-
-    Object.values(groups).forEach(group => {
-      if (group.length === 1) {
-        cleanList.push(group[0]);
-        return;
-      }
-
-      // 2. Score duplicates
-      // Score = +1 for each existing field: father, mother, birthWeight>0, notes!=default
-      group.forEach(a => {
-        a._score = 0;
-        if (a.father) a._score++;
-        if (a.mother) a._score++;
-        if (a.birthWeight > 0) a._score++;
-        if (a.currentWeight > 0) a._score++;
-        if (a.notes && !a.notes.includes('Importado')) a._score++; // User manually edited notes are valuable
-        if (a.sex) a._score++;
-      });
-
-      // Sort descending by score. If tie, keep the most recently created (or oldest? Usually newest has better data if imported later).
-      // Let's keep newest if score ties.
-      group.sort((a, b) => {
-        if (b._score !== a._score) return b._score - a._score;
-        return new Date(b.createdAt) - new Date(a.createdAt);
-      });
-
-      const winner = group[0];
-      // Ensure winner has the root crotal (clean suffix)
-      winner.crotal = group[0].crotal.replace(/-\d+$/, '');
-
-      // Remove score property
-      delete winner._score;
-      cleanList.push(winner);
-      removedCount += (group.length - 1);
-    });
-
-    // Save
-    storage.write(`animals_${currentUser}`, cleanList);
-    renderAnimals();
-    updateStats(getFincas());
-    alert(`Se han eliminado ${removedCount} duplicados. Se conservaron los registros más completos.`);
-  };
-  // Process Batch 2
-  rawBatch2.forEach(row => {
-    let [crotal, nac, mad, pad, sexChar, peso] = row;
-
-    // Handle 'xxxx' or duplicates
-    if (crotal === 'xxxx' || !crotal) {
-      crotal = 'TEMP-' + Math.floor(Math.random() * 1000);
-    }
-
-    // Attempt to de-duplicate if exact crotal exists (append suffix if needed)
-    // Actually, user gave same crotal (e.g. 4991) for different animals.
-    // We will append a suffix if it already exists in the MAIN list.
-    let uniqueCrotal = crotal;
-    let suffix = 2;
-    while (animals.some(a => a.crotal === uniqueCrotal)) {
-      uniqueCrotal = `${crotal}-${suffix}`;
-      suffix++;
-    }
-
-    const birthDate = parseDate(nac);
-    const sex = sexChar === 'M' ? 'Macho' : 'Hembra';
-    const birthW = parseFloat(peso) || 0;
-
-    animals.push({
-      id: crypto.randomUUID(),
-      crotal: uniqueCrotal,
-      name: '',
-      farmId: targetFarm.id,
-      breed: 'Mestiza', // Default as not specified in this batch, or could infer
-      sex: sex,
-      birthDate: birthDate,
-      birthWeight: birthW,
-      currentWeight: birthW, // New borns/calves probably
-      notes: 'Importado lote 2',
-      father: pad || '',
-      mother: mad || '',
-      createdAt: new Date().toISOString()
-    });
-    count++;
-  });
-
-  storage.write(`animals_${currentUser}`, animals);
-  alert(`Proceso finalizado. Total añadidos: ${count}`);
-  renderAnimals();
-  updateStats(getFincas());
-};
 
 // --- Event Listeners for Filters ---
 [searchAnimalInput, filterFarmSelect, filterBreedSelect].forEach(el => {
@@ -2085,7 +2427,6 @@ const eventTypeInput = qs('#eventType');
 const eventWeightInput = qs('#eventWeight');
 const eventWeightLabel = qs('#eventWeightLabel');
 const eventNextInput = qs('#eventNext');
-const alertsList = qs('#alertsList');
 
 // === Autocomplete Logic ===
 function setupAutocomplete(input, list, getFilterFn) {
@@ -2093,6 +2434,7 @@ function setupAutocomplete(input, list, getFilterFn) {
 
   function doSearch() {
     const term = input.value.trim().toLowerCase();
+    console.log('Searching for:', term); // DEBUG
     if (!term) {
       list.classList.add('hidden');
       return;
@@ -2102,13 +2444,14 @@ function setupAutocomplete(input, list, getFilterFn) {
     const filterFn = getFilterFn ? getFilterFn() : null;
 
     const matches = animals.filter(a => {
-      const crotal = a.crotal.toLowerCase();
+      const crotal = (a.crotal || '').toLowerCase();
       // Robust search: Includes is better for user experience than strict validation here
       const matchTerm = crotal.includes(term);
 
       const matchExtra = filterFn ? filterFn(a) : true;
       return matchTerm && matchExtra;
     });
+    console.log('Matches found:', matches.length); // DEBUG
 
     const results = matches.slice(0, 10);
 
@@ -2166,7 +2509,7 @@ if (toggleEventFormBtn) {
     if (eventFormCard) {
       if (eventFormCard.classList.contains('hidden')) {
         // Prepare Form
-        // populateAnimalSelects(); // REMOVED: Now using Search Input
+        populateFarmSelects();
         eventFormCard.classList.remove('hidden');
         toggleEventFormBtn.textContent = 'Cancelar';
         // Set default date to today (Internal for tracking, though UI is hidden)
@@ -2222,16 +2565,65 @@ if (eventTypeInput) {
     const bullBreedLabel = qs('#eventBullBreedLabel');
     const bullBreedSelect = qs('#eventBullBreed');
 
+    // Decision Macho Fields
+    const dmFields = qs('#decisionMachoFields');
+
+    // Sacrificio Fields
+    const sacrificeFields = qs('#sacrificeFields');
+
+    // Saneamiento Fields
+    const saneamientoFields = qs('#saneamientoFields');
+
+    // Mover de Corral Fields
+    const moveCorralFields = qs('#moveCorralFields');
+
+
+
+
     // Reset All Visibility first
     partoHeader.classList.add('hidden');
     partoFields.forEach(el => el.classList.add('hidden'));
     if (bullBreedLabel) bullBreedLabel.classList.add('hidden');
+    if (dmFields) dmFields.classList.add('hidden');
+    if (sacrificeFields) sacrificeFields.classList.add('hidden');
+    if (saneamientoFields) saneamientoFields.classList.add('hidden');
+    if (moveCorralFields) moveCorralFields.classList.add('hidden');
+
 
     // Default: Show standard fields
     descLabel.classList.remove('hidden');
     costLabel.classList.remove('hidden');
     nextDateLabel.classList.remove('hidden');
     if (eventWeightLabel) eventWeightLabel.classList.add('hidden');
+
+    // Event Type Change - Toggle Fields
+    const eventFarmContainer = qs('#eventFarmContainer');
+    const eventAnimalContainer = qs('#eventAnimalContainer');
+    const eventFarmSelect = qs('#eventFarmKey');
+    const eventAnimalInput = qs('#eventAnimal');
+
+    if (type === 'Saneamiento') {
+      if (saneamientoFields) saneamientoFields.classList.remove('hidden');
+      if (eventFarmContainer) eventFarmContainer.classList.remove('hidden');
+      if (eventAnimalContainer) eventAnimalContainer.classList.add('hidden');
+
+      // Toggle Required
+      if (eventFarmSelect) eventFarmSelect.required = true;
+      if (eventAnimalInput) eventAnimalInput.required = false;
+
+      descLabel.classList.add('hidden'); // Auto-desc
+      costLabel.classList.add('hidden');
+    } else {
+      if (saneamientoFields) saneamientoFields.classList.add('hidden');
+      if (eventFarmContainer) eventFarmContainer.classList.add('hidden');
+      if (eventAnimalContainer) eventAnimalContainer.classList.remove('hidden');
+
+      if (eventFarmSelect) {
+        eventFarmSelect.required = false;
+        eventFarmSelect.value = ''; // Reset
+      }
+      if (eventAnimalInput) eventAnimalInput.required = true; // Default back to required
+    }
 
     if (isPesaje) {
       descLabel.classList.add('hidden');
@@ -2259,6 +2651,7 @@ if (eventTypeInput) {
         if (bullBreedSelect) {
           bullBreedSelect.innerHTML = '<option value="">Selecciona raza</option>';
           // Use global BREED_DATA
+          // Use global BREED_DATA
           Object.values(BREED_DATA).forEach(b => {
             const opt = document.createElement('option');
             opt.value = b.name;
@@ -2267,6 +2660,154 @@ if (eventTypeInput) {
           });
         }
       }
+    } else if (type === 'Destete' || type === 'Aborto') {
+      costLabel.classList.add('hidden');
+    } else if (type === 'Decisión Macho') {
+      if (dmFields) dmFields.classList.remove('hidden');
+      descLabel.classList.add('hidden'); // Auto-desc
+      costLabel.classList.add('hidden'); // Usually internal decision
+    } else if (type === 'Sacrificio') {
+      if (sacrificeFields) sacrificeFields.classList.remove('hidden');
+      descLabel.classList.add('hidden'); // Auto-desc
+      costLabel.classList.add('hidden'); // Replaced by Total Price
+      nextDateLabel.classList.add('hidden'); // End of life
+    } else if (type === 'Cambio de corral') {
+      if (moveCorralFields) moveCorralFields.classList.remove('hidden');
+      descLabel.classList.add('hidden'); // Auto-desc
+      costLabel.classList.add('hidden');
+
+      // Initial Population Logic
+      const crotal = qs('#eventAnimal').value;
+      const originInput = qs('#moveCorralOrigin');
+      const destSelect = qs('#moveCorralDest');
+
+      if (crotal && originInput && destSelect) {
+        originInput.value = 'Calculando...';
+        destSelect.innerHTML = '<option value="">Cargando...</option>';
+
+        // Defer lookup to ensure latest data
+        setTimeout(() => {
+          const animals = storage.read(`animals_${currentUser}`, []);
+          const animal = animals.find(a => a.crotal.endsWith(crotal) || a.crotal === crotal);
+
+          if (animal) {
+            const fincas = getFincas();
+            const farm = fincas.find(f => f.id === animal.farmId);
+
+            // 1. Determine Origin
+            let originName = 'Sin Asignar';
+
+            // Inheritance Logic
+            if (animal.corral) {
+              if (farm && farm.corrales) {
+                const found = farm.corrales.find(c => c.id == animal.corral);
+                originName = found ? found.name : `Corral ${animal.corral}`;
+              } else {
+                originName = `Corral ${animal.corral}`;
+              }
+            } else if (animal.mother) {
+              // Check mother
+              const mother = animals.find(m => m.crotal === animal.mother);
+              if (mother && mother.corral) {
+                if (farm && farm.corrales) { // Assuming same farm
+                  const found = farm.corrales.find(c => c.id == mother.corral);
+                  originName = found ? found.name : `Corral ${mother.corral}`;
+                } else {
+                  originName = `Corral ${mother.corral}`;
+                }
+                originName += ' (Madre)';
+              }
+            }
+            originInput.value = originName;
+
+            // 2. Populate Destinations
+            destSelect.innerHTML = '<option value="">Selecciona nuevo corral</option>';
+            if (farm && farm.corrales) {
+              const num = farm.numero_corrales || 1;
+              for (let i = 1; i <= num; i++) {
+                const custom = farm.corrales.find(c => c.id == i);
+                const name = custom ? custom.name : `Corral ${i}`;
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = name;
+                destSelect.appendChild(opt);
+              }
+            } else {
+              destSelect.innerHTML = '<option value="">Finca sin corrales</option>';
+            }
+
+          } else {
+            originInput.value = 'Animal no encontrado';
+          }
+        }, 100);
+      }
+    } else {
+      if (dmFields) dmFields.classList.add('hidden');
+      if (sacrificeFields) sacrificeFields.classList.add('hidden');
+    }
+  });
+
+  // Listener for Saneamiento Result (Toggle Crotal Input)
+  const saneamientoResult = qs('#saneamientoResult');
+  const saneamientoPositiveInput = qs('#saneamientoPositiveInput');
+  if (saneamientoResult && saneamientoPositiveInput) {
+    saneamientoResult.addEventListener('change', (e) => {
+      if (e.target.value === 'Positivo') {
+        saneamientoPositiveInput.classList.remove('hidden');
+      } else {
+        saneamientoPositiveInput.classList.add('hidden');
+      }
+    });
+  }
+}
+
+// Auto-Fill Slaughter Category on Animal Selection
+const eventAnimalInput = qs('#eventAnimal');
+if (eventAnimalInput) {
+  eventAnimalInput.addEventListener('blur', () => {
+    // Only run if Event Type is Sacrificio
+    if (qs('#eventType').value !== 'Sacrificio') return;
+
+    const term = eventAnimalInput.value.trim();
+    if (!term) return;
+
+    const animals = storage.read(`animals_${currentUser}`, []);
+    // Find match (exact or endsWith)
+    const animal = animals.find(a => a.crotal.endsWith(term));
+
+    if (!animal) return;
+
+    // Calculate Age
+    const birth = new Date(animal.birthDate);
+    const now = new Date();
+    const ageMonths = (now - birth) / (1000 * 60 * 60 * 24 * 30.44);
+
+    let cat = '';
+
+    if (ageMonths < 8) cat = 'V'; // Ternera
+    else if (ageMonths >= 8 && ageMonths < 12) cat = 'Z'; // Añojo
+    else {
+      // > 12 Months
+      if (animal.sex === 'Castrado' || animal.category === 'Buey') {
+        cat = 'C';
+      } else if (animal.sex === 'Macho') {
+        if (ageMonths < 24) cat = 'A'; // Macho Joven
+        else cat = 'B'; // Toro
+      } else if (animal.sex === 'Hembra') {
+        // Simplification: > 30 months = Cow (D), else Heifer (E)
+        // Or check if she has calved? (Complexity)
+        // Let's us > 24m as cutoff for D for now, or assume E until proven.
+        if (ageMonths > 30) cat = 'D'; // Vaca
+        else cat = 'E'; // Novilla
+      }
+    }
+
+    const catSelect = qs('#sacrificeCategory');
+    if (catSelect && cat) {
+      catSelect.value = cat;
+      // Visual feedback
+      catSelect.style.backgroundColor = '#f0fdf4';
+      setTimeout(() => catSelect.style.backgroundColor = '', 1000);
     }
   });
 }
@@ -2307,9 +2848,44 @@ if (eventForm) {
     try {
       const type = qs('#eventType').value;
       const animalSearchTerm = qs('#eventAnimal').value.trim(); // Text Search
+
+      // Logic for Move Corral
+      if (type === 'Cambio de corral') {
+        const newCorralId = qs('#moveCorralDest').value;
+        const originTxt = qs('#moveCorralOrigin').value;
+
+        if (!newCorralId) {
+          alert('Por favor selecciona el nuevo corral de destino.');
+          return;
+        }
+
+        const animals = storage.read(`animals_${currentUser}`, []);
+        const animalIdx = animals.findIndex(a => a.crotal.endsWith(animalSearchTerm) || a.crotal === animalSearchTerm);
+
+        if (animalIdx !== -1) {
+          const animal = animals[animalIdx];
+
+          // Update Animal
+          animal.corral = parseInt(newCorralId);
+          animals[animalIdx] = animal;
+          storage.write(`animals_${currentUser}`, animals);
+
+          // Set Auto Description
+          // Trick to get text from select
+          const sel = qs('#moveCorralDest');
+          const destTxt = sel.options[sel.selectedIndex].text;
+
+          // We inject description into the form input so normal flow picks it up
+          qs('#eventDesc').value = `Movimiento: ${originTxt} -> ${destTxt}`;
+        } else {
+          alert('Error: Animal no encontrado para mover.');
+          return;
+        }
+      }
+
       // const date = qs('#eventDate').value; // Automated now
       const date = new Date().toISOString(); // Auto-set
-      const desc = qs('#eventDesc').value.trim();
+      let desc = qs('#eventDesc').value.trim(); // Make mutable for Decision Macho
       const cost = parseFloat(qs('#eventCost').value) || 0;
       const nextDate = qs('#eventNext').value;
       const weight = parseFloat(qs('#eventWeight').value) || 0;
@@ -2317,40 +2893,321 @@ if (eventForm) {
       // FIX: Move events declaration to top so it's accessible in Parto block
       const events = storage.read('events', []);
 
-      if (!type || !animalSearchTerm) {
-        alert('Por favor completa los campos obligatorios.');
-        return;
-      }
-
       const animals = storage.read(`animals_${currentUser}`, []);
 
-      // SEARCH LOGIC
-      // 1. Try Exact Match First (Best for Autocomplete)
-      let matches = animals.filter(a => a.crotal.toLowerCase() === animalSearchTerm.toLowerCase());
+      let animal = null;
+      let animalId = null;
+      let animalCrotal = null;
 
-      // 2. If no exact match, try partial match (EndsWith)
-      if (matches.length === 0) {
-        matches = animals.filter(a => a.crotal.endsWith(animalSearchTerm));
-      }
+      if (type === 'Saneamiento') {
+        // Finca Logic
+        const farmId = qs('#eventFarmKey').value;
+        if (!farmId) {
+          alert('Selecciona una Finca para el saneamiento.');
+          return;
+        }
+        // Set context to "Farm"
+        // We won't have a single 'animal' object here usually.
+        // We will fetch herd inside the specific logic block.
+      } else {
+        // Standard Single Animal Logic
+        if (!animalSearchTerm) { alert('Introduce el animal.'); return; }
 
-      if (matches.length === 0) {
-        alert(`No se encontró ningún animal que termine en "${animalSearchTerm}".`);
-        return;
-      }
-      if (matches.length > 1) {
-        alert(`Múltiples animales encontrados (${matches.length}) terminan en "${animalSearchTerm}". Por favor introduce más dígitos.`);
-        return;
-      }
+        let matches = animals.filter(a => a.crotal.toLowerCase() === animalSearchTerm.toLowerCase());
+        if (matches.length === 0) matches = animals.filter(a => a.crotal.endsWith(animalSearchTerm));
 
-      const animal = matches[0];
-      const animalId = animal.id;
-      const animalCrotal = animal.crotal;
+        if (matches.length === 0) {
+          alert(`No se encontró ningún animal que termine en "${animalSearchTerm}".`);
+          return;
+        }
+        if (matches.length > 1) {
+          alert(`Múltiples animales encontrados (${matches.length}). Introduce más dígitos.`);
+          return;
+        }
+        animal = matches[0];
+        animalId = animal.id;
+        animalCrotal = animal.crotal;
+      }
 
       // LOGIC: PESAJE UPDATE
       if (type === 'Pesaje') {
+        const prevWeight = animal.currentWeight || 0;
         animal.currentWeight = weight;
+
+        // --- NEW: Calculate Estimates & History ---
+        if (typeof CarcassAndQualityEngine !== 'undefined') {
+          // 1. Calculate ADG from previous weight event or birth
+          // Find last weight event
+          // We need to look in 'events' or assume 'currentWeight' was the last one.
+          // Problem: We don't have the DATE of the last weight easily unless we query events.
+          // Let's query events for this animal, sort desc.
+          const animalEvents = events.filter(e => e.animalId === animalId && e.type === 'Pesaje'); // Excludes current new one yet
+          animalEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
+          const lastEvent = animalEvents[0];
+
+          let lastDate = lastEvent ? new Date(lastEvent.date) : new Date(animal.birthDate);
+          let lastW = lastEvent ? (lastEvent.weight || prevWeight) : (animal.birthWeight || 0);
+
+          // If no previous weight event, use birth
+          if (!lastEvent && prevWeight > 0) lastW = prevWeight; // Fallback
+
+          const curDate = new Date(date);
+          const daysDiff = (curDate - lastDate) / (1000 * 60 * 60 * 24);
+
+          let adgObs = 1.0; // Default fallback
+          if (daysDiff > 0 && weight > lastW) {
+            adgObs = (weight - lastW) / daysDiff;
+          }
+
+          // 2. Get Environment & Diet Variables
+          const weatherTemp = parseFloat(qs('#weather-temp')?.textContent) || 20;
+          const thi = CarcassAndQualityEngine.calculateTHI(weatherTemp, 50); // Approx
+
+          // Diet Energy: We don't know the exact diet here in the Event Modal.
+          // We will assume a default energy based on system or use a 'Standard' value.
+          // Or use the configuration default.
+          const dietE = 2.0; // Moderate energy assumption for history logging
+
+          // 3. Run Estimates
+          // Need breed data
+          // We need to load it synchronously or assume it's in global BREED_DATA
+          // BreedDataManager.getAll() is sync if loaded.
+          let breedData = {};
+          if (window.BREED_DATA && window.BREED_DATA[animal.breed]) {
+            // If map is by ID, we need to find by name
+            // BREED_DATA is object by ID usually.
+            // Let's assume we can find it.
+            const breeds = Object.values(window.BREED_DATA);
+            breedData = breeds.find(b => b.name === animal.breed) || {};
+          }
+
+          const ageMonths = (curDate - new Date(animal.birthDate)) / (1000 * 60 * 60 * 24 * 30.44);
+
+          const carcass = CarcassAndQualityEngine.estimateCarcassResult(
+            { ageMonths, system: 'Intensivo' }, // Default system
+            weight,
+            adgObs,
+            dietE,
+            thi,
+            breedData
+          );
+
+          const quality = CarcassAndQualityEngine.calculateQualityIndex(
+            { ageMonths },
+            breedData,
+            dietE,
+            adgObs,
+            thi,
+            10 // Days finishing unknown, assume low
+          );
+
+          // 4. Save to Animal History
+          if (!animal.monthlyRecords) animal.monthlyRecords = [];
+          animal.monthlyRecords.push({
+            date: date,
+            weightKg: weight,
+            adg: adgObs,
+            rc_est: carcass.rc_percent,
+            carcass_weight_est: carcass.carcass_weight,
+            meat_quality_index: quality.iq_score,
+            marbling_est: quality.marbling_est,
+            tenderness_risk: quality.tenderness_risk,
+            diet_energy: dietE,
+            thi: thi
+          });
+        }
+
         storage.write(`animals_${currentUser}`, animals);
         if (typeof renderAnimals === 'function') renderAnimals(); // Update UI
+      }
+
+
+
+      // LOGIC: SANEAMIENTO
+      if (type === 'Saneamiento') {
+        const result = qs('#saneamientoResult').value;
+        const farmId = qs('#eventFarmKey').value;
+        const fincas = getFincas();
+        const farm = fincas.find(f => f.id === farmId);
+
+        if (!result) {
+          alert('Selecciona el resultado del saneamiento.');
+          return;
+        }
+
+        const herdAnimals = animals.filter(a => a.farmId === farmId && a.status !== 'Muerto' && a.status !== 'Vendido' && a.status !== 'Sacrificado');
+        const farmName = farm ? farm.name : 'Finca Desconocida';
+
+        if (herdAnimals.length === 0) {
+          alert('No hay animales activos en esta finca.');
+          return;
+        }
+
+        if (result === 'Negativo') {
+          // ALL NEGATIVE
+          herdAnimals.forEach(a => {
+            a.healthStatus = 'Sano';
+            if (a.status === 'Cuarentena') a.status = 'Activo'; // Restore status if coming from quarantine? Or just healthStatus.
+            // Let's keep status as 'Activo' usually, but healthStatus dedicated field.
+            if (!a.status) a.status = 'Activo';
+          });
+          desc = 'Saneamiento NEGATIVO. Todo el rebaño declarado SANO.';
+        } else if (result === 'Positivo') {
+          // POSITIVE DETECTED
+          const infectedText = qs('#saneamientoInfected').value;
+          const infectedCrotals = infectedText.split(',').map(s => s.trim().toUpperCase()).filter(s => s);
+
+          if (infectedCrotals.length === 0) {
+            alert('Has indicado POSITIVO. Introduce los crotales infectados.');
+            return;
+          }
+
+          let infectedCount = 0;
+
+          herdAnimals.forEach(a => {
+            const isPositive = infectedCrotals.some(ic => a.crotal.toUpperCase().endsWith(ic)); // Loose match or strict? EndsWith is safer for user input shorthands
+
+            if (isPositive) {
+              // INFECTED ANIMAL
+              a.healthStatus = 'Tuberculosis+';
+              a.status = 'Sacrificado'; // Auto-Sacrifice
+              a.exitDate = date;
+              a.actualPrice = 0; // No sales value
+              a.actualCarcassWeight = 0; // Unknown yet
+              a.deathReason = 'Saneamiento Positivo';
+
+              infectedCount++;
+
+              // Create specific sacrifice event for history?? 
+              // It will appear in their history via this main event if we link it?
+              // We usually link event to ONE animal. But this is a Bulk event.
+              // For history tracking, we should push individual events?
+              // Complexity: High. Let's assume the main event records it, 
+              // and the animal status change is enough for now.
+              // Or push a separate "Sacrificio Sanitario" event for each?
+              if (a.id !== animal.id) { // Don't duplicate for the 'main' selected animal
+                // Push discrete event
+                events.push({
+                  id: crypto.randomUUID(),
+                  type: 'Sacrificio',
+                  date: date,
+                  animalId: a.id,
+                  animalCrotal: a.crotal,
+                  desc: 'Sacrificio Obligatorio (Saneamiento+)',
+                  cost: 0
+                });
+              }
+
+            } else {
+              // REST OF HERD -> QUARANTINE
+              a.healthStatus = 'Cuarentena';
+              // Warn: Do we change main status? 'Activo' is fine, but health is 'Cuarentena'.
+            }
+          });
+
+          // SCHEDULE CHECK +15 Days
+          const checkDate = new Date(date);
+          checkDate.setDate(checkDate.getDate() + 15);
+
+          // We act as if the event is "General" (no specific animal ID?)
+          // But our system requires an ID to query events usually. 
+          // We can assign it to the first animal of the herd as a placeholder? 
+          // OR create a "FARM-{ID}" "fake" animal ID? 
+          // CURRENT SYSTEM: Events filter by animalId. Global events not fully supported in Animal List.
+          // BUT in Dashboard all events show up.
+          // Let's create a single event linked to a placeholder or the first animal to ensure visibility.
+
+          let anchorId = herdAnimals[0].id;
+          let anchorCrotal = `${farmName} (REBAÑO)`; // Special display
+
+          events.push({
+            id: crypto.randomUUID(),
+            type: 'Revisión Cuarentena',
+            date: checkDate.toISOString().split('T')[0],
+            animalId: anchorId, // Anchor to first animal for data consistency 
+            animalCrotal: anchorCrotal,
+            desc: `⚠️ Revisión Cuarentena: ${farmName} (15 días post-positivo)`,
+            actionRequired: 'Saneamiento',
+            status: 'scheduled'
+          });
+
+          desc = `Saneamiento POSITIVO en ${farmName}. ${infectedCount} sacrificados. Resto (${herdAnimals.length - infectedCount}) en CUARENTENA.`;
+        }
+
+        // Add Main Event Record (To whom? To a placeholder or just push to events list?)
+        // If we push with animalId null, it might break filters.
+        // Let's use the anchor strategy: ID of the first animal of the herd.
+
+        events.push({
+          id: crypto.randomUUID(),
+          type: 'Saneamiento',
+          date: date, // Today
+          animalId: herdAnimals[0] ? herdAnimals[0].id : 'FARM_EVENT',
+          animalCrotal: `${farmName} (General)`,
+          desc: desc, // Compiled description
+          completed: true,
+          status: 'completed'
+        });
+
+        storage.write(`animals_${currentUser}`, animals);
+        storage.write('events', events);
+
+        alert('Saneamiento registrado correctamente.');
+        eventForm.reset();
+        if (eventFormCard) eventFormCard.classList.add('hidden');
+        if (toggleEventFormBtn) toggleEventFormBtn.textContent = 'Nuevo Evento';
+        renderEvents();
+        updateDashboardAlerts();
+        return; // EXIT FUNCTION EARLY (Skip Standard Push)
+      } // End Saneamiento Block
+
+      // LOGIC: SACRIFICIO
+      if (type === 'Sacrificio') {
+        const sCategory = qs('#sacrificeCategory').value;
+        const sWeight = parseFloat(qs('#sacrificeWeight').value) || 0;
+        const sPrice = parseFloat(qs('#sacrificePrice').value) || 0;
+        const sConf = qs('#sacrificeConf').value;
+        const sFat = qs('#sacrificeFat').value;
+
+        if (!sWeight || !sPrice || !sCategory) {
+          alert('Por favor introduce la Categoría, Peso Canal y el Precio.');
+          return;
+        }
+
+        // Update Animal
+        animal.status = 'Sacrificado';
+        animal.exitDate = date;
+        animal.actualCategory = sCategory;
+        animal.actualCarcassWeight = sWeight;
+        animal.actualPrice = sPrice;
+        if (sConf) animal.actualSeuropConf = sConf;
+        if (sFat) animal.actualSeuropFat = sFat;
+
+        // Auto-Description
+        desc = `Sacrificio: Cat. ${sCategory} - ${sWeight}kg Canal @ ${sPrice}€ Total. (${sConf || '-'}/${sFat || '-'})`;
+
+        // FUTURE: This is where we would trigger the "Training" of the algorithm comparison
+        // CarcassAndQualityEngine.logTrainingData(animal);
+      }
+
+      // LOGIC: DECISIÓN MACHO
+      if (type === 'Decisión Macho') {
+        const decision = qs('#decisionMachoResult').value;
+        if (!decision) {
+          alert('Por favor selecciona el resultado de la decisión (Semental o Castrado).');
+          return;
+        }
+
+        if (decision === 'Castrado') {
+          animal.sex = 'Castrado';
+          animal.category = 'Buey';
+          // Postpone slaughter date?? handled by Nutrition Engine (Buey has longer lifecycle)
+        } else if (decision === 'Semental') {
+          animal.sex = 'Macho'; // Ensure stays Macho
+          animal.category = 'Semental';
+          animal.isBreeder = true; // Mark as potential father
+        }
+        desc = `Decisión Macho: ${decision}`;
       }
 
       // LOGIC: PARTO (Create Calf)
@@ -2366,7 +3223,7 @@ if (eventForm) {
 
         // Create New Animal
         const newCalf = {
-          id: generateUUID(), // Using Crotal as ID for simplicity? No, using UUID for system ID, Crotal as Display
+          id: crypto.randomUUID(), // Using Crotal as ID for simplicity? No, using UUID for system ID, Crotal as Display
           crotal: calfCrotal,
           name: '', // Optional
           farmId: animal.farmId, // Inherit Farm ID
@@ -2390,7 +3247,7 @@ if (eventForm) {
         weighDate.setDate(weighDate.getDate() + 30);
 
         events.push({
-          id: generateUUID(),
+          id: crypto.randomUUID(),
           type: 'Pesaje',
           animalId: newCalf.id,
           animalCrotal: newCalf.crotal,
@@ -2401,23 +3258,7 @@ if (eventForm) {
           createdAt: new Date().toISOString()
         });
 
-        // Schedule: Male Decision (6 Months)
-        if (calfSex === 'Macho') {
-          const decisionDate = new Date();
-          decisionDate.setDate(decisionDate.getDate() + 180); // 6 months
-
-          events.push({
-            id: generateUUID(),
-            type: 'Revisión',
-            animalId: newCalf.id,
-            animalCrotal: newCalf.crotal,
-            date: decisionDate.toISOString().split('T')[0],
-            desc: 'DECISIÓN MACHO: ¿Castrar o Semental?',
-            cost: 0,
-            status: 'pending',
-            createdAt: new Date().toISOString()
-          });
-        }
+        // "Decisión Macho" is now handled dynamically in runLifecycleChecks (approx 6 months)
 
         alert(`✅ Parto registrado. Cría ${calfCrotal} añadida al inventario.`);
       }
@@ -2429,7 +3270,7 @@ if (eventForm) {
       const calfInfo = type === 'Parto' ? `Cría: ${qs('#eventCalfCrotal').value} (${qs('#eventSex').value}). Peso: ${weight}kg` : '';
 
       const newEvent = {
-        id: generateUUID(),
+        id: crypto.randomUUID(),
         type,
         animalId,
         animalCrotal,
@@ -2448,7 +3289,7 @@ if (eventForm) {
         nextWeighDate.setDate(nextWeighDate.getDate() + 30); // +30 Days
 
         const autoEvent = {
-          id: generateUUID(),
+          id: crypto.randomUUID(),
           type: 'Pesaje',
           animalId,
           animalCrotal,
@@ -2487,7 +3328,7 @@ if (eventForm) {
           stepDate.setDate(stepDate.getDate() + step.day);
 
           const autoEvent = {
-            id: generateUUID(),
+            id: crypto.randomUUID(),
             type: step.type,
             animalId,
             animalCrotal,
@@ -2529,16 +3370,44 @@ const eventsList = qs('#eventsList');
 const filterEventType = qs('#filterEventType');
 const filterEventAnimal = qs('#filterEventAnimal');
 
+// Helper: Grouping Logic
+function getEventTimeGroup(date) {
+  const d = new Date(date);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const eventDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  const diffDays = Math.floor((eventDate - today) / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return { label: 'Hoy' };
+  if (diffDays === 1) return { label: 'Mañana' };
+  if (diffDays > 1 && diffDays <= 7) return { label: 'Esta Semana' };
+  if (diffDays > 7 && diffDays <= 30) return { label: 'Este Mes' };
+
+  // Future (Months/Seasons)
+  if (diffDays > 30) {
+    const month = d.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+    // Capitalize first letter
+    return { label: month.charAt(0).toUpperCase() + month.slice(1) };
+  }
+
+  // Past
+  if (diffDays === -1) return { label: 'Ayer' };
+  if (diffDays < -1 && diffDays >= -7) return { label: 'Semana Pasada' };
+  if (diffDays < -7 && diffDays >= -30) return { label: 'Mes Pasado' };
+
+  return { label: d.toLocaleString('es-ES', { month: 'long', year: 'numeric' }) };
+}
+
+
 function renderEvents() {
   if (!eventsList) return;
 
   let events = storage.read('events', []);
-  const animals = storage.read(`animals_${currentUser}`, []);
 
-  // Sort Date Descending
+  // Sort Date Descending (Newest First)
   events.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  // Filters
   const fType = filterEventType ? filterEventType.value : '';
   const fAnimal = filterEventAnimal ? filterEventAnimal.value : '';
 
@@ -2549,10 +3418,6 @@ function renderEvents() {
     return match;
   });
 
-  // Update Count in Header if exists
-  // const countSpan = qs('#eventCount');
-  // if(countSpan) countSpan.textContent = events.length;
-
   eventsList.innerHTML = '';
 
   if (events.length === 0) {
@@ -2560,32 +3425,254 @@ function renderEvents() {
     return;
   }
 
+  let currentGroupLabel = null;
+
   events.forEach(ev => {
+    const group = getEventTimeGroup(ev.date);
+    if (group.label !== currentGroupLabel) {
+      currentGroupLabel = group.label;
+      const header = document.createElement('div');
+      header.className = 'timeline-header';
+      header.textContent = currentGroupLabel;
+      eventsList.appendChild(header);
+    }
+
     const el = document.createElement('div');
-    el.className = 'farm';
+    el.className = `event-card type-${ev.type}`;
+    el.onclick = (e) => {
+      if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+      if (e.target.tagName === 'INPUT' || e.target.closest('input')) return;
+      openEventDetail(ev.id);
+    };
 
-    // Check if date is future
-    const isFuture = new Date(ev.date) > new Date();
-    const futureStyle = isFuture ? 'border-left: 4px solid #f59e0b; background: #fffbeb;' : '';
+    const d = new Date(ev.date);
+    const day = d.getDate();
+    const monthShort = d.toLocaleString('es-ES', { month: 'short' }).replace('.', '');
 
-    el.style = `padding: 12px; margin-bottom: 8px; ${futureStyle}`;
+    let statusText = ev.status ? ev.status.toUpperCase() : '';
+    let badgeColor = '#6b7280';
+    let textColor = '#fff';
+
+    if (ev.status === 'scheduled') { badgeColor = '#2563eb'; statusText = 'Programado'; }
+    else if (ev.status === 'completed') { badgeColor = '#16a34a'; statusText = 'Completado'; }
+    else if (ev.status === 'pending') { badgeColor = '#d97706'; statusText = 'Pendiente'; }
+    else if (ev.status === 'overdue') { badgeColor = '#dc2626'; statusText = 'Atrasado'; }
+
+    // Add completed status to badge if not already set
+    if (ev.completed && ev.status !== 'completed') {
+      statusText = 'COMPLETADO';
+      badgeColor = '#16a34a';
+    }
+
+    let statusBadge = '';
+    if (statusText) {
+      statusBadge = `<span class="event-badge" style="background:${badgeColor}; color:${textColor};">${statusText}</span>`;
+    }
+
+    // Custom Actions
+    let actionBtn = '';
+    if (ev.actionRequired === 'Destete' && !ev.completed && ev.status !== 'completed') {
+      actionBtn = `<button class="btn small" style="background:#eab308; color:#fff; border:none; margin-right:5px;" onclick="openDesteteForm('${ev.animalId}', '${ev.animalCrotal}')">Destetar</button>`;
+    } else if (ev.actionRequired === 'DecisionMacho' && !ev.completed && ev.status !== 'completed') {
+      actionBtn = `<button class="btn small" style="background:#8b5cf6; color:#fff; border:none; margin-right:5px;" onclick="openDecisionMachoForm('${ev.animalId}', '${ev.animalCrotal}')">Decidir</button>`;
+    }
 
     el.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:start;">
-                <div>
-                    <div style="font-weight:bold; color: #1f2937;">${ev.type} <span style="font-weight:normal; color:#6b7280;">- ${ev.animalCrotal}</span></div>
-                    <div style="font-size:0.9em; margin-top:2px;">${ev.desc}</div>
-                    <div style="font-size:0.85em; color:#9ca3af; margin-top:4px;">
-                        📅 ${new Date(ev.date).toLocaleDateString()} 
-                        ${ev.nextDate ? `➡ Prox: ${new Date(ev.nextDate).toLocaleDateString()}` : ''}
-                    </div>
-                </div>
-                <button class="ghost small" onclick="deleteEvent('${ev.id}')" style="color:#ef4444;">×</button>
-            </div>
-        `;
+      <div class="event-date">
+          <span class="event-day">${day}</span>
+          <span class="event-month">${monthShort}</span>
+      </div>
+      <div class="event-content">
+          <div class="event-title">
+              <span>${ev.type}</span>
+              ${statusBadge}
+          </div>
+          <div class="event-subtitle">${ev.animalCrotal}</div>
+          <div style="font-size:12px; color:#4b5563; margin-top:2px;">${ev.desc}</div>
+      </div>
+      <div style="display:flex; align-items:center;">
+           ${actionBtn}
+           <button class="ghost small" style="color:#9ca3af;">&gt;</button>
+      </div>
+    `;
     eventsList.appendChild(el);
   });
 }
+
+// --- Specialized Action Handlers ---
+window.openDesteteForm = function (animalId, animalCrotal) {
+  if (eventFormCard) {
+    eventFormCard.classList.remove('hidden');
+    if (toggleEventFormBtn) toggleEventFormBtn.textContent = 'Cancelar';
+
+    // Pre-fill
+    if (eventTypeInput) {
+      eventTypeInput.value = 'Destete';
+      // Trigger generic change event if needed to show/hide fields
+      eventTypeInput.dispatchEvent(new Event('change'));
+    }
+
+    // Needs delay for logic that clears fields on type change?
+    setTimeout(() => {
+      // We set values directly. "Destete" type usually implies specialized handling.
+      // We need to bypass the "Search" UI if we want to force it.
+      // Or we just set the hidden input if we know the ID.
+      // Let's rely on the search input being the primary way.
+      const searchInput = qs('#eventAnimal');
+      if (searchInput) {
+        searchInput.value = animalCrotal; // Visual
+        // Trigger search logic?
+      }
+      // Force internal value if logic uses it (some existing logic uses filtered search)
+      // But the form submission uses qs('#eventAnimal').value usually? 
+      // Let's check submission logic. It uses qs('#eventAnimal').value or checks the object?
+      // It uses searchInput.value.
+
+      // Date
+      if (qs('#eventDate')) qs('#eventDate').value = new Date().toISOString().split('T')[0];
+    }, 100);
+  }
+};
+
+window.openDecisionMachoForm = function (animalId, animalCrotal) {
+  if (eventFormCard) {
+    eventFormCard.classList.remove('hidden');
+    if (toggleEventFormBtn) toggleEventFormBtn.textContent = 'Cancelar';
+
+    // Pre-fill
+    if (eventTypeInput) {
+      eventTypeInput.value = 'Decisión Macho';
+      eventTypeInput.dispatchEvent(new Event('change'));
+    }
+
+    setTimeout(() => {
+      const searchInput = qs('#eventAnimal');
+      if (searchInput) {
+        searchInput.value = animalCrotal;
+      }
+      if (qs('#eventDesc')) {
+        qs('#eventDesc').value = 'Decisión Macho: '; // Hint
+      }
+    }, 100);
+
+    // Show prompt
+    alert('Por favor, registra un evento (Castración o Selección Semental) para completar esta decisión.');
+  }
+};
+
+window.openEventDetail = function (id) {
+  const events = storage.read('events', []);
+  const ev = events.find(e => e.id === id);
+  if (!ev) return;
+
+  const content = qs('#eventDetailContent');
+  const modal = qs('#eventDetailModal');
+
+  const d = new Date(ev.date);
+
+  let actionsHTML = '';
+  // Re-implement specialized actions in Modal
+  if (ev.type === 'Tratamiento' && !ev.completed && ev.desc.includes('Protocolo')) {
+    actionsHTML = `
+            <div style="margin-top:15px; padding-top:15px; border-top:1px dashed #e5e7eb;">
+                <p style="font-weight:bold; font-size:0.9em;">Acciones de Protocolo</p>
+                <div style="margin-top:8px;">
+                    <input type="text" id="note-${ev.id}" placeholder="Anotaciones extra..." style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px; margin-bottom:8px;">
+                    <button class="primary full" onclick="confirmTreatment('${ev.id}')">Confirmar Tratamiento Realizado</button>
+                </div>
+            </div>
+        `;
+  }
+  else if (ev.type === 'Revisión' && ev.desc.includes('Diagnóstico') && !ev.result) {
+    actionsHTML = `
+            <div style="margin-top:15px; padding-top:15px; border-top:1px dashed #e5e7eb;">
+                <p style="font-weight:bold; font-size:0.9em;">Registrar Diagnóstico</p>
+                <input type="text" id="note-${ev.id}" placeholder="Notas..." style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px; margin-bottom:8px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <button class="primary" onclick="setDiagnosis('${ev.id}', 'Gestante')" style="background:#16a34a; border-color:#16a34a;">Positivo (+)</button>
+                    <button class="primary" onclick="setDiagnosis('${ev.id}', 'Vacía')" style="background:#dc2626; border-color:#dc2626;">Negativo (-)</button>
+                </div>
+            </div>
+        `;
+  }
+
+  content.innerHTML = `
+        <h2 style="margin-top:0; margin-right: 24px; font-size: 1.5rem; line-height: 1.2;">${ev.type}</h2>
+        <div style="color:#6b7280; margin-bottom:24px; font-weight:600; font-size: 0.95rem;">
+            Animal: <span class="clickable-crotal" onclick="window.openAnimalDetails('${ev.animalId}')" style="color:#2563eb; cursor:pointer; text-decoration:underline; font-weight:800;" title="Ver ficha del animal">${ev.animalCrotal}</span>
+        </div>
+        
+        <div class="detail-row"><span class="detail-label">Fecha</span> <span class="detail-value">${d.toLocaleDateString()}</span></div>
+        <div class="detail-row"><span class="detail-label">Estado</span> <span class="detail-value">${ev.completed ? 'Completado' : (ev.status || 'Pendiente')}</span></div>
+        <div class="detail-row"><span class="detail-label">Descripción</span> <span class="detail-value" style="text-align:right; max-width:60%;">${ev.desc}</span></div>
+        ${ev.cost ? `<div class="detail-row"><span class="detail-label">Coste</span> <span class="detail-value">${ev.cost}€</span></div>` : ''}
+        ${ev.notes ? `<div class="detail-row"><span class="detail-label">Notas</span> <span class="detail-value">${ev.notes}</span></div>` : ''}
+        
+        ${actionsHTML}
+    `;
+
+  // Bind Delete
+  const btnDel = qs('#btnDeleteEventModal');
+  if (btnDel) btnDel.onclick = () => {
+    deleteEvent(id);
+    modal.classList.add('hidden');
+  };
+
+  // Bind Close
+  const btnClose = qs('#btnCloseEventModal');
+  const spanClose = qs('#closeEventDetail');
+  const closer = () => modal.classList.add('hidden');
+  if (btnClose) btnClose.onclick = closer;
+  if (spanClose) spanClose.onclick = closer;
+
+  modal.classList.remove('hidden');
+};
+
+window.confirmTreatment = function (id) {
+  if (!confirm('¿Confirmar que se ha administrado el tratamiento?')) return;
+  const events = storage.read('events', []);
+  const ev = events.find(e => e.id === id);
+  if (ev) {
+    const noteInput = document.getElementById(`note-${id}`);
+    if (noteInput && noteInput.value) {
+      ev.notes = noteInput.value;
+    }
+
+    ev.completed = true;
+    // ev.desc += ' [Completado]'; // No longer needed as we have UI indicator
+    storage.write('events', events);
+    renderEvents();
+    updateDashboardAlerts();
+  }
+};
+
+window.setDiagnosis = function (id, result) {
+  if (!confirm(`¿Confirmar diagnóstico: ${result}?`)) return;
+  const events = storage.read('events', []);
+  const ev = events.find(e => e.id === id);
+  if (ev) {
+    const noteInput = document.getElementById(`note-${id}`);
+    if (noteInput && noteInput.value) {
+      ev.notes = noteInput.value;
+    }
+
+    ev.result = result; // Store structured result
+    ev.completed = true;
+
+    // Also update description for legacy visibility
+    ev.desc = ev.desc.replace('Diagnóstico Gestación', `Diagnóstico: ${result.toUpperCase()}`);
+
+    storage.write('events', events);
+    renderEvents();
+    updateDashboardAlerts();
+
+    // If confirmed Pregnant, maybe trigger an alert or toast?
+    if (result === 'Gestante') alert('¡Enhorabuena! Vaca confirmada gestante.');
+    else alert('Vaca vacía. Se recomienda reiniciar protocolo.');
+
+    if (typeof renderAnimals === 'function') renderAnimals(); // Refresh UI if showing status
+  }
+};
 
 window.deleteEvent = function (id) {
   if (!confirm('¿Eliminar evento?')) return;
@@ -2601,49 +3688,7 @@ if (filterEventType) filterEventType.addEventListener('change', renderEvents);
 if (filterEventAnimal) filterEventAnimal.addEventListener('change', renderEvents);
 
 
-// DASHBOARD ALERTS (Upcoming Events)
-function updateDashboardAlerts() {
-  if (!alertsList) return;
-
-  const events = storage.read('events', []);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const nextWeek = new Date(today);
-  nextWeek.setDate(today.getDate() + 7);
-
-  // Find events in range [Today, Today+7]
-  const upcoming = events.filter(ev => {
-    const d = new Date(ev.date);
-    return d >= today && d <= nextWeek;
-  });
-
-  upcoming.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  alertsList.innerHTML = '';
-
-  if (upcoming.length === 0) {
-    alertsList.innerHTML = '<li><span>No hay eventos próximos (7 días)</span></li>';
-    return;
-  }
-
-  upcoming.forEach(ev => {
-    const li = document.createElement('li');
-
-    // Warning color if today
-    const isToday = new Date(ev.date).toDateString() === today.toDateString();
-    const style = isToday ? 'color: #d97706; font-weight:bold;' : '';
-
-    li.innerHTML = `
-            <div style="display:flex; justify-content:space-between; width:100%; ${style}">
-                <span>${ev.type}: ${ev.animalCrotal}</span>
-                <span>${new Date(ev.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-            </div>
-            <div style="font-size:0.85em; color:#6b7280;">${ev.desc}</div>
-        `;
-    alertsList.appendChild(li);
-  });
-}
+// Duplicate function deleted
 
 
 // Initial Setup
@@ -2745,39 +3790,44 @@ if (uploadBreedCSVBtn) {
 
 if (downloadBreedTemplateBtn) {
   downloadBreedTemplateBtn.addEventListener('click', () => {
-    // Generate CSV template from current BREED_DATA
-    const headers = 'raza_id,raza,subespecie,peso_macho_adulto_kg,peso_hembra_adulta_kg,edad_sacrificio_meses,ADG_feedlot_kg_dia,ADG_pastoreo_kg_dia,FCR,termotolerancia,potencial_marmoleo,facilidad_parto,rendimiento_canal_porcentaje,kg_PV_por_kg_MS\n';
+    if (typeof BreedDataManager !== 'undefined' && BreedDataManager.downloadCSV) {
+      BreedDataManager.downloadCSV();
+    } else {
+      console.warn('BreedDataManager methods not found, using fallback download.');
+      // Generate CSV template from current BREED_DATA
+      const headers = 'raza_id,raza,subespecie,peso_macho_adulto_kg,peso_hembra_adulta_kg,edad_sacrificio_meses,ADG_feedlot_kg_dia,ADG_pastoreo_kg_dia,FCR,termotolerancia,potencial_marmoleo,facilidad_parto,rendimiento_canal_porcentaje,kg_PV_por_kg_MS\n';
 
-    const rows = Object.values(BREED_DATA).map(breed => {
-      return [
-        breed.code || breed.id || '',
-        breed.name || '',
-        breed.subspecies_name || breed.subspecies || '',
-        breed.weight_male_adult || '',
-        breed.weight_female_adult || '',
-        breed.slaughter_age_months || (breed.slaughter_age ? breed.slaughter_age.raw : '') || '',
-        breed.adg_feedlot || '',
-        breed.adg_grazing || '',
-        breed.fcr_feedlot || '',
-        breed.heat_tolerance || '',
-        breed.marbling || '',
-        breed.calving_ease || '',
-        breed.yield_percentage || '',
-        breed.kg_PV_por_kg_MS || ''
-      ].join(',');
-    }).join('\n');
+      const rows = Object.values(BREED_DATA).map(breed => {
+        return [
+          breed.code || breed.id || '',
+          breed.name || '',
+          breed.subspecies_name || breed.subspecies || '',
+          breed.weight_male_adult || '',
+          breed.weight_female_adult || '',
+          breed.slaughter_age_months || (breed.slaughter_age ? breed.slaughter_age.raw : '') || '',
+          breed.adg_feedlot || '',
+          breed.adg_grazing || '',
+          breed.fcr_feedlot || '',
+          breed.heat_tolerance || '',
+          breed.marbling || '',
+          breed.calving_ease || '',
+          breed.yield_percentage || '',
+          breed.kg_PV_por_kg_MS || ''
+        ].join(',');
+      }).join('\n');
 
-    const csvContent = headers + rows;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
+      const csvContent = headers + rows;
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
 
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'breed_data_template.csv');
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'breed_data_template.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
 
     showCSVStatus('success', '✓ Plantilla descargada correctamente');
   });
@@ -2967,3 +4017,203 @@ window.handleAnimalBatchImport = async function (event) {
 };
 
 
+
+// --- Market Data & Feed Price Event Listeners ---
+// --- Market Data & Feed Price Event Listeners ---
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('Initializing Market Data Events...');
+
+  // 1. Upload Beef Prices
+  const uploadBeefBtn = document.getElementById('uploadBeefPriceBtn');
+  const beefInput = document.getElementById('beefPriceCSV');
+  if (uploadBeefBtn && beefInput) {
+    console.log('Beef Upload buttons found.');
+    uploadBeefBtn.addEventListener('click', () => {
+      const file = beefInput.files[0];
+      if (!file) {
+        alert('Selecciona un archivo CSV');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (typeof MarketDataManager !== 'undefined') {
+          const count = MarketDataManager.importBeefCSV(e.target.result);
+          const status = document.getElementById('beefPriceStatus');
+          if (status) {
+            status.textContent = `✅ ${count} precios actualizados.`;
+            status.classList.remove('hidden');
+            setTimeout(() => status.classList.add('hidden'), 5000);
+          }
+        } else {
+          console.error('MarketDataManager not loaded');
+          alert('Error: MarketDataManager no está cargado.');
+        }
+      };
+      reader.readAsText(file);
+    });
+  } else {
+    console.warn('Beef Upload buttons NOT found in DOM.');
+  }
+
+  // 2. Download Beef Template
+  const downloadBeefBtn = document.getElementById('downloadBeefTemplateBtn');
+  if (downloadBeefBtn) {
+    downloadBeefBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const csvContent = typeof MarketDataManager !== 'undefined' ? MarketDataManager.defaultBeefCSV : "categoria;conformacion;grasa;precio_100kg\nAñojo;R;3;5.20\nVaca;O;3;3.50";
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'plantilla_precios_vacuno.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+  } else {
+    console.warn('Beef Download Template button NOT found.');
+  }
+
+  // 3. Update Feed Prices
+  const updateFeedBtn = document.getElementById('updateFeedPriceBtn');
+  const feedInput = document.getElementById('feedUpdateCSV');
+  if (updateFeedBtn && feedInput) {
+    updateFeedBtn.addEventListener('click', () => {
+      const file = feedInput.files[0];
+      if (!file) {
+        alert('Selecciona un archivo CSV');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (typeof MarketDataManager !== 'undefined') {
+          const count = MarketDataManager.updateFeedPrices(e.target.result);
+          const status = document.getElementById('feedUpdateStatus');
+          if (status) {
+            status.textContent = `✅ ${count} alimentos actualizados.`;
+            status.classList.remove('hidden');
+            setTimeout(() => status.classList.add('hidden'), 5000);
+          }
+        } else {
+          console.error('MarketDataManager not loaded');
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  // 4. Download Feed Price Template
+  const downloadFeedUpdateBtn = document.getElementById('downloadFeedUpdateTemplateBtn');
+  if (downloadFeedUpdateBtn) {
+    downloadFeedUpdateBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const csvContent = "Alimento_ID;Nuevo_Precio\nC01;0.26\nP01;0.45";
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'plantilla_actualizar_precios_pienso.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+  }
+});
+
+// --- Helper: Breed Recommendations ---
+function recommendBreedsForFarm(finca) {
+  const container = qs('#detailFarmBreeds');
+  if (!container) return;
+
+  if (!window.BreedDataManager) {
+    container.innerHTML = '<span style="color:red; font-size:0.9em;">Error: Gestor de Razas no disponible.</span>';
+    return;
+  }
+
+  // 1. Get Criteria
+  const management = (finca.management || '').toLowerCase(); // intensivo, extensivo, semi
+
+  // 2. Filter Breeds
+  const allData = window.BreedDataManager.getAllBreeds();
+  const allBreeds = Object.values(allData);
+  let recommended = [];
+
+  // Crossbreed Storage
+  let crosses = [];
+
+  if (management === 'extensivo') {
+    // A. Purebreds: Rustic
+    recommended = allBreeds.filter(b => {
+      const rustic = ['Avileña', 'Retinta', 'Morucha', 'Berrenda', 'Pirenaica'];
+      return rustic.some(r => b.name.includes(r)) || (b.heat_tolerance && (b.heat_tolerance === 'Alta' || b.heat_tolerance === 'Muy alta'));
+    });
+
+    // B. Crosses: Industrial Cross (Rustic Mother x Industrial Father)
+    // Suggest generic crosses known to work well
+    crosses.push(
+      { name: 'Cruce: Avileña x Limousin', type: 'Industrial', desc: 'Vigor híbrido: Rusticidad + Carne' },
+      { name: 'Cruce: Retinta x Charolais', type: 'Industrial', desc: 'Adaptación y conformación' }
+    );
+
+  } else if (management === 'intensivo') {
+    // A. Purebreds: High Yield
+    recommended = allBreeds.filter(b => {
+      return (b.adg_feedlot >= 1.3) || ['Charolais', 'Limousin', 'Azul Belga', 'Blonde'].some(n => b.name.includes(n));
+    });
+
+    // B. Crosses: Terminal
+    crosses.push(
+      { name: 'Cruce: Limousin x Charolais', type: 'Terminal', desc: 'Máximo rendimiento cárnico' },
+      { name: 'Cruce: Azul Belga x Holstein', type: 'Terminal', desc: 'Aprovechamiento lechero industrial' }
+    );
+
+  } else {
+    // Semi-Intensive
+    recommended = allBreeds.filter(b => b.adg_grazing >= 0.6 && b.adg_feedlot >= 1.0);
+
+    // B. Crosses: Maternal / Balanced
+    crosses.push(
+      { name: 'Cruce: Angus x Hereford (Careta)', type: 'Maternal', desc: 'Excelente maternidad y carne' },
+      { name: 'Cruce: F1 (Simmental x Brahman)', type: 'Resistencia', desc: 'Doble propósito y resistencia' }
+    );
+  }
+
+  // 3. Render
+  container.innerHTML = '';
+  if (recommended.length === 0 && crosses.length === 0) {
+    container.innerHTML = '<span style="color:#666; font-size:0.9em;">No hay recomendaciones específicas.</span>';
+    return;
+  }
+
+  // Sort by ADG desc
+  recommended.sort((a, b) => b.adg_feedlot - a.adg_feedlot);
+
+  // Render Purebreds
+  recommended.slice(0, 5).forEach(b => {
+    const el = document.createElement('div');
+    el.className = 'tag';
+    el.style.cssText = 'background-color: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; cursor: help;';
+    el.textContent = b.name;
+    el.title = `ADG: ${b.adg_feedlot} kg/d`;
+    container.appendChild(el);
+  });
+
+  // Render Crosses
+  crosses.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'tag';
+    el.style.cssText = 'background-color: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; cursor: help; font-weight: bold;';
+    el.textContent = c.name;
+    el.title = `${c.type}: ${c.desc}`;
+    container.appendChild(el);
+  });
+}
+
+window.logout = function () { console.log('Logging out...'); localStorage.removeItem('currentUser'); window.location.reload(); };
+// Initialize Application on Load
+if (typeof window !== 'undefined') {
+  window.addEventListener('DOMContentLoaded', () => {
+    console.log('App starting...');
+    loadSession();
+  });
+}

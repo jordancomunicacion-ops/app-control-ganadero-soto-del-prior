@@ -355,31 +355,7 @@ const AppSigpac = (function () {
         fetchParcelData: publicFetchParcelData
     };
 
-    // Internal helper for UI Search
-    async function performSearch() {
-        // ... (access DOM inputs)
-        const prov = sigpacProv.value;
-        const muni = sigpacMuni.value;
-        const poli = sigpacPoli.value.trim();
-        const parc = sigpacParc.value.trim();
 
-        if (!prov || !muni || !poli || !parc) {
-            showStatus('Completa todos los campos', 'error');
-            return;
-        }
-
-        updateLoading(true, 'Consultando SIGPAC...');
-
-        const data = await publicFetchParcelData(prov, muni, poli, parc);
-
-        updateLoading(false);
-
-        if (data) {
-            fillForm(data);
-        } else {
-            showStatus('No se encontró información. Verifica los datos.', 'error');
-        }
-    }
 
 })();
 

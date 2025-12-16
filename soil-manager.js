@@ -133,6 +133,25 @@ const SoilDataManager = {
     },
 
     /**
+     * Find crops compatible with a given soil profile/criteria
+     * @param {Object} criteria - e.g. { textura_ideal: 'Franco' }
+     */
+    filterCropsForSoil(criteria) {
+        const name = (criteria.textura_ideal || criteria.nombre || '').toLowerCase();
+        if (!name) return [];
+
+        // 1. Find the soil ID that matches the name
+        const soil = Object.values(this._data.characteristics).find(s =>
+            s.nombre.toLowerCase() === name || s.textura.toLowerCase() === name
+        );
+
+        if (!soil) return [];
+
+        // 2. Return recommendations for that ID
+        return this.getFeedRecommendations(soil.id_suelo);
+    },
+
+    /**
      * Calculates weighted indices for a mixture of soils.
      * @param {Object} composition Map of soilId -> percentage (0-100). E.g., { "1": 50, "2": 50 }
      */

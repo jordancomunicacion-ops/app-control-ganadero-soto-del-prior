@@ -639,6 +639,15 @@ button {
   background: #f8fafc;
   display: grid;
   gap: 6px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  cursor: pointer;
+}
+
+.farm:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+  border-color: #bbebd1;
+  background: #ffffff;
 }
 
 .farm-title {
@@ -760,6 +769,9 @@ button {
   width: min(500px, 100%);
   position: relative;
   background: #ffffff;
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: 12px;
 }
 
 .close-modal {
@@ -872,7 +884,7 @@ input[type="file"]::file-selector-button:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   max-height: 200px;
   overflow-y: auto;
-  z-index: 50;
+  z-index: 1000;
   list-style: none;
   padding: 0;
   margin: 4px 0 0 0;
@@ -893,4 +905,164 @@ input[type="file"]::file-selector-button:hover {
 
 .suggestions-list li:last-child {
   border-bottom: none;
+}
+
+/* Event Cards & Timeline */
+.timeline-group {
+  margin-bottom: 24px;
+}
+
+.timeline-header {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--muted);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-header::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e5e7eb;
+}
+
+.event-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  gap: 16px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.event-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.05);
+  border-color: #bbebd1;
+}
+
+.event-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--muted);
+}
+
+.event-card.type-Vacunación::before {
+  background: #3b82f6;
+}
+
+/* Blue */
+.event-card.type-Tratamiento::before {
+  background: #ef4444;
+}
+
+/* Red */
+.event-card.type-Parto::before {
+  background: #22c55e;
+}
+
+/* Green */
+.event-card.type-Inseminación::before {
+  background: #8b5cf6;
+}
+
+/* Purple */
+.event-card.type-Destete::before {
+  background: #f59e0b;
+}
+
+/* Amber */
+.event-card.type-Pesaje::before {
+  background: #06b6d4;
+}
+
+/* Cyan */
+
+.event-date-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 50px;
+  height: 50px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.event-day {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text);
+}
+
+.event-month {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.event-content {
+  flex: 1;
+  display: grid;
+  gap: 4px;
+}
+
+.event-title {
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.event-subtitle {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.event-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Event Detail Modal Extras */
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-label {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.detail-value {
+  font-weight: 700;
+  text-align: right;
 }

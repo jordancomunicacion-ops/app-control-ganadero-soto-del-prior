@@ -1,32 +1,32 @@
 // Feed Data Management Module
 const FeedDataManager = {
     // Default Data: Table 2 (User Provided - Updated 2025)
-    defaultCSV: `ID;Tipo;Nombre;Porcentaje_MS;Porcentaje_PB;Porcentaje_FDN;Porcentaje_ADF;Energia_Neta_Mcal_kg;Riesgo;Uso_Recomendado;Notas;Coste_Eur_kg
-F01;Forraje;Pasto natural;22;13;45;25;1.28;Bajo;Mantenimiento y recr\u00EDa;Alta variabilidad estacional;0.12
-F02;Forraje;Pasto mejorado (ryegrass);23;15;45;27;1.35;Bajo;Recr\u00EDa y crecimiento;Joven y digestible;0.12
-F03;Forraje;Heno de pradera;88;10;60;35;1.1;Bajo;Mantenimiento;Rumiantes adultos;0.12
-F04;Forraje;Heno de alfalfa;89;18;45;30;1.25;Bajo;Recr\u00EDa y lactaci\u00F3n;Alto calcio;0.12
-F05;Forraje;Ensilado de ma\u00EDz;35;8;49;27;1.6;Medio;Engorde;Alto aporte energ\u00E9tico;0.12
-C01;Concentrado;Ma\u00EDz grano;89;9;12;4;2.05;Alto;ADG y marmoleo;Requiere fibra efectiva;0.25
-C02;Concentrado;Cebada;88;11;18;6;1.95;Medio;Engorde seguro;Menor riesgo acidosis;0.25
-C03;Concentrado;Trigo;88;12;10;5;2.0;Alto;Engorde r\u00E1pido;Peligro de acidosis si mal manejado;0.25
-C04;Concentrado;DDGS;90;28;32;17;2.05;Medio;Sustituto de cereal;Estable para rumen;0.25
-C05;Concentrado;Pulpa de remolacha;90;10;40;25;1.7;Bajo;Mejora digestibilidad;Alta fibra soluble;0.25
-C06;Concentrado;Cascarilla de soja;90;14;60;45;1.4;Bajo;Aumentar fibra efectiva;Muy segura;0.25
-P01;Proteico;Harina de soja 47%;88;47;15;10;1.9;Medio;Construcci\u00F3n muscular;Prote\u00EDna by-pass;0.42
-P02;Proteico;Colza;90;38;13;9;1.7;Bajo;Sustituir soja;Eficiente y econ\u00F3mica;0.42
-P03;Proteico;Guisante proteico;88;24;20;10;1.6;Bajo;Recr\u00EDa joven;Producci\u00F3n KM0;0.42
-P04;Proteico;Urea (NNP);100;281;0;0;2.6;Alto;Solo animales >8 meses;No usar en terneros;0.42
-S01;Suplemento;N\u00FAcleo mineral;100;0;0;0;0.0;Nulo;Salud general;Ca-P-Mg-Zn-Cu-Se;0.8
-S02;Suplemento;Premezcla de engorde;95;12;0;0;0.0;Medio;Mejorar FCR;Incluye ion\u00F3foros/buffers;0.8
-S03;Suplemento;Vitaminas ADE;100;0;0;0;0.0;Nulo;Salud inmunitaria;Animales estabulados;0.8
-S04;Suplemento;Corrector de acidosis;100;0;0;0;0.0;Bajo;Estabilidad ruminal;Bicarbonatos y levaduras;0.8`,
+    defaultCSV: `ID;Tipo;Nombre;Porcentaje_MS;Porcentaje_PB;Porcentaje_P;Porcentaje_FDN;Porcentaje_ADF;Energia_Neta_Mcal_kg;Riesgo;Uso_Recomendado;Notas;Coste_Eur_kg
+F01;Forraje;Pasto natural;22;13;0.3;45;25;1.28;Bajo;Mantenimiento y recr\u00EDa;Alta variabilidad estacional;0.12
+F02;Forraje;Pasto mejorado (ryegrass);23;15;0.35;45;27;1.35;Bajo;Recr\u00EDa y crecimiento;Joven y digestible;0.12
+F03;Forraje;Heno de pradera;88;10;0.25;60;35;1.1;Bajo;Mantenimiento;Rumiantes adultos;0.12
+F04;Forraje;Heno de alfalfa;89;18;0.3;45;30;1.25;Bajo;Recr\u00EDa y lactaci\u00F3n;Alto calcio;0.12
+F05;Forraje;Ensilado de ma\u00EDz;35;8;0.25;49;27;1.6;Medio;Engorde;Alto aporte energ\u00E9tico;0.12
+C01;Concentrado;Ma\u00EDz grano;89;9;0.3;12;4;2.05;Alto;ADG y marmoleo;Requiere fibra efectiva;0.25
+C02;Concentrado;Cebada;88;11;0.35;18;6;1.95;Medio;Engorde seguro;Menor riesgo acidosis;0.25
+C03;Concentrado;Trigo;88;12;0.4;10;5;2.0;Alto;Engorde r\u00E1pido;Peligro de acidosis si mal manejado;0.25
+C04;Concentrado;DDGS;90;28;0.8;32;17;2.05;Medio;Sustituto de cereal;Estable para rumen;0.25
+C05;Concentrado;Pulpa de remolacha;90;10;0.1;40;25;1.7;Bajo;Mejora digestibilidad;Alta fibra soluble;0.25
+C06;Concentrado;Cascarilla de soja;90;14;0.2;60;45;1.4;Bajo;Aumentar fibra efectiva;Muy segura;0.25
+P01;Proteico;Harina de soja 47%;88;47;0.65;15;10;1.9;Medio;Construcci\u00F3n muscular;Prote\u00EDna by-pass;0.42
+P02;Proteico;Colza;90;38;1.1;13;9;1.7;Bajo;Sustituir soja;Eficiente y econ\u00F3mica;0.42
+P03;Proteico;Guisante proteico;88;24;0.4;20;10;1.6;Bajo;Recr\u00EDa joven;Producci\u00F3n KM0;0.42
+P04;Proteico;Urea (NNP);100;281;0.0;0;0;2.6;Alto;Solo animales >8 meses;No usar en terneros;0.42
+S01;Suplemento;N\u00FAcleo mineral;100;0;10.0;0;0;0.0;Nulo;Salud general;Ca-P-Mg-Zn-Cu-Se;0.8
+S02;Suplemento;Premezcla de engorde;95;12;4.0;0;0;0.0;Medio;Mejorar FCR;Incluye ion\u00F3foros/buffers;0.8
+S03;Suplemento;Vitaminas ADE;100;0;0;0;0;0.0;Nulo;Salud inmunitaria;Animales estabulados;0.8
+S04;Suplemento;Corrector de acidosis;100;0;0;0;0;0.0;Bajo;Estabilidad ruminal;Bicarbonatos y levaduras;0.8`,
 
     init() {
         // Force reload to apply new defaults
-        if (!sessionStorage.getItem('FEED_CACHE_CLEARED_V15')) {
+        if (!sessionStorage.getItem('FEED_CACHE_CLEARED_V16_P')) {
             localStorage.removeItem('FEED_DATA_CACHE');
-            sessionStorage.setItem('FEED_CACHE_CLEARED_V15', 'true');
+            sessionStorage.setItem('FEED_CACHE_CLEARED_V16_P', 'true');
         }
 
         this.load().then(data => {
@@ -56,6 +56,7 @@ S04;Suplemento;Corrector de acidosis;100;0;0;0;0.0;Bajo;Estabilidad ruminal;Bica
             nombre: headers.findIndex(h => h === 'nombre' || h === 'name'),
             ms: headers.findIndex(h => h.includes('ms') || h.includes('dm')),
             pb: headers.findIndex(h => h.includes('pb') || h.includes('cp')),
+            p: headers.findIndex(h => h.includes('porcentaje_p') || h.includes('phosphorus') || h === 'p' || h === 'fósforo' || h === 'fosforo'),
             fdn: headers.findIndex(h => h.includes('fdn') || h.includes('ndf')),
             adf: headers.findIndex(h => h.includes('adf')),
             en: headers.findIndex(h => h.includes('energ') || h.includes('net energy')),
@@ -82,6 +83,7 @@ S04;Suplemento;Corrector de acidosis;100;0;0;0;0.0;Bajo;Estabilidad ruminal;Bica
                 name: name,
                 dm_percent: this.parseNumber(values[col.ms]),
                 cp_percent: this.parseNumber(values[col.pb]),
+                p_percent: (col.p > -1 && values[col.p]) ? this.parseNumber(values[col.p]) : 0.3, // Default 0.3%
                 ndf_percent: this.parseNumber(values[col.fdn]),
                 adf_percent: this.parseNumber(values[col.adf]),
                 energia_neta_Mcal_kg: this.parseNumber(values[col.en]),
@@ -173,6 +175,11 @@ S04;Suplemento;Corrector de acidosis;100;0;0;0;0.0;Bajo;Estabilidad ruminal;Bica
         const parsed = this.parseCSV(this.defaultCSV);
         localStorage.setItem('FEED_DATA_CACHE', JSON.stringify(parsed));
         return parsed;
+    },
+
+    getFeeds() {
+        if (this._feeds && Object.keys(this._feeds).length > 0) return this._feeds;
+        return this.parseCSV(this.defaultCSV);
     },
 
     async reload() {
