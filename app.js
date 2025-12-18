@@ -2841,528 +2841,161 @@ function populateAnimalSelects() {
 }
 
 // Handle Event Submit
+// Handle Event Submit (REFACTORED using EventManager)
 if (eventForm) {
-  eventForm.addEventListener('submit', (e) => {
+  eventForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     try {
       const type = qs('#eventType').value;
-      const animalSearchTerm = qs('#eventAnimal').value.trim(); // Text Search
-
-      // Logic for Move Corral
-      if (type === 'Cambio de corral') {
-        const newCorralId = qs('#moveCorralDest').value;
-        const originTxt = qs('#moveCorralOrigin').value;
-
-        if (!newCorralId) {
-          alert('Por favor selecciona el nuevo corral de destino.');
-          return;
-        }
-
-        const animals = storage.read(`animals_${currentUser}`, []);
-        const animalIdx = animals.findIndex(a => a.crotal.endsWith(animalSearchTerm) || a.crotal === animalSearchTerm);
-
-        if (animalIdx !== -1) {
-          const animal = animals[animalIdx];
-
-          // Update Animal
-          animal.corral = parseInt(newCorralId);
-          animals[animalIdx] = animal;
-          storage.write(`animals_${currentUser}`, animals);
-
-          // Set Auto Description
-          // Trick to get text from select
-          const sel = qs('#moveCorralDest');
-          const destTxt = sel.options[sel.selectedIndex].text;
-
-          // We inject description into the form input so normal flow picks it up
-          qs('#eventDesc').value = `Movimiento: ${originTxt} -> ${destTxt}`;
-        } else {
-          alert('Error: Animal no encontrado para mover.');
-          return;
-        }
-      }
-
-      // const date = qs('#eventDate').value; // Automated now
-      const date = new Date().toISOString(); // Auto-set
-      let desc = qs('#eventDesc').value.trim(); // Make mutable for Decision Macho
+      const animalSearchTerm = qs('#eventAnimal').value.trim();
+      const date = new Date().toISOString();
+      let desc = qs('#eventDesc').value.trim();
       const cost = parseFloat(qs('#eventCost').value) || 0;
       const nextDate = qs('#eventNext').value;
       const weight = parseFloat(qs('#eventWeight').value) || 0;
 
-      // FIX: Move events declaration to top so it's accessible in Parto block
-      const events = storage.read('events', []);
+      // Dependencies for EventManager
+      const context = {
+        events: storage.read('events', []),
+        animals: storage.read(`animals_${currentUser}`, []),
+        currentUser: currentUser,
+        storage: storage,
+        getFincas: getFincas
+      };
 
-      const animals = storage.read(`animals_${currentUser}`, []);
-
-      let animal = null;
-      let animalId = null;
-      let animalCrotal = null;
-
+      // 1. SANEAMIENTO SPECIAL FLOW
       if (type === 'Saneamiento') {
-        // Finca Logic
         const farmId = qs('#eventFarmKey').value;
-        if (!farmId) {
-          alert('Selecciona una Finca para el saneamiento.');
+        const result = qs('#saneamientoResult').value;
+        const infectedCrotalsText = qs('#saneamientoInfected').value;
+
+        if (!farmId || !result) {
+          alert('Completa los datos del Saneamiento (Finca y Resultado).');
           return;
         }
-        // Set context to "Farm"
-        // We won't have a single 'animal' object here usually.
-        // We will fetch herd inside the specific logic block.
-      } else {
-        // Standard Single Animal Logic
+
+        const res = await EventManager.handleSaneamiento({
+          result, infectedCrotalsText, date, farmId
+        }, context);
+
+        alert(res.message);
+        finalizeEventSubmit();
+        return;
+      }
+
+      // 2. FIND ANIMAL (For all other events)
+      let animal = null;
+      if (type !== 'Saneamiento') {
+        // Special case: 'Cambio de corral' uses a different search logic inside standard flow? 
+        // No, we need the animal first usually.
+
         if (!animalSearchTerm) { alert('Introduce el animal.'); return; }
+        let matches = context.animals.filter(a => a.crotal.toLowerCase() === animalSearchTerm.toLowerCase());
+        if (matches.length === 0) matches = context.animals.filter(a => a.crotal.endsWith(animalSearchTerm));
 
-        let matches = animals.filter(a => a.crotal.toLowerCase() === animalSearchTerm.toLowerCase());
-        if (matches.length === 0) matches = animals.filter(a => a.crotal.endsWith(animalSearchTerm));
-
-        if (matches.length === 0) {
-          alert(`No se encontró ningún animal que termine en "${animalSearchTerm}".`);
-          return;
-        }
-        if (matches.length > 1) {
-          alert(`Múltiples animales encontrados (${matches.length}). Introduce más dígitos.`);
+        if (matches.length === 0 || matches.length > 1) {
+          alert(`Animal no encontrado o múltiples coincidencias (${matches.length}).`);
           return;
         }
         animal = matches[0];
-        animalId = animal.id;
-        animalCrotal = animal.crotal;
       }
 
-      // LOGIC: PESAJE UPDATE
+      // 3. INSEMINATION FLOW
+      if (type === 'Inseminación') {
+        const bullBreed = qs('#eventBullBreed').value;
+        const res = await EventManager.handleInsemination({
+          animal, date, bullBreed, desc
+        }, context);
+        alert(res.message);
+        finalizeEventSubmit();
+        return;
+      }
+
+      // 4. WEIGHING FLOW
       if (type === 'Pesaje') {
-        const prevWeight = animal.currentWeight || 0;
-        animal.currentWeight = weight;
-
-        // --- NEW: Calculate Estimates & History ---
-        if (typeof CarcassAndQualityEngine !== 'undefined') {
-          // 1. Calculate ADG from previous weight event or birth
-          // Find last weight event
-          // We need to look in 'events' or assume 'currentWeight' was the last one.
-          // Problem: We don't have the DATE of the last weight easily unless we query events.
-          // Let's query events for this animal, sort desc.
-          const animalEvents = events.filter(e => e.animalId === animalId && e.type === 'Pesaje'); // Excludes current new one yet
-          animalEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
-          const lastEvent = animalEvents[0];
-
-          let lastDate = lastEvent ? new Date(lastEvent.date) : new Date(animal.birthDate);
-          let lastW = lastEvent ? (lastEvent.weight || prevWeight) : (animal.birthWeight || 0);
-
-          // If no previous weight event, use birth
-          if (!lastEvent && prevWeight > 0) lastW = prevWeight; // Fallback
-
-          const curDate = new Date(date);
-          const daysDiff = (curDate - lastDate) / (1000 * 60 * 60 * 24);
-
-          let adgObs = 1.0; // Default fallback
-          if (daysDiff > 0 && weight > lastW) {
-            adgObs = (weight - lastW) / daysDiff;
-          }
-
-          // 2. Get Environment & Diet Variables
-          const weatherTemp = parseFloat(qs('#weather-temp')?.textContent) || 20;
-          const thi = CarcassAndQualityEngine.calculateTHI(weatherTemp, 50); // Approx
-
-          // Diet Energy: We don't know the exact diet here in the Event Modal.
-          // We will assume a default energy based on system or use a 'Standard' value.
-          // Or use the configuration default.
-          const dietE = 2.0; // Moderate energy assumption for history logging
-
-          // 3. Run Estimates
-          // Need breed data
-          // We need to load it synchronously or assume it's in global BREED_DATA
-          // BreedDataManager.getAll() is sync if loaded.
-          let breedData = {};
-          if (window.BREED_DATA && window.BREED_DATA[animal.breed]) {
-            // If map is by ID, we need to find by name
-            // BREED_DATA is object by ID usually.
-            // Let's assume we can find it.
-            const breeds = Object.values(window.BREED_DATA);
-            breedData = breeds.find(b => b.name === animal.breed) || {};
-          }
-
-          const ageMonths = (curDate - new Date(animal.birthDate)) / (1000 * 60 * 60 * 24 * 30.44);
-
-          const carcass = CarcassAndQualityEngine.estimateCarcassResult(
-            { ageMonths, system: 'Intensivo' }, // Default system
-            weight,
-            adgObs,
-            dietE,
-            thi,
-            breedData
-          );
-
-          const quality = CarcassAndQualityEngine.calculateQualityIndex(
-            { ageMonths },
-            breedData,
-            dietE,
-            adgObs,
-            thi,
-            10 // Days finishing unknown, assume low
-          );
-
-          // 4. Save to Animal History
-          if (!animal.monthlyRecords) animal.monthlyRecords = [];
-          animal.monthlyRecords.push({
-            date: date,
-            weightKg: weight,
-            adg: adgObs,
-            rc_est: carcass.rc_percent,
-            carcass_weight_est: carcass.carcass_weight,
-            meat_quality_index: quality.iq_score,
-            marbling_est: quality.marbling_est,
-            tenderness_risk: quality.tenderness_risk,
-            diet_energy: dietE,
-            thi: thi
-          });
-        }
-
-        storage.write(`animals_${currentUser}`, animals);
-        if (typeof renderAnimals === 'function') renderAnimals(); // Update UI
+        const res = await EventManager.handleWeighing({
+          animal, weight, date, notes: desc
+        }, context);
+        alert(res.message);
+        finalizeEventSubmit();
+        return;
       }
 
+      // 5. STANDARD / OTHER EVENTS
+      // Gather extra data for specific types
+      let typeData = {};
 
-
-      // LOGIC: SANEAMIENTO
-      if (type === 'Saneamiento') {
-        const result = qs('#saneamientoResult').value;
-        const farmId = qs('#eventFarmKey').value;
-        const fincas = getFincas();
-        const farm = fincas.find(f => f.id === farmId);
-
-        if (!result) {
-          alert('Selecciona el resultado del saneamiento.');
-          return;
-        }
-
-        const herdAnimals = animals.filter(a => a.farmId === farmId && a.status !== 'Muerto' && a.status !== 'Vendido' && a.status !== 'Sacrificado');
-        const farmName = farm ? farm.name : 'Finca Desconocida';
-
-        if (herdAnimals.length === 0) {
-          alert('No hay animales activos en esta finca.');
-          return;
-        }
-
-        if (result === 'Negativo') {
-          // ALL NEGATIVE
-          herdAnimals.forEach(a => {
-            a.healthStatus = 'Sano';
-            if (a.status === 'Cuarentena') a.status = 'Activo'; // Restore status if coming from quarantine? Or just healthStatus.
-            // Let's keep status as 'Activo' usually, but healthStatus dedicated field.
-            if (!a.status) a.status = 'Activo';
-          });
-          desc = 'Saneamiento NEGATIVO. Todo el rebaño declarado SANO.';
-        } else if (result === 'Positivo') {
-          // POSITIVE DETECTED
-          const infectedText = qs('#saneamientoInfected').value;
-          const infectedCrotals = infectedText.split(',').map(s => s.trim().toUpperCase()).filter(s => s);
-
-          if (infectedCrotals.length === 0) {
-            alert('Has indicado POSITIVO. Introduce los crotales infectados.');
-            return;
-          }
-
-          let infectedCount = 0;
-
-          herdAnimals.forEach(a => {
-            const isPositive = infectedCrotals.some(ic => a.crotal.toUpperCase().endsWith(ic)); // Loose match or strict? EndsWith is safer for user input shorthands
-
-            if (isPositive) {
-              // INFECTED ANIMAL
-              a.healthStatus = 'Tuberculosis+';
-              a.status = 'Sacrificado'; // Auto-Sacrifice
-              a.exitDate = date;
-              a.actualPrice = 0; // No sales value
-              a.actualCarcassWeight = 0; // Unknown yet
-              a.deathReason = 'Saneamiento Positivo';
-
-              infectedCount++;
-
-              // Create specific sacrifice event for history?? 
-              // It will appear in their history via this main event if we link it?
-              // We usually link event to ONE animal. But this is a Bulk event.
-              // For history tracking, we should push individual events?
-              // Complexity: High. Let's assume the main event records it, 
-              // and the animal status change is enough for now.
-              // Or push a separate "Sacrificio Sanitario" event for each?
-              if (a.id !== animal.id) { // Don't duplicate for the 'main' selected animal
-                // Push discrete event
-                events.push({
-                  id: crypto.randomUUID(),
-                  type: 'Sacrificio',
-                  date: date,
-                  animalId: a.id,
-                  animalCrotal: a.crotal,
-                  desc: 'Sacrificio Obligatorio (Saneamiento+)',
-                  cost: 0
-                });
-              }
-
-            } else {
-              // REST OF HERD -> QUARANTINE
-              a.healthStatus = 'Cuarentena';
-              // Warn: Do we change main status? 'Activo' is fine, but health is 'Cuarentena'.
-            }
-          });
-
-          // SCHEDULE CHECK +15 Days
-          const checkDate = new Date(date);
-          checkDate.setDate(checkDate.getDate() + 15);
-
-          // We act as if the event is "General" (no specific animal ID?)
-          // But our system requires an ID to query events usually. 
-          // We can assign it to the first animal of the herd as a placeholder? 
-          // OR create a "FARM-{ID}" "fake" animal ID? 
-          // CURRENT SYSTEM: Events filter by animalId. Global events not fully supported in Animal List.
-          // BUT in Dashboard all events show up.
-          // Let's create a single event linked to a placeholder or the first animal to ensure visibility.
-
-          let anchorId = herdAnimals[0].id;
-          let anchorCrotal = `${farmName} (REBAÑO)`; // Special display
-
-          events.push({
-            id: crypto.randomUUID(),
-            type: 'Revisión Cuarentena',
-            date: checkDate.toISOString().split('T')[0],
-            animalId: anchorId, // Anchor to first animal for data consistency 
-            animalCrotal: anchorCrotal,
-            desc: `⚠️ Revisión Cuarentena: ${farmName} (15 días post-positivo)`,
-            actionRequired: 'Saneamiento',
-            status: 'scheduled'
-          });
-
-          desc = `Saneamiento POSITIVO en ${farmName}. ${infectedCount} sacrificados. Resto (${herdAnimals.length - infectedCount}) en CUARENTENA.`;
-        }
-
-        // Add Main Event Record (To whom? To a placeholder or just push to events list?)
-        // If we push with animalId null, it might break filters.
-        // Let's use the anchor strategy: ID of the first animal of the herd.
-
-        events.push({
-          id: crypto.randomUUID(),
-          type: 'Saneamiento',
-          date: date, // Today
-          animalId: herdAnimals[0] ? herdAnimals[0].id : 'FARM_EVENT',
-          animalCrotal: `${farmName} (General)`,
-          desc: desc, // Compiled description
-          completed: true,
-          status: 'completed'
-        });
-
-        storage.write(`animals_${currentUser}`, animals);
-        storage.write('events', events);
-
-        alert('Saneamiento registrado correctamente.');
-        eventForm.reset();
-        if (eventFormCard) eventFormCard.classList.add('hidden');
-        if (toggleEventFormBtn) toggleEventFormBtn.textContent = 'Nuevo Evento';
-        renderEvents();
-        updateDashboardAlerts();
-        return; // EXIT FUNCTION EARLY (Skip Standard Push)
-      } // End Saneamiento Block
-
-      // LOGIC: SACRIFICIO
       if (type === 'Sacrificio') {
-        const sCategory = qs('#sacrificeCategory').value;
-        const sWeight = parseFloat(qs('#sacrificeWeight').value) || 0;
-        const sPrice = parseFloat(qs('#sacrificePrice').value) || 0;
-        const sConf = qs('#sacrificeConf').value;
-        const sFat = qs('#sacrificeFat').value;
-
-        if (!sWeight || !sPrice || !sCategory) {
-          alert('Por favor introduce la Categoría, Peso Canal y el Precio.');
-          return;
-        }
-
-        // Update Animal
-        animal.status = 'Sacrificado';
-        animal.exitDate = date;
-        animal.actualCategory = sCategory;
-        animal.actualCarcassWeight = sWeight;
-        animal.actualPrice = sPrice;
-        if (sConf) animal.actualSeuropConf = sConf;
-        if (sFat) animal.actualSeuropFat = sFat;
-
-        // Auto-Description
-        desc = `Sacrificio: Cat. ${sCategory} - ${sWeight}kg Canal @ ${sPrice}€ Total. (${sConf || '-'}/${sFat || '-'})`;
-
-        // FUTURE: This is where we would trigger the "Training" of the algorithm comparison
-        // CarcassAndQualityEngine.logTrainingData(animal);
-      }
-
-      // LOGIC: DECISIÓN MACHO
-      if (type === 'Decisión Macho') {
-        const decision = qs('#decisionMachoResult').value;
-        if (!decision) {
-          alert('Por favor selecciona el resultado de la decisión (Semental o Castrado).');
-          return;
-        }
-
-        if (decision === 'Castrado') {
-          animal.sex = 'Castrado';
-          animal.category = 'Buey';
-          // Postpone slaughter date?? handled by Nutrition Engine (Buey has longer lifecycle)
-        } else if (decision === 'Semental') {
-          animal.sex = 'Macho'; // Ensure stays Macho
-          animal.category = 'Semental';
-          animal.isBreeder = true; // Mark as potential father
-        }
-        desc = `Decisión Macho: ${decision}`;
-      }
-
-      // LOGIC: PARTO (Create Calf)
-      if (type === 'Parto') {
-        const calfCrotal = qs('#eventCalfCrotal').value.trim();
-        const calfSex = qs('#eventSex').value;
-        const fatherCrotal = qs('#eventFather').value.trim();
-
-        if (!calfCrotal || !calfSex) {
-          alert('Por favor indica el Crotal de la cría y su Sexo.');
-          return;
-        }
-
-        // Create New Animal
-        const newCalf = {
-          id: crypto.randomUUID(), // Using Crotal as ID for simplicity? No, using UUID for system ID, Crotal as Display
-          crotal: calfCrotal,
-          name: '', // Optional
-          farmId: animal.farmId, // Inherit Farm ID
-          farm: animal.farm, // Inherit Farm Name
-          breed: animal.breed || 'Desconocida', // Inherit Breed? Or Mixed?
-          sex: calfSex,
-          father: fatherCrotal,
-          mother: animalCrotal,
-          birthDate: date.split('T')[0],
-          birthWeight: weight,
-          currentWeight: weight,
-          notes: `Nacido de ${animalCrotal} el ${date.split('T')[0]}`,
-          createdAt: new Date().toISOString()
+        typeData = {
+          category: qs('#sacrificeCategory').value,
+          carcassWeight: parseFloat(qs('#sacrificeWeight').value) || 0,
+          price: parseFloat(qs('#sacrificePrice').value) || 0,
+          conf: qs('#sacrificeConf').value,
+          fat: qs('#sacrificeFat').value
         };
-
-        animals.push(newCalf);
-        storage.write(`animals_${currentUser}`, animals);
-
-        // Schedule: 1st Weighing (1 Month)
-        const weighDate = new Date();
-        weighDate.setDate(weighDate.getDate() + 30);
-
-        events.push({
-          id: crypto.randomUUID(),
-          type: 'Pesaje',
-          animalId: newCalf.id,
-          animalCrotal: newCalf.crotal,
-          date: weighDate.toISOString().split('T')[0],
-          desc: 'CONTROL MENSUAL (1er Mes)',
-          cost: 0,
-          status: 'pending',
-          createdAt: new Date().toISOString()
-        });
-
-        // "Decisión Macho" is now handled dynamically in runLifecycleChecks (approx 6 months)
-
-        alert(`✅ Parto registrado. Cría ${calfCrotal} añadida al inventario.`);
-      }
-
-
-
-      // 1. Create Main Event (The Birth Record itself - Linked to Mother)
-      // Note: User might want link to calf in desc
-      const calfInfo = type === 'Parto' ? `Cría: ${qs('#eventCalfCrotal').value} (${qs('#eventSex').value}). Peso: ${weight}kg` : '';
-
-      const newEvent = {
-        id: crypto.randomUUID(),
-        type,
-        animalId,
-        animalCrotal,
-        date,
-        desc: type === 'Pesaje' ? `Pesaje: ${weight.toFixed(4)}kg. ${desc}` : (type === 'Parto' ? `Parto. ${calfInfo}` : desc),
-        cost,
-        nextDate,
-        createdAt: new Date().toISOString()
-      };
-
-      events.push(newEvent);
-
-      // 2. Logic: Auto-Schedule Next Weighing
-      if (type === 'Pesaje') {
-        const nextWeighDate = new Date(date);
-        nextWeighDate.setDate(nextWeighDate.getDate() + 30); // +30 Days
-
-        const autoEvent = {
-          id: crypto.randomUUID(),
-          type: 'Pesaje',
-          animalId,
-          animalCrotal,
-          date: nextWeighDate.toISOString().split('T')[0],
-          desc: 'CONTROL MENSUAL AUTOMÁTICO', // Flag to know it's auto
-          cost: 0,
-          status: 'pending', // Optional status flag
-          createdAt: new Date().toISOString()
-        };
-        events.push(autoEvent);
-        alert('✅ Peso actualizado y próxima revisión programada en 30 días.');
-      } else if (type === 'Inseminación') {
-        // PROTOCOL GENERATOR (Ovsynch + IATF)
-        // Day 0: Start (This Event) -> GnRH 1
-
-        let breedInfo = '';
-        const bullBreedSelect = qs('#eventBullBreed');
-        if (bullBreedSelect && bullBreedSelect.value) {
-          breedInfo = ` Toro: ${bullBreedSelect.value}.`;
+        if (!typeData.category || !typeData.carcassWeight || !typeData.price) {
+          alert('Faltan datos de Sacrificio.'); return;
         }
-
-        // 1. Update THIS event description
-        newEvent.desc = `Inicio Protocolo IA (Día 0): Evaluación + GnRH 1.${breedInfo} ${desc}`;
-
-        // 2. Generate Future Events
-        const protocolSteps = [
-          { day: 7, type: 'Tratamiento', desc: 'Protocolo IA (Día 7): Prostaglandina (PGF2a)' },
-          { day: 9, type: 'Tratamiento', desc: 'Protocolo IA (Día 9): GnRH 2ª dosis' },
-          { day: 10, type: 'Inseminación', desc: `Protocolo IA (Día 10): IA a Tiempo Fijo (16-20h tras GnRH).${breedInfo}` }, // The actual IA
-          { day: 35, type: 'Revisión', desc: 'Protocolo IA (Día 35): Ecografía (Diagnóstico Gestación)' },
-          { day: 60, type: 'Revisión', desc: 'Protocolo IA (Día 60): Confirmación Viabilidad' }
-        ];
-
-        protocolSteps.forEach(step => {
-          const stepDate = new Date(date); // Clone start date
-          stepDate.setDate(stepDate.getDate() + step.day);
-
-          const autoEvent = {
-            id: crypto.randomUUID(),
-            type: step.type,
-            animalId,
-            animalCrotal,
-            date: stepDate.toISOString().split('T')[0], // YYYY-MM-DD
-            desc: step.desc,
-            cost: 0, // Costs can be added later
-            status: 'scheduled',
-            createdAt: new Date().toISOString()
-          };
-          events.push(autoEvent);
-        });
-
-        alert('✅ Protocolo de Inseminación iniciado. Se han programado 5 eventos futuros (Día 7, 9, 10, 35, 60).');
-
-      } else {
-        alert('Evento registrado correctamente.');
+      }
+      else if (type === 'Decisión Macho') {
+        typeData = { decision: qs('#decisionMachoResult').value };
+      }
+      else if (type === 'Cambio de corral') {
+        typeData = {
+          newCorralId: qs('#moveCorralDest') ? qs('#moveCorralDest').value : null, // If using simplified UI? 
+          // Wait, the UI for move corral wasn't fully visible in view_file but logic was there.
+          // We'll trust the ID 'moveCorralDest' exists if the UI shows it.
+          // Note: The previous code checked 'newCorralId' which came from a DOM element.
+        };
+        // Re-implement the DOM read if needed, but for now standard flow.
+        // The previous code had specific logic for 'Cambio de corral' reading specific inputs.
+        // If those inputs are hidden/shown dynamically, we need to read them.
+        /*
+           previous: 
+           const newCorralId = qs('#moveCorralDest').value;
+           const originTxt = qs('#moveCorralOrigin').value;
+        */
+        // Ensure we grab them if they exist
+        const destEl = qs('#moveCorralDest');
+        if (destEl) {
+          typeData.newCorralId = destEl.value;
+          typeData.originTxt = qs('#moveCorralOrigin')?.value;
+          typeData.destTxt = destEl.options[destEl.selectedIndex]?.text;
+        }
+      }
+      else if (type === 'Parto') {
+        typeData = {
+          calfCrotal: qs('#eventCalfCrotal').value,
+          calfSex: qs('#eventSex').value,
+          fatherCrotal: qs('#eventFather').value,
+          birthWeight: weight // Re-use weight field
+        };
       }
 
-      storage.write('events', events);
+      const res = await EventManager.handleStandardEvent({
+        type, animal, date, desc, cost, nextDate, typeData
+      }, context);
 
-      eventForm.reset();
-      eventFormCard.classList.add('hidden');
-      toggleEventFormBtn.textContent = 'Nuevo Evento';
-      if (eventWeightLabel) eventWeightLabel.classList.add('hidden');
-
-      renderEvents();
-      updateDashboardAlerts();
-      updateStats(getFincas());
+      alert(res.message);
+      finalizeEventSubmit();
 
     } catch (err) {
       console.error(err);
-      alert('Error al guardar evento: ' + err.message);
+      alert('Error: ' + err.message);
     }
   });
+}
+
+function finalizeEventSubmit() {
+  eventForm.reset();
+  eventFormCard.classList.add('hidden');
+  toggleEventFormBtn.textContent = 'Nuevo Evento';
+  if (qs('#eventWeightLabel')) qs('#eventWeightLabel').classList.add('hidden');
+
+  renderEvents();
+  updateDashboardAlerts();
+  updateStats(getFincas());
 }
 
 // Render Events List
@@ -3692,7 +3325,7 @@ if (filterEventAnimal) filterEventAnimal.addEventListener('change', renderEvents
 
 
 // Initial Setup
-populateBreedSelects();
+// populateBreedSelects(); // Removed to avoid race condition (called in initializeBreedData)
 // updateAgeOptions(); // Call once to set initial state
 
 // One-time fix for breed spelling error

@@ -76,8 +76,8 @@
                         <a href="#" class="nav-link" data-target="farms">Fincas</a>
                         <a href="#" class="nav-link" data-target="animals">Animales</a>
                         <a href="#" class="nav-link" data-target="events">Eventos</a>
-                        <a href="#" class="nav-link" data-target="reports">Reportes</a>
                         <a href="#" class="nav-link" data-target="calculator">Rendimiento</a>
+                        <a href="#" class="nav-link" data-target="reports">Reportes</a>
                         <a href="#" class="nav-link" id="nav-data" data-target="data">Datos</a>
                     </nav>
                     <div class="sidebar-actions">
@@ -402,8 +402,8 @@
                                 </label>
 
                                 <!-- Parto Specific Fields -->
-                                <label id="partoFields" class="hidden"
-                                    style="color:#15803d; font-weight:600; margin-top:8px;">Datos de la Cría</label>
+                                <p id="partoFields" class="hidden"
+                                    style="color:#15803d; font-weight:600; margin-top:8px;">Datos de la Cría</p>
                                 <label class="parto-field hidden">Crotal Cría
                                     <input type="text" id="eventCalfCrotal" placeholder="Nuevo Crotal">
                                 </label>
@@ -661,7 +661,11 @@
                                                     </select>
                                                 </td>
                                                 <td style="color:#6b7280; font-size:0.85em;">Forraje</td>
-                                                <td style="text-align:right;" id="dietSlot1Pct">-</td>
+                                                <td style="text-align:right;">
+                                                    <input type="number" id="dietSlot1Pct" class="pct-input"
+                                                        placeholder="%"
+                                                        style="width:50px; text-align:right; padding:2px;"> %
+                                                </td>
                                                 <td style="text-align:right; font-weight:bold;" id="dietSlot1Kg">-</td>
                                                 <td style="text-align:right; color:#059669;" id="dietSlot1Cost">-</td>
                                             </tr>
@@ -674,7 +678,11 @@
                                                     </select>
                                                 </td>
                                                 <td style="color:#6b7280; font-size:0.85em;">Energía</td>
-                                                <td style="text-align:right;" id="dietSlot3Pct">-</td>
+                                                <td style="text-align:right;">
+                                                    <input type="number" id="dietSlot3Pct" class="pct-input"
+                                                        placeholder="%"
+                                                        style="width:50px; text-align:right; padding:2px;"> %
+                                                </td>
                                                 <td style="text-align:right; font-weight:bold;" id="dietSlot3Kg">-</td>
                                                 <td style="text-align:right; color:#059669;" id="dietSlot3Cost">-</td>
                                             </tr>
@@ -687,7 +695,11 @@
                                                     </select>
                                                 </td>
                                                 <td style="color:#6b7280; font-size:0.85em;">Proteína</td>
-                                                <td style="text-align:right;" id="dietSlot4Pct">-</td>
+                                                <td style="text-align:right;">
+                                                    <input type="number" id="dietSlot4Pct" class="pct-input"
+                                                        placeholder="%"
+                                                        style="width:50px; text-align:right; padding:2px;"> %
+                                                </td>
                                                 <td style="text-align:right; font-weight:bold;" id="dietSlot4Kg">-</td>
                                                 <td style="text-align:right; color:#059669;" id="dietSlot4Cost">-</td>
                                             </tr>
@@ -700,7 +712,11 @@
                                                     </select>
                                                 </td>
                                                 <td style="color:#6b7280; font-size:0.85em;">Correctores</td>
-                                                <td style="text-align:right;" id="dietSlot5Pct">-</td>
+                                                <td style="text-align:right;">
+                                                    <input type="number" id="dietSlot5Pct" class="pct-input"
+                                                        placeholder="%"
+                                                        style="width:50px; text-align:right; padding:2px;"> %
+                                                </td>
                                                 <td style="text-align:right; font-weight:bold;" id="dietSlot5Kg">-</td>
                                                 <td style="text-align:right; color:#059669;" id="dietSlot5Cost">-</td>
                                             </tr>
@@ -827,7 +843,7 @@
                                             <p class="kpi-label">Peso Canal Est.</p>
                                             <p class="kpi-value" id="calcCarcass">-</p>
                                             <p class="kpi-foot">Rendimiento <span id="calcYield"
-                                                    style="font-size:1.2em; font-weight:bold; color:#000; margin:0 2px;">58</span>%
+                                                    style="font-size:1.2em; font-weight:bold; color:#000; margin:0 2px;">-</span>%
                                             </p>
                                         </div>
                                     </div>
@@ -1028,9 +1044,9 @@
                                         <option value="Extensivo">Extensivo</option>
                                     </select>
                                 </label>
-                                <label class="section-label"
-                                    style="margin-top: 20px; font-weight: 600; color: #4b5563;">Control
-                                    Climático</label>
+                                <p class="section-label" style="margin-top: 20px; font-weight: 600; color: #4b5563;">
+                                    Control
+                                    Climático</p>
                                 <div
                                     style="background: #f9fafb; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb; margin-bottom: 20px;">
                                     <label
@@ -1615,6 +1631,7 @@
     <script src="farm-feed-manager.js?v=2025_v16"></script>
     <script src="weather-service.js?v=2025_v16"></script>
     <script src="app-sigpac.js?v=2025_v16"></script>
+    <script src="event-manager.js?v=2025_v16"></script>
     <script src="app.js?v=2025_v17"></script>
     <script src="app-reports.js?v=2025_v16"></script>
 </body>

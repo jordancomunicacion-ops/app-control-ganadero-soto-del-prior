@@ -175,11 +175,12 @@ const AnimalCalculator = {
         });
 
 
-        // FIX: Force initial calculation after population so ADG doesn't show 0.00 (Delayed)
-        setTimeout(() => {
-            console.log('[Calculator] Triggering initial calculation...');
-            this.updateDietCalculationsFromDOM(false);
-        }, 500);
+        // FIX: Removed forced initial calculation. 
+        // We only want to calculate when an animal is selected or manual input occurs.
+        // setTimeout(() => {
+        //    console.log('[Calculator] Triggering initial calculation...');
+        //    this.updateDietCalculationsFromDOM(false);
+        // }, 500);
     },
 
     handleRecalculation() {
@@ -432,10 +433,24 @@ const AnimalCalculator = {
             if (stageObj) {
                 stage = stageObj.name;
                 this.currentStageObj = stageObj;
+            } else {
+                // Fallback if engine returns nothing
+                stage = 'Mantenimiento (Genérico)';
             }
         }
+
+        // Update Inputs
         this.updateField('stage', stage);
-        if (this.dom.dietPhase) this.dom.dietPhase.textContent = `Fase: ${stage}`;
+
+        // Update Visual Phase Indicator (Summary)
+        if (this.dom.dietPhase) {
+            this.dom.dietPhase.innerHTML = `
+                <div>
+                    <div style="font-weight:bold; color:#1f2937;">${stage}</div>
+                    <div style="font-size:0.75em; color:#6b7280;">Etapa Detectada</div>
+                </div>
+            `;
+        }
 
         // --- WEIGHT FALLBACK LOGIC ---
         let currentWeight = parseFloat(animal.currentWeight || 0);
@@ -791,7 +806,7 @@ const AnimalCalculator = {
             // Checks: Cebo, Lactancia, or Intensive System
             const isIntensive = (system && system.includes('Intensivo')) || (this.currentStageObj.id === 'cebo') || (this.currentStageObj.id === 'lactancia');
             if (isIntensive) {
-                recommendations.push({ slot: 5, keywords: ['Corrector', 'Mineral', 'Vitamínico'] });
+                recommendations.push({ slot: 5, keywords: ['Corrector', 'Mineral', 'Vitamina', 'Aditivo'] });
             }
 
             if (updateSelectors) {
@@ -861,14 +876,14 @@ const AnimalCalculator = {
         if (isBellotaMode) {
             const isSeason = NutritionEngine.BELLOTA_PROTOCOL.isBellotaSeason();
 
-            // Override Percentages for Montanera
-            // User Req: Bellota 10-35% (Slot 3), Pasto 40-70% (Slot 1), Forraje 10-20% (Slot 1 split?)
-            // Simplified: Slot 1 (Pasto+Forraje) = 65%, Slot 3 (Bellota) = 30%, Slot 4/5 = 5%
-            targetPcts = { 1: 65, 3: 30, 4: 3, 5: 2 };
+            // Override Percentages for Montanera to ensure Protein sufficiency
+            // Bellota (6% PB) needs balancing.
+            // Adjusted: Slot 1 (Forage) 55%, Slot 3 (Bellota) 35%, Slot 4 (Protein) 10%
+            targetPcts = { 1: 55, 3: 35, 4: 10, 5: 0 };
 
             if (!isSeason) {
                 // Substitution Mode (High Oleic)
-                // Keep same percentages but swap feed item below
+                // Similar profile
             }
         }
 
@@ -876,35 +891,48 @@ const AnimalCalculator = {
         let totalDM = 0;
         let totalAsFed = 0;
         let totalProtein = 0;
-        let totalEnergy = 0;
         let totalPhosphorus = 0; // NEW: Track P
+        let totalEnergy = 0;
+        let hasLecithin = false; // Track if Lecithin or equivalent is present
 
         [1, 3, 4, 5].forEach(slot => {
             const select = document.getElementById(`dietSlot${slot}`);
-            const pctEl = document.getElementById(`dietSlot${slot}Pct`);
+            const pctInput = document.getElementById(`dietSlot${slot}Pct`);
             const kgEl = document.getElementById(`dietSlot${slot}Kg`);
             const costEl = document.getElementById(`dietSlot${slot}Cost`);
+
+            if (pctInput && !pctInput.hasAttribute('data-bound')) {
+                pctInput.addEventListener('change', () => this.updateDietCalculationsFromDOM(false));
+                pctInput.setAttribute('data-bound', 'true');
+            }
 
             // --- BELLOTA AUTO-SELECTION ---
             if (isBellotaMode && select) {
                 const isSeason = NutritionEngine.BELLOTA_PROTOCOL.isBellotaSeason();
                 // Slot 3: Force Bellota or Subst
                 if (slot === 3) {
-                    // Try to find specific Bellota de Encina or Alto Oleico
                     let targetTerm = isSeason ? 'Bellota' : 'Alto Oleico';
-                    // Specific matching for "Bellota de encina"
                     let match = Array.from(select.options).find(o => o.text.toLowerCase().includes(targetTerm.toLowerCase()));
                     if (!match && !isSeason) {
-                        // Fallback matching
                         match = Array.from(select.options).find(o => o.text.includes('Lecitina') || o.text.includes('Grasa'));
                     }
                     if (match) select.value = match.value;
-
                 }
-                // Slot 1: Force Pasto Dehesa
+                // Slot 1: Force Pasto Dehesa or similar
                 if (slot === 1) {
                     let match = Array.from(select.options).find(o => o.text.includes('Dehesa') || o.text.includes('Pasto'));
                     if (match) select.value = match.value;
+                }
+                // Slot 4: Force PROTEIN (Critical for Bellota 6% PB)
+                if (slot === 4) {
+                    // Look for high protein sources: Soja, Colza, Guisante
+                    let match = Array.from(select.options).find(o => o.text.includes('Soja') || o.text.includes('Colza') || o.text.includes('Guisante'));
+                    // If not found, try generic 'Proteico'
+                    if (!match) match = Array.from(select.options).find(o => o.text.includes('Proteico'));
+
+                    if (match && (!select.value || select.value === '')) {
+                        select.value = match.value;
+                    }
                 }
             }
 
@@ -916,7 +944,17 @@ const AnimalCalculator = {
 
             let asFedKg = 0;
             let dailyCost = 0;
-            let currentPct = targetPcts[slot] || 0;
+            let currentPct = 0;
+
+            if (updateSelectors) {
+                currentPct = targetPcts[slot] || 0;
+            } else {
+                if (pctInput && pctInput.value !== '') {
+                    currentPct = parseFloat(pctInput.value);
+                } else {
+                    currentPct = targetPcts[slot] || 0;
+                }
+            }
 
             if (feed) {
                 const dmVal = feed.dm_percent || feed.Porcentaje_MS || feed.porcentaje_ms || 88;
@@ -943,7 +981,11 @@ const AnimalCalculator = {
                 totalEnergy += parseFloat(enVal) * kgDM;
             }
 
-            if (pctEl) pctEl.textContent = `${currentPct}%`;
+            if (pctInput) {
+                if (updateSelectors || pctInput.value == '') {
+                    pctInput.value = currentPct;
+                }
+            }
 
             if (kgEl) kgEl.textContent = feed && !isNaN(asFedKg) ? `${asFedKg.toFixed(1)} kg` : '-';
             if (costEl) costEl.textContent = feed && !isNaN(dailyCost) ? `${dailyCost.toFixed(2)} €` : '-';
@@ -1289,6 +1331,7 @@ const AnimalCalculator = {
             let qualityInfo = { classification: 'R3', conformation: 'R', fat: 3 };
             const totalKgForCalc = totalDM || 1;
             let concRatio = 0, pastRatio = 0, silageRatio = 0, hasFlax = false;
+            let isBellota = false;
 
             if (feedItems && feedItems.length > 0) {
                 feedItems.forEach(i => {
@@ -1298,6 +1341,7 @@ const AnimalCalculator = {
                     if (type.includes('pasto') || type.includes('forraje verde')) pastRatio += i.kg;
                     if (name.includes('ensilado de maíz') || name.includes('maiz silo')) silageRatio += i.kg;
                     if (name.includes('lino') || name.includes('linaza')) hasFlax = true;
+                    if (name.includes('bellota')) isBellota = true;
                 });
                 concRatio /= totalKgForCalc; pastRatio /= totalKgForCalc; silageRatio /= totalKgForCalc;
             }
@@ -1308,7 +1352,7 @@ const AnimalCalculator = {
             } else if (NutritionEngine.Quality && NutritionEngine.Quality.predictSeurop) {
                 // Fallback (Legacy)
                 qualityInfo = NutritionEngine.Quality.predictSeurop(breedData || {}, tarW, ageMonths + (daysDuration / 30), {
-                    concentrate: concRatio, pasture: pastRatio, silage_maize: silageRatio, hasFlax: hasFlax
+                    concentrate: concRatio, pasture: pastRatio, silage_maize: silageRatio, hasFlax: hasFlax, isBellota: isBellota
                 });
             }
 
@@ -1722,7 +1766,7 @@ const AnimalCalculator = {
     },
 
     clearResults() {
-        ['breed', 'sex', 'system', 'ageMonths', 'stage', 'weight', 'targetWeight', 'date', 'adg', 'carcass'].forEach(k => this.updateField(k, ''));
+        ['breed', 'sex', 'system', 'ageMonths', 'stage', 'weight', 'targetWeight', 'date', 'adg', 'carcass', 'yield'].forEach(k => this.updateField(k, '-'));
         if (this.dom.daysRemaining) this.dom.daysRemaining.textContent = '0 días';
         if (this.dom.reqDisplay) this.dom.reqDisplay.innerHTML = '';
         if (this.dom.dietTableBody) {

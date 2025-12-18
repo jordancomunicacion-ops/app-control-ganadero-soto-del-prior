@@ -53,23 +53,6 @@ AZB;Bos taurus;Azul Belga;1175;775;16.5;1.7;1.0;6.75;Baja;1;Muy Baja;0.0240;16;2
         return null;
     },
 
-    async load() {
-        // 1. Try Cache
-        if (this._breeds.size > 0) return this.getAll();
-
-        const cached = localStorage.getItem('BREED_DATA_CACHE');
-        if (cached) {
-            this.restoreFromCache(cached);
-            if (this._breeds.size > 0) return this.getAll();
-        }
-
-        // 2. Try Default Data directly (Skip external fetch for now to ensure defaults appear)
-        console.log('Loading default breed data...');
-        this.importCSV(this.defaultCSV);
-        this.saveToStorage();
-        return this.getAll();
-    },
-
     getBreedSmart(nameOrId) {
         if (!nameOrId) return null;
         const target = this.slugify(nameOrId);

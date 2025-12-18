@@ -13,6 +13,7 @@ C03;Concentrado;Trigo;88;12;0.4;10;5;2.0;Alto;Engorde r\u00E1pido;Peligro de aci
 C04;Concentrado;DDGS;90;28;0.8;32;17;2.05;Medio;Sustituto de cereal;Estable para rumen;0.25
 C05;Concentrado;Pulpa de remolacha;90;10;0.1;40;25;1.7;Bajo;Mejora digestibilidad;Alta fibra soluble;0.25
 C06;Concentrado;Cascarilla de soja;90;14;0.2;60;45;1.4;Bajo;Aumentar fibra efectiva;Muy segura;0.25
+BELLHO_01;Concentrado;Bellota (encina / alcornoque);62;6;0.1;22;12;2.2;Medio-Alto;Acabado extensivo estacional;Alta en ácido oleico, baja proteína, suplementar PB, riesgo acidosis si exceso;0.10
 P01;Proteico;Harina de soja 47%;88;47;0.65;15;10;1.9;Medio;Construcci\u00F3n muscular;Prote\u00EDna by-pass;0.42
 P02;Proteico;Colza;90;38;1.1;13;9;1.7;Bajo;Sustituir soja;Eficiente y econ\u00F3mica;0.42
 P03;Proteico;Guisante proteico;88;24;0.4;20;10;1.6;Bajo;Recr\u00EDa joven;Producci\u00F3n KM0;0.42
@@ -24,9 +25,9 @@ S04;Suplemento;Corrector de acidosis;100;0;0;0;0;0.0;Bajo;Estabilidad ruminal;Bi
 
     init() {
         // Force reload to apply new defaults
-        if (!sessionStorage.getItem('FEED_CACHE_CLEARED_V16_P')) {
+        if (!sessionStorage.getItem('FEED_CACHE_CLEARED_V17_P')) {
             localStorage.removeItem('FEED_DATA_CACHE');
-            sessionStorage.setItem('FEED_CACHE_CLEARED_V16_P', 'true');
+            sessionStorage.setItem('FEED_CACHE_CLEARED_V17_P', 'true');
         }
 
         this.load().then(data => {

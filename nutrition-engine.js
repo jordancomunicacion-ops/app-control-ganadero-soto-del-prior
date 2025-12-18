@@ -97,8 +97,14 @@ const NutritionEngine = {
         // 6. Identify Limiting Factor
         let limitingFactor = 'Energy';
         if (proteinADG < energyADG) limitingFactor = 'Protein';
-        if (finalADG >= geneticMax) limitingFactor = 'Genetics';
-        if (NE_available_for_growth < 0) limitingFactor = 'Energy Deficit';
+        if (finalADG >= geneticMax) limitingFactor = 'Simulación Genética (Max)';
+
+        // Clarify Energy Limit if it's just normal extensive growth vs feedlot potential
+        if (limitingFactor === 'Energy' && finalADG < geneticMax * 0.8) {
+            limitingFactor = 'Energía (Dieta Extensiva)';
+        }
+
+        if (NE_available_for_growth < 0) limitingFactor = 'Déficit Energético';
 
         return {
             predictedADG: parseFloat(finalADG.toFixed(2)),
@@ -147,19 +153,63 @@ const NutritionEngine = {
             });
         }
 
-        // --- EXCEPTION: BELLOTA ---
-        // Bellota is high energy/starch but physically different (slower degradation than rolled grain?)
-        // For now we don't count Bellota fully towards the "Concentrado dangerous" ratio if we can detect it.
-        // Assuming 'feedItems' has names.
+        // --- BELLOTA PROTOCOL LOGIC ---
         let bellotaKg = 0;
         feedItems.forEach(item => {
             if ((item.feed.name || '').toLowerCase().includes('bellota')) bellotaKg += item.kg;
         });
+        const bellotaRatio = totalKg > 0 ? bellotaKg / totalKg : 0;
+
+        if (bellotaRatio > 0) {
+            // 1. Season Check
+            if (!this.BELLOTA_PROTOCOL.isBellotaSeason()) {
+                alerts.push({
+                    level: 'warning',
+                    message: '⚠️ Protocolo Bellota: Fuera de temporada (Oct-Ene). Verificar disponibilidad.'
+                });
+            }
+
+            // 2. Fiber Check (Stricter: > 28% FDN physically effective)
+            // Using NDF as proxy. Normal limit is 20%, Bellota requires 28%.
+            if ((totalFiber / totalKg) < 0.28) {
+                alerts.push({
+                    level: 'danger',
+                    message: '⛔ Protocolo Bellota: Falta Fibra Efectiva (FDN < 28%). Riesgo grave de acidosis.'
+                });
+            }
+
+            // 3. Protein Supplement Check (Mandatory leguminous/cake > 30% PB)
+            const hasProteinSupp = feedItems.some(item =>
+                ((item.feed.type === 'Proteico' || item.feed.cp_percent >= 30) || (item.feed.name || '').toLowerCase().includes('leguminosa'))
+                && item.kg > 0.1
+            );
+            if (!hasProteinSupp) {
+                alerts.push({
+                    level: 'danger',
+                    message: '⛔ Protocolo Bellota: Requiere suplemento proteico (Torta/Leguminosa >30% PB).'
+                });
+            }
+
+            // 4. Max Inclusion / Penalty
+            // "Penalización si > 30–40 % MS total"
+            if (bellotaRatio > 0.40) {
+                alerts.push({
+                    level: 'warning',
+                    message: `⚠️ Exceso Bellota (>40% MS). Riesgo alto de acidosis. Limitar o aumentar fibra.`
+                });
+            }
+        } else {
+            // Only reduce starch alert if NOT detecting bellota explicitly but maybe high starch from other sources?
+            // Actually, if bellota is present, we skipped the generic checks below? No, we just added specific ones.
+            // But Bellota IS high starch/energy.
+        }
 
         if (bellotaKg > 0) {
-            // Reduce severity of acidosis alert if energy comes from Bellota
-            // Effectively remove bellota from the "Dangerous Starch" bucket for the calculation or add a note.
-            // Simplified: If > 50% Bellota, it's natural Montanera, usually safe if adapted.
+            // If Bellota is present, we might want to suppress the GENERIC starch warning if it's redundant with the Bellota warning
+            // or if Bellota starch is considered differently.
+            // For now, we leave the generic starch check (Rule 1 at line 135) as it checks Total Starch. 
+            // Bellota is ~60% starch/energy roughly (implied by high energy).
+            // But we already added specific Bellota warnings.
         }
 
         // Rule 2: Minimum Fiber

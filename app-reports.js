@@ -301,11 +301,17 @@ async function handleReportGeneration(type, format = 'csv') {
                     const isCastrated = (a.subType || '').includes('Buey') || (a.category || '').includes('Buey');
                     const animalProfile = { ageMonths, sex, isParida, isCastrated };
 
-                    let priceResult = { price: 3.0, code: 'Generic' };
-                    if (marketData && typeof marketData.getBeefPrice === 'function') {
-                        priceResult = marketData.getBeefPrice(a.category || '', 'R', 3, animalProfile);
+                    let estimatedValue = 0;
+                    // IF SACRIFICIADO -> USE REAL PRICE
+                    if ((a.status === 'Sacrificado' || a.status === 'Vendido') && a.actualPrice) {
+                        estimatedValue = parseFloat(a.actualPrice);
+                    } else {
+                        // ESTIMATE BASED ON MARKET
+                        const priceResult = (marketData && typeof marketData.getBeefPrice === 'function')
+                            ? marketData.getBeefPrice(a.category || '', 'R', 3, animalProfile)
+                            : { price: 3.0 }; // Default fallback
+                        estimatedValue = (parseFloat(a.currentWeight) || 0) * (priceResult.price || 3.0);
                     }
-                    const estimatedValue = (parseFloat(a.currentWeight) || 0) * (priceResult.price || 3.0);
 
                     return {
                         Crotal: a.crotal,

@@ -108,7 +108,13 @@ const CarcassAndQualityEngine = {
     // ==========================================
     // 5. MEAT QUALITY INDEX (IQ) & MARBLING (Wagyu Logic)
     // ==========================================
-    calculateQualityIndex(animal, breedData, dietEnergy, adgObs, thi, daysOnFinishing, dietStability = 1.0, healthStatus = 1.0) {
+    calculateQualityIndex(animal, breedData, dietEnergy, adgObs, thi, daysOnFinishing, dietStability, healthStatus, options = {}) {
+        // animal: { ageMonths, weight, system, breed_name }
+        // dietEnergy: Mcal/kg MS (avg)
+        // adgObs: kg/day observed/predicted
+        // thi: Temperature Humidity Index (avg)
+        // daysOnFinishing: Days on high energy diet
+        // options: { isBellota, hasLecithin, ... }
         // Defaults if breedData is incomplete (Robustness)
         const params = {
             nei_min: breedData.nei_min || 12,
@@ -201,11 +207,38 @@ const CarcassAndQualityEngine = {
         // Genetic Ceiling (Potential 1-5) from CSV
         const MaxPotential = parseFloat(breedData.marbling_potential) || 3; // Default 3 (Media)
 
+        // Map MarblingScore_100 to a 1-5 scale, capped by genetic potential
+        // Linear mapping: 0% -> 1, 100% -> MaxPotential
+        let Marbling_1_5 = this.clamp(1 + (MarblingScore_100 / 100) * (MaxPotential - 1), 1, MaxPotential);
+
         // Efficiency Ratio (0-1)
         const efficiency = MarblingScore_100 / 100;
 
-        // Base Result scaled to Potential
-        let Marbling_1_5 = 1 + (MaxPotential - 1) * efficiency;
+        // --- 5. RESULT ---
+        // Lecithin Synergy (Viera et al.)
+        // If Bellota (High Oleic) + Lecithin => Significant IMF boost
+        let synergyBonus = 0;
+
+        // Check flags passed via options (9th arugment expected, or we check arguments)
+        // We update the signature to: calculateQualityIndex(animal, breedData, dietEnergy, adgObs, thi, daysOnFinishing, dietStability, healthStatus, options = {})
+
+        const isBellota = options && (options.isBellota || options.highOleic);
+        const hasLecithin = options && options.hasLecithin;
+
+        if (isBellota && hasLecithin) {
+            // Synergy Active!
+            // Check animal type
+            const isOx = (animal.sex === 'Macho' && (animal.ageMonths || 0) > 30 && (animal.isCastrated || animal.stage === 'buey'));
+
+            if (isOx) {
+                synergyBonus = 0.6; // Large bonus for Oxen (+40% IMF roughly maps to +0.6 on 1-5 scale)
+            } else {
+                synergyBonus = 0.25; // Smaller bonus for females/others
+            }
+        }
+
+        Marbling_1_5 += synergyBonus;
+
 
         // --- GENETIC FLEXIBILITY (New) ---
         // If efficiency is exceptionally high (>95%), allow a small overflow beyond the genetic ceiling.
@@ -221,7 +254,6 @@ const CarcassAndQualityEngine = {
 
             // Simplified: Map 95-100 linear or quadratic to a 0.5 bonus?
             // Let's use a "Soft Cap" break.
-            const overflow = (efficiency - 0.95) / 0.05; // 0 to 1
             const bonus = overflow * 0.6; // Max +0.6 points
             Marbling_1_5 += bonus;
         }
