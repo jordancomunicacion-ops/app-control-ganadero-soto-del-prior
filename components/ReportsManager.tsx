@@ -1,8 +1,76 @@
 'use client';
 
 import React from 'react';
+import { useStorage } from '@/context/StorageContext';
+import { NutritionEngine } from '@/services/nutritionEngine';
+import { breedManager } from '@/services/breedManager';
 
 export function ReportsManager() {
+    const { read } = useStorage();
+
+    const handleFCRReport = async () => {
+        try {
+            await breedManager.init();
+            const user = read<string>('sessionUser', '');
+            const animals = read<any[]>(`animals_${user}`, []);
+
+            if (!animals || animals.length === 0) {
+                alert('No hay animales registrados para generar el reporte.');
+                return;
+            }
+
+            // CSV Header
+            let csvContent = "ID;Raza;Sexo;Peso (kg);Edad (meses);GMD Estimada (kg/d);Ingesta Objetivo (kg MS);Eficiencia (FCR);Costo Diario Est (€)\n";
+
+            // Process each animal
+            for (const animal of animals) {
+                // Determine Age
+                const ageMonths = (new Date().getTime() - new Date(animal.birth).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+
+                // Determine Breed
+                const breed = breedManager.getBreedSmart(animal.breed);
+
+                // Calculate Targets
+                const dietTargets = NutritionEngine.calculateDiet(breed, animal.weight, ageMonths);
+
+                // Fixed Mock Diet Stats for Estimation (similar to Calculator)
+                const mockDietStats = {
+                    totalEnergyMcal: dietTargets ? (dietTargets.requiredEnergyDensity * dietTargets.dmiKg) : 15,
+                    totalProteinG: 1200,
+                    dmiKg: dietTargets ? dietTargets.dmiKg : 10
+                };
+
+                // Calculate Performance
+                const performance = NutritionEngine.calculatePerformance(breed, mockDietStats, animal.weight);
+                const predictedADG = performance.predictedADG || 1.1;
+
+                // Estimate Cost (Using mock diet average cost ~0.15 €/kg DM equivalent for calculation)
+                const estimatedDailyCost = (mockDietStats.dmiKg / 0.9) * 0.15; // Rough estimate
+
+                // Calculate FCR (Cost / Gain or Feed / Gain) - Here using Feed Conversion Ratio (kg Feed / kg Gain)
+                const fcr = predictedADG > 0 ? (mockDietStats.dmiKg / predictedADG).toFixed(2) : "N/A";
+
+                // Append Row
+                csvContent += `${animal.id};${animal.breed};${animal.sex};${animal.weight};${ageMonths.toFixed(1)};${predictedADG.toFixed(2)};${mockDietStats.dmiKg.toFixed(2)};${fcr};${estimatedDailyCost.toFixed(2)}\n`;
+            }
+
+            // Create Download Link
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `reporte_rendimiento_fcr_${new Date().toISOString().slice(0, 10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+        } catch (error) {
+            console.error("Error generating report:", error);
+            alert("Error al generar el reporte. Ver consola para detalles.");
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div>
@@ -16,11 +84,16 @@ export function ReportsManager() {
                     <h3 className="font-bold text-lg text-gray-800 mb-2">Informe Económico</h3>
                     <p className="text-gray-500 text-sm">Resumen de gastos, ingresos estimados y valor de inventario.</p>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:border-green-200 transition-colors cursor-pointer group">
+
+                <div
+                    onClick={handleFCRReport}
+                    className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:border-green-200 transition-colors cursor-pointer group"
+                >
                     <span className="text-3xl mb-4 block group-hover:scale-110 transition-transform">📈</span>
-                    <h3 className="font-bold text-lg text-gray-800 mb-2">Informe de Rendimiento</h3>
-                    <p className="text-gray-500 text-sm">Evolución de peso, GMD y eficiencia alimentaria.</p>
+                    <h3 className="font-bold text-lg text-gray-800 mb-2">Informe de Rendimiento (FCR)</h3>
+                    <p className="text-gray-500 text-sm">Descargar CSV con evolución de peso, GMD y eficiencia alimentaria.</p>
                 </div>
+
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:border-green-200 transition-colors cursor-pointer group">
                     <span className="text-3xl mb-4 block group-hover:scale-110 transition-transform">🧬</span>
                     <h3 className="font-bold text-lg text-gray-800 mb-2">Informe Reproductivo</h3>
