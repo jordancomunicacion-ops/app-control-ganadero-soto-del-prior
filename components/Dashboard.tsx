@@ -13,36 +13,36 @@ export function Dashboard() {
     const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
 
     useEffect(() => {
-        // 1. Load Weather
-        const users = read('users', []);
-        const sessionUser = read('sessionUser', '');
-        const farms = read(`fincas_${sessionUser}`, []);
+        try {
+            // 1. Load Weather
+            const sessionUser = read('appSession', '');
 
-        let lat = 40.45;
-        let lon = -3.75;
+            const users = read('users', []);
+            const farms = read(`fincas_${sessionUser}`, []);
 
-        if (farms.length > 0) {
-            // Logic to extract coords if available would go here
+            let lat = 40.45;
+            let lon = -3.75;
+
+            WeatherService.getWeather(lat, lon).then(data => {
+                setWeather(data);
+                setLoadingWeather(false);
+            }).catch(err => {
+                setLoadingWeather(false);
+            });
+
+            // 2. Load Animal Stats
+            const animals = read(`animals_${sessionUser}`, []);
+            const stats = calculateAnimalStats(animals);
+            setAnimalStats(stats);
+
+            // 3. Load Events
+            const events = read('events', []);
+            const upcoming = EventManager.getUpcomingEvents(events, 30);
+            setUpcomingEvents(upcoming);
+
+        } catch (e) {
+            // Silent catch for initialization errors
         }
-
-        WeatherService.getWeather(lat, lon).then(data => {
-            setWeather(data);
-            setLoadingWeather(false);
-        }).catch(err => {
-            console.error("Weather load failed", err);
-            setLoadingWeather(false);
-        });
-
-        // 2. Load Animal Stats
-        const animals = read(`animals_${sessionUser}`, []);
-        const stats = calculateAnimalStats(animals);
-        setAnimalStats(stats);
-
-        // 3. Load Events
-        const events = read('events', []);
-        const upcoming = EventManager.getUpcomingEvents(events, 30);
-        setUpcomingEvents(upcoming);
-
     }, [read]);
 
     const calculateAnimalStats = (animals: any[]) => {
@@ -77,7 +77,7 @@ export function Dashboard() {
             </div>
 
             {/* Weather Card */}
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg">
                 <div className="flex justify-between items-start">
                     <div>
                         <p className="opacity-90 font-medium mb-1">Clima en Finca</p>
@@ -105,7 +105,7 @@ export function Dashboard() {
                 <h3 className="text-lg font-bold text-gray-800 mb-4">Distribución de Animales</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div>
-                        <h4 className="text-blue-600 font-semibold mb-3 border-b border-blue-100 pb-2">Machos</h4>
+                        <h4 className="text-green-600 font-semibold mb-3 border-b border-green-100 pb-2">Machos</h4>
                         <div className="space-y-2 text-sm">
                             {Object.entries(animalStats.males).map(([cat, count]) => (
                                 <div key={cat} className="flex justify-between">
@@ -140,7 +140,7 @@ export function Dashboard() {
                         ) : (
                             upcomingEvents.map((evt, i) => (
                                 <div key={i} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                                    <div className="w-2 h-2 mt-2 rounded-full bg-blue-500 shrink-0"></div>
+                                    <div className="w-2 h-2 mt-2 rounded-full bg-green-500 shrink-0"></div>
                                     <div>
                                         <p className="font-medium text-gray-800 text-sm">{evt.type}</p>
                                         <p className="text-xs text-gray-500">{new Date(evt.date).toLocaleDateString()} - {evt.animalId || 'General'}</p>
@@ -155,7 +155,7 @@ export function Dashboard() {
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                     <h3 className="text-lg font-bold text-gray-800 mb-4">Acciones Rápidas</h3>
                     <div className="space-y-3">
-                        <button className="w-full bg-blue-50 text-blue-700 font-medium py-2 px-4 rounded-lg hover:bg-blue-100 transition-colors text-left flex items-center gap-2">
+                        <button className="w-full bg-green-50 text-green-700 font-medium py-2 px-4 rounded-lg hover:bg-green-100 transition-colors text-left flex items-center gap-2">
                             <span>➕</span> Registrar nuevo animal
                         </button>
                         <button className="w-full bg-emerald-50 text-emerald-700 font-medium py-2 px-4 rounded-lg hover:bg-emerald-100 transition-colors text-left flex items-center gap-2">

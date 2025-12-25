@@ -48,7 +48,7 @@ export function EventsList() {
                                 <tr key={i} className="hover:bg-gray-50 transition-colors">
                                     <td className="p-4 text-gray-900 font-medium">{new Date(e.date).toLocaleDateString()}</td>
                                     <td className="p-4 text-gray-600">
-                                        <span className="inline-block px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs font-bold">
+                                        <span className="inline-block px-2 py-1 rounded bg-green-50 text-green-700 text-xs font-bold">
                                             {e.type}
                                         </span>
                                     </td>

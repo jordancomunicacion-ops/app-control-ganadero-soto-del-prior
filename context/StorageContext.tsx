@@ -22,9 +22,19 @@ export function StorageProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined') return fallback;
     try {
       const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
+      if (!raw) return fallback;
+      try {
+        const parsed = JSON.parse(raw);
+        return parsed as T;
+      } catch (parseErr) {
+        // Safety: If fallback is an array but we got a string, return the fallback to avoid .map/.find crashes
+        if (Array.isArray(fallback) && typeof raw === 'string') {
+          return fallback;
+        }
+
+        return raw as unknown as T;
+      }
     } catch (err) {
-      console.error(`Error reading key "${key}":`, err);
       return fallback;
     }
   };

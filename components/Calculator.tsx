@@ -66,7 +66,7 @@ export function Calculator() {
                             </div>
 
                             {selectedAnimal && (
-                                <div className="bg-blue-50 p-3 rounded-lg text-sm space-y-1">
+                                <div className="bg-green-50 p-3 rounded-lg text-sm space-y-1">
                                     <p><strong>Raza:</strong> {selectedAnimal.breed}</p>
                                     <p><strong>Sexo:</strong> {selectedAnimal.sex}</p>
                                     <p><strong>Peso:</strong> {selectedAnimal.weight} kg</p>
@@ -104,7 +104,7 @@ export function Calculator() {
                             <button
                                 onClick={handleCalculate}
                                 disabled={!selectedAnimalId || loading}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-colors"
+                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-colors"
                             >
                                 {loading ? 'Calculando...' : 'Calcula Dieta Óptima'}
                             </button>
@@ -124,7 +124,7 @@ export function Calculator() {
                                 </div>
                                 <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
                                     <p className="text-gray-500 text-sm">Ingesta (MS)</p>
-                                    <p className="text-2xl font-bold text-blue-600">{(results.dmiTarget || 0).toFixed(2)} kg</p>
+                                    <p className="text-2xl font-bold text-green-600">{(results.dmiTarget || 0).toFixed(2)} kg</p>
                                 </div>
                                 <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
                                     <p className="text-gray-500 text-sm">Costo Diario</p>

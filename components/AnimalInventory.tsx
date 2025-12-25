@@ -70,7 +70,7 @@ export function AnimalInventory() {
                 </div>
                 <button
                     onClick={() => setShowForm(!showForm)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                    className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
                 >
                     {showForm ? 'Cancelar' : 'Nuevo Animal'}
                 </button>

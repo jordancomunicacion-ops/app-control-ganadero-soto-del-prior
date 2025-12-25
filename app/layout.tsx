@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { StorageProvider } from "@/context/StorageContext";
+import { Providers } from "@/components/Providers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,14 +23,23 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  if (typeof window !== 'undefined') {
+    // Self-healing: Clear corrupted non-JSON strings from critical keys
+    ['sessionUser', 'appSession'].forEach(key => {
+      const val = localStorage.getItem(key);
+      if (val && !val.startsWith('{') && !val.startsWith('[') && !val.startsWith('"')) {
+        localStorage.removeItem(key);
+      }
+    });
+  }
   return (
     <html lang="es">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <StorageProvider>
+        <Providers>
           {children}
-        </StorageProvider>
+        </Providers>
       </body>
     </html>
   );
