@@ -29,18 +29,30 @@ export function Sidebar({ activeTab, onTabChange, onLogout }: SidebarProps) {
     // Auto-promote Gerencia if stuck as worker
     React.useEffect(() => {
         const users = read<any[]>('users', []);
-        const currentUser = users.find((u: any) => u.name === sessionUser);
+        // Check for Gerencia account existence and permissions
+        const gerenciaUser = users.find((u: any) => u.name.toLowerCase().includes('gerencia') || u.email === 'gerencia@sotodelprior.com');
 
-        // Check if this is the Gerencia account but has wrong role
-        if (currentUser && (currentUser.name.toLowerCase().includes('gerencia') || currentUser.email === 'gerencia@sotodelprior.com')) {
-            if (currentUser.role !== 'admin') {
-                // Promote to admin
-                const updatedUser = { ...currentUser, role: 'admin' };
-                const otherUsers = users.filter((u: any) => u.name !== sessionUser);
-                write('users', [...otherUsers, updatedUser]);
-                // Force page reload to reflect changes
-                window.location.reload();
-            }
+        if (!gerenciaUser) {
+            // Create Gerencia if missing
+            const newGerencia = {
+                name: 'Gerencia',
+                email: 'gerencia@sotodelprior.com',
+                pass: 'admin123',
+                role: 'admin',
+                joined: new Date().toISOString(),
+                jobTitle: 'Dirección General',
+                firstName: 'Gerencia',
+                lastName: 'Soto del Prior'
+            };
+            write('users', [...users, newGerencia]);
+            console.log('Auto-created Gerencia account');
+        } else if (gerenciaUser.role !== 'admin') {
+            // Promote to admin
+            const updatedUser = { ...gerenciaUser, role: 'admin' };
+            const otherUsers = users.filter((u: any) => u.name !== gerenciaUser.name);
+            write('users', [...otherUsers, updatedUser]);
+            // Force page reload to reflect changes
+            window.location.reload();
         }
     }, [sessionUser, read, write]);
 
