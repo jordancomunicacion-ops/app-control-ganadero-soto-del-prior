@@ -259,15 +259,37 @@ export const EventManager = {
         const { type, animal, date, desc, cost, nextDate, typeData } = data;
         const { events, animals, storage, currentUser } = context;
 
-        if (type === 'Sacrificio') {
-            const { category, carcassWeight, price, conf, fat } = typeData || {};
-            animal.status = 'Sacrificado';
+        if (['Sacrificio', 'Venta', 'Muerte/Sacrificio', 'Salida'].includes(type) || type.startsWith('Sacrificio')) {
+            const {
+                category, carcassWeight, price, conf, fat,
+                pricePerKg, liveWeight, yield: yieldVal, seuropConf, fatCover
+            } = typeData || {};
+
+            // Determine Status
+            if (type.includes('Sacrificio')) animal.status = 'Sacrificado';
+            else if (type === 'Venta') animal.status = 'Vendido';
+            else if (type === 'Muerte') animal.status = 'Muerto';
+            else animal.status = 'Baja'; // Generic fallback
+
             animal.exitDate = date;
-            animal.actualCategory = category;
-            if (carcassWeight) animal.actualCarcassWeight = carcassWeight;
-            if (price) animal.actualPrice = price;
-            if (conf) animal.actualSeuropConf = conf;
-            if (fat) animal.actualSeuropFat = fat;
+
+            // Map Commercial Data
+            if (category) animal.actualCategory = category;
+
+            // Weights & Yield
+            if (carcassWeight) animal.actualCarcassWeight = parseFloat(carcassWeight);
+            if (liveWeight) animal.actualLiveWeight = parseFloat(liveWeight);
+            if (yieldVal) animal.actualYield = parseFloat(yieldVal);
+
+            // Pricing
+            if (price) animal.actualPrice = parseFloat(price);
+            if (pricePerKg) animal.actualPricePerKg = parseFloat(pricePerKg);
+            else if (price && carcassWeight) animal.actualPricePerKg = parseFloat((parseFloat(price) / parseFloat(carcassWeight)).toFixed(2));
+
+            // Quality
+            if (conf || seuropConf) animal.actualSeuropConf = conf || seuropConf;
+            if (fat || fatCover) animal.actualSeuropFat = fat || fatCover;
+
             storage.write(`animals_${currentUser}`, animals);
         }
         else if (type === 'Cambio de corral') {
@@ -279,7 +301,23 @@ export const EventManager = {
             const { decision } = typeData || {};
             if (decision === 'Castrado') {
                 animal.sex = 'Castrado';
-                animal.category = 'Buey';
+
+                // Logic: Castration must be between 6 and 9 months to be 'Buey'
+                const birth = new Date(animal.birth || animal.birthDate);
+                const eventDate = new Date(date);
+                const ageMonths = (eventDate.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+
+                if (ageMonths >= 6 && ageMonths <= 9) {
+                    animal.category = 'Buey';
+                } else if (ageMonths > 9) {
+                    animal.category = 'Toro'; // Late castration -> Toro
+                } else {
+                    animal.category = 'Ternero Castrado'; // Early castration
+                }
+
+                // Store castration date reference if possible, or just rely on event history
+                animal.castrationDate = date;
+
             } else if (decision === 'Semental') {
                 animal.sex = 'Macho';
                 animal.category = 'Semental';

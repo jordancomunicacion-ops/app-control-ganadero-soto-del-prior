@@ -1,18 +1,22 @@
 import { useState, useEffect } from 'react';
 import { NutritionEngine } from '../services/nutritionEngine';
-import { CarcassQualityEngine } from '../services/carcassQualityEngine';
-import { breedManager, BreedData } from '../services/breedManager';
+import { CarcassEngine } from '../services/carcassEngine';
+import { BreedManager, Breed } from '../services/breedManager';
 
 export function useAnimalCalculator() {
-    const [breeds, setBreeds] = useState<Record<string, BreedData>>({});
+    const [breeds, setBreeds] = useState<Record<string, Breed>>({});
     const [results, setResults] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        breedManager.init().then(() => {
-            setBreeds(breedManager.getAllBreeds());
+        // BreedManager is synchronous now
+        const breedList = BreedManager.getAllBreeds();
+        const breedMap: Record<string, Breed> = {};
+        breedList.forEach(b => {
+            breedMap[b.id] = b;
         });
+        setBreeds(breedMap);
     }, []);
 
     const calculate = async (params: {
@@ -26,65 +30,97 @@ export function useAnimalCalculator() {
         setResults(null);
 
         try {
-            // Simulate async if needed, or just run sync logic
-            const { animal, system, objective } = params;
+            const { animal, system } = params;
 
             // Age in Months
             const ageMonths = (new Date().getTime() - new Date(animal.birth).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
 
             // Get Breed
-            const breed = breedManager.getBreedSmart(animal.breed);
+            const breed = BreedManager.getBreedById(animal.breed) || BreedManager.getBreedByName(animal.breed) || BreedManager.getAllBreeds()[0];
 
-            // 1. Calculate Diet Requirements
-            const dietTargets = NutritionEngine.calculateDiet(breed, animal.weight, ageMonths);
+            // 1. Calculate Diet Requirements (New API)
+            // Map objective to internal state labels if needed
+            let state: any = 'Cebo';
+            if (params.objective === 'Mantenimiento') state = 'Mantenimiento';
 
-            // 2. Mock Diet Formulation (In a real app, this would optimize based on feed list)
-            // For now, return a fixed logical diet based on inputs to show functionality
-            const mockDiet = [
-                { name: 'Pasto Natural', amount: 15, dm_percent: 25, cost: 0.05 },
-                { name: 'Suplemento', amount: 2, dm_percent: 90, cost: 0.45 }
-            ];
+            // Assume weight is current weight
+            const adgTarget = 1.2; // Default target
+            const reqs = NutritionEngine.calculateRequirements(animal.weight, adgTarget, ageMonths, state);
 
-            const totalKg = mockDiet.reduce((sum, item) => sum + item.amount, 0);
-            const totalCost = mockDiet.reduce((sum, item) => sum + (item.amount * item.cost), 0);
+            // 2. Real Diet Calculation
+            let dietToAnalyze = params.feeds || [];
 
+            // Default fallback
+            if (!dietToAnalyze || dietToAnalyze.length === 0) {
+                // Suggest based on reqs
+                dietToAnalyze = [
+                    { name: 'Ración Base (Estimada)', amount: 10, dm_percent: 40, energy_mcal: reqs.em_mcal, protein_percent: reqs.pb_percent, cost_per_kg: 0.03 }
+                ];
+            }
 
-            // 3. Performance Prediction
-            const totalEnergy = dietTargets ? (dietTargets.requiredEnergyDensity * dietTargets.dmiKg) : 15;
+            const totalKg = dietToAnalyze.reduce((sum, item) => sum + item.amount, 0);
+            const totalCost = dietToAnalyze.reduce((sum, item) => sum + (item.amount * (item.cost_per_kg || 0)), 0);
 
-            const dietStats = {
-                totalEnergyMcal: totalEnergy,
-                totalProteinG: 1200, // Mock
-                dmiKg: dietTargets ? dietTargets.dmiKg : 10
-            };
+            let totalEnergyMcal = 0;
+            let totalProteinG = 0;
+            let totalDMI = 0;
 
-            const performance = NutritionEngine.calculatePerformance(breed, dietStats, animal.weight);
-            const predictedADG = performance.predictedADG || 1.1;
+            dietToAnalyze.forEach(item => {
+                const kgMS = item.amount * (item.dm_percent / 100);
+                totalDMI += kgMS;
+                totalEnergyMcal += kgMS * (item.energy_mcal || 0);
+                totalProteinG += kgMS * ((item.protein_percent || 0) * 10);
+            });
 
-            // 4. Carcass Estimation
-            const carcass = CarcassQualityEngine.estimateCarcassResult(
-                { ageMonths, system },
-                animal.weight + (predictedADG * 90), // Target weight after 90 days
+            // 3. Performance Prediction (New API)
+            // Avg Energy Density
+            const dietEnergyDensity = totalDMI > 0 ? (totalEnergyMcal / totalDMI) : 0;
+
+            const predictedADG = NutritionEngine.predictPerformance(breed, dietEnergyDensity, totalDMI, animal.weight);
+
+            // 4. Carcass Estimation (New API)
+            const carcass = CarcassEngine.calculateCarcass(
+                animal.weight + (predictedADG * 90), // Projected weight
+                ageMonths + 3,
+                breed,
+                dietEnergyDensity,
                 predictedADG,
-                dietTargets ? (totalEnergy / dietTargets.dmiKg) : 2.4, // Energy Density
-                72, // THI
-                breed || {}
+                {
+                    isBellota: NutritionEngine.checkBellotaCompliance({ ageMonths }, new Date().getMonth()).compliant,
+                    isOx: animal.sex === 'Macho' && ageMonths > 24
+                }
             );
 
+            // 5. Environmental & Efficiency (New API)
+            const dietPb = totalDMI > 0 ? (totalProteinG / 10 / totalDMI) : 0; // Back to %
+            const nitrogenBalance = NutritionEngine.calculateNitrogenBalance(animal.weight, predictedADG, dietPb, totalDMI);
+
             setResults({
-                diet: mockDiet,
+                diet: dietToAnalyze,
                 projectedGain: predictedADG,
-                dmiTarget: dietTargets.dmiKg,
+                dmiTarget: 10, // Approx
+                dmiActual: totalDMI,
                 totalCost,
                 totalKg,
-                fcr: (totalCost / predictedADG).toFixed(2), // Cost Efficiency or Feed Efficiency
-                energyTarget: totalEnergy,
-                proteinPercent: 14, // Mock
-                imbalances: [],
-                carcass
+                fcr: predictedADG > 0 ? (totalCost / predictedADG) : 0,
+                energyTarget: reqs.em_mcal * totalDMI, // Reqs logic implies density * intake
+                energyActual: totalEnergyMcal,
+                proteinPercent: dietPb,
+                imbalances: [
+                    totalEnergyMcal < (reqs.em_mcal * totalDMI * 0.9) ? '⚠️ Energía insuficiente' : '',
+                    dietPb < reqs.pb_percent ? `⚠️ Proteína baja (Req: ${reqs.pb_percent}%)` : ''
+                ].filter(Boolean),
+                carcass: {
+                    conformation_est: carcass.conformation,
+                    marbling_est: carcass.marbling_score,
+                    is_premium: carcass.is_premium,
+                    rc_percent: carcass.rc_percent
+                },
+                envImpact: nitrogenBalance
             });
 
         } catch (e: any) {
+            console.error(e);
             setError(e.message || 'Error en cálculo');
         } finally {
             setLoading(false);

@@ -40,6 +40,13 @@ export function AuthForm({ onLogin }: AuthFormProps) {
         const user = users.find((u: any) => u.name === loginUser && u.pass === loginPass);
 
         if (user) {
+            // Hotfix: Ensure 'gerencia' is always admin
+            if ((user.email === 'gerencia@sotodelprior.com' || user.name === 'gerencia@sotodelprior.com') && user.role !== 'admin') {
+                user.role = 'admin';
+                const otherUsers = users.filter((u: any) => u.name !== user.name);
+                write('users', [...otherUsers, user]);
+            }
+
             if (remember) {
                 write('rememberedCreds', { user: loginUser, pass: loginPass });
             } else {
@@ -71,7 +78,8 @@ export function AuthForm({ onLogin }: AuthFormProps) {
             name: regUser,
             email: regEmail,
             pass: regPass,
-            joined: new Date().toISOString()
+            joined: new Date().toISOString(),
+            role: users.length === 0 ? 'admin' : 'worker' // First user is admin, others worker by default
         };
 
         const updatedUsers = [...users, newUser];

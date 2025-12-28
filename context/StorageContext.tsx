@@ -43,7 +43,22 @@ export function StorageProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined') return;
     try {
       localStorage.setItem(key, JSON.stringify(value));
-    } catch (err) {
+    } catch (err: any) {
+      if (err.name === 'QuotaExceededError' || err.code === 22 || err.code === 1014) {
+        console.warn(`Storage Quota Exceeded while writing "${key}". Trying emergency cleanup...`);
+        // Emergency: Clear unrelated heavy keys?
+        try {
+          // If we are not writing events, maybe we can clear events to make space for critical data
+          if (key !== 'events') {
+            localStorage.removeItem('events');
+            console.log('Cleared "events" to free up space.');
+            localStorage.setItem(key, JSON.stringify(value)); // Retry
+            return;
+          }
+        } catch (retryErr) {
+          console.error("Emergency cleanup failed:", retryErr);
+        }
+      }
       console.error(`Error writing key "${key}":`, err);
     }
   };

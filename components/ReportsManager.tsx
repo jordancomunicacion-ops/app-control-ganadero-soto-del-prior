@@ -3,14 +3,14 @@
 import React from 'react';
 import { useStorage } from '@/context/StorageContext';
 import { NutritionEngine } from '@/services/nutritionEngine';
-import { breedManager } from '@/services/breedManager';
+import { BreedManager } from '@/services/breedManager';
 
 export function ReportsManager() {
     const { read } = useStorage();
 
     const handleFCRReport = async () => {
         try {
-            await breedManager.init();
+            // No init required for BreedManager
             const user = read<string>('sessionUser', '');
             const animals = read<any[]>(`animals_${user}`, []);
 
@@ -28,26 +28,29 @@ export function ReportsManager() {
                 const ageMonths = (new Date().getTime() - new Date(animal.birth).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
 
                 // Determine Breed
-                const breed = breedManager.getBreedSmart(animal.breed);
+                const breed = BreedManager.getBreedById(animal.breed) || BreedManager.getBreedByName(animal.breed) || BreedManager.getAllBreeds()[0];
 
-                // Calculate Targets
-                const dietTargets = NutritionEngine.calculateDiet(breed, animal.weight, ageMonths);
+                // Calculate Targets (New API)
+                // Assuming 'Cebo' state for FCR report
+                const dietTargets = NutritionEngine.calculateRequirements(animal.weight, 1.2, ageMonths, 'Cebo');
 
                 // Fixed Mock Diet Stats for Estimation (similar to Calculator)
                 const mockDietStats = {
-                    totalEnergyMcal: dietTargets ? (dietTargets.requiredEnergyDensity * dietTargets.dmiKg) : 15,
+                    totalEnergyMcal: dietTargets ? (dietTargets.em_mcal * 10) : 15, // Approx
                     totalProteinG: 1200,
-                    dmiKg: dietTargets ? dietTargets.dmiKg : 10
+                    dmiKg: 10 // Approx fixed DMI for report baseline
                 };
 
-                // Calculate Performance
-                const performance = NutritionEngine.calculatePerformance(breed, mockDietStats, animal.weight);
-                const predictedADG = performance.predictedADG || 1.1;
+                // Calculate Density for Prediction
+                const dietEnergyDensity = mockDietStats.totalEnergyMcal / mockDietStats.dmiKg;
+
+                // Calculate Performance (Predict)
+                const predictedADG = NutritionEngine.predictPerformance(breed, dietEnergyDensity, mockDietStats.dmiKg, animal.weight);
 
                 // Estimate Cost (Using mock diet average cost ~0.15 €/kg DM equivalent for calculation)
                 const estimatedDailyCost = (mockDietStats.dmiKg / 0.9) * 0.15; // Rough estimate
 
-                // Calculate FCR (Cost / Gain or Feed / Gain) - Here using Feed Conversion Ratio (kg Feed / kg Gain)
+                // Calculate FCR
                 const fcr = predictedADG > 0 ? (mockDietStats.dmiKg / predictedADG).toFixed(2) : "N/A";
 
                 // Append Row

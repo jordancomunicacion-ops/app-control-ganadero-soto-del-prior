@@ -1,5 +1,5 @@
 import { AppConfig } from './appConfig';
-import { Breed } from './nutritionEngine';
+import { Breed } from './breedManager';
 
 interface AnimalInput {
     ageMonths?: number;

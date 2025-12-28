@@ -11,16 +11,11 @@ import { AnimalInventory } from '@/components/AnimalInventory';
 import { Calculator } from '@/components/Calculator';
 import { EventsList } from '@/components/EventsList';
 import { ReportsManager } from '@/components/ReportsManager';
+import { UsersManager } from '@/components/UsersManager';
+import { UserProfile } from '@/components/UserProfile';
+import { DataSeeder } from '@/components/DataSeeder';
 
-const Sections = {
-    Home: Dashboard,
-    Farms: FarmsManager,
-    Animals: AnimalInventory,
-    Events: EventsList,
-    Calculator: Calculator,
-    Reports: ReportsManager,
-    Data: () => <div className="p-4 bg-white rounded shadow">Data Import/Export (Coming Soon)</div>,
-};
+
 
 export function LivestockApp({ session }: { session: any }) {
     const { write, isLoaded } = useStorage();
@@ -32,6 +27,7 @@ export function LivestockApp({ session }: { session: any }) {
     useEffect(() => {
         if (sessionUser && isLoaded) {
             write('appSession', sessionUser);
+            write('sessionUser', sessionUser); // Sync for legacy components
         }
     }, [sessionUser, isLoaded, write]);
 
@@ -50,13 +46,16 @@ export function LivestockApp({ session }: { session: any }) {
 
     return (
         <AppShell activeTab={activeTab} onTabChange={setActiveTab} onLogout={handleLogout}>
-            {activeTab === 'home' && <Dashboard />}
-            {activeTab === 'farms' && <Sections.Farms />}
-            {activeTab === 'animals' && <Sections.Animals />}
-            {activeTab === 'events' && <Sections.Events />}
-            {activeTab === 'calculator' && <Sections.Calculator />}
-            {activeTab === 'reports' && <Sections.Reports />}
-            {activeTab === 'data' && <Sections.Data />}
+            <DataSeeder />
+            {activeTab === 'home' && <Dashboard onNavigate={setActiveTab} />}
+            {activeTab === 'farms' && <FarmsManager />}
+            {activeTab === 'animals' && <AnimalInventory />}
+            {activeTab === 'events' && <EventsList />}
+            {activeTab === 'calculator' && <Calculator />}
+            {activeTab === 'reports' && <ReportsManager />}
+            {activeTab === 'users' && <UsersManager />}
+            {activeTab === 'profile' && <UserProfile />}
+            {activeTab === 'data' && <div className="p-4 bg-white rounded shadow">Data Import/Export (Coming Soon)</div>}
         </AppShell>
     );
 }
