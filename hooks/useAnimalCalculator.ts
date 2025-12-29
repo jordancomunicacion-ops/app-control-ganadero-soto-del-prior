@@ -24,6 +24,7 @@ export function useAnimalCalculator() {
         objective: string;
         system: string;
         feeds?: any[];
+        overrideBreed?: Breed; // Support for simulating different breeds/crosses
     }) => {
         setLoading(true);
         setError(null);
@@ -35,8 +36,29 @@ export function useAnimalCalculator() {
             // Age in Months
             const ageMonths = (new Date().getTime() - new Date(animal.birth).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
 
-            // Get Breed
-            const breed = BreedManager.getBreedById(animal.breed) || BreedManager.getBreedByName(animal.breed) || BreedManager.getAllBreeds()[0];
+            // Determine Effective Breed
+            let breed = params.overrideBreed || BreedManager.getBreedById(animal.breed);
+
+            // SPECIAL LOGIC: Automatic F1 Resolution
+            // If breed is generic 'Cruzado' or missing, try to resolve via parents
+            const isGeneric = !breed || animal.breed === 'Cruzado' || animal.breed === 'Mestizo';
+
+            if (isGeneric) {
+                // Try to find parent genetics in the animal object
+                // Adapting to Schema: animal.genotype?.fatherBreedId OR animal.fatherBreedId shortcut
+                const fatherId = animal.genotype?.fatherBreedId || (animal as any).fatherBreedId;
+                const motherId = animal.genotype?.motherBreedId || (animal as any).motherBreedId;
+
+                if (fatherId && motherId) {
+                    const hybrid = BreedManager.calculateHybrid(fatherId, motherId);
+                    if (hybrid) breed = hybrid;
+                }
+            }
+
+            // Fallback
+            if (!breed) {
+                breed = BreedManager.getBreedByName(animal.breed) || BreedManager.getAllBreeds()[0];
+            }
 
             // 1. Calculate Diet Requirements (New API)
             // Map objective to internal state labels if needed
@@ -44,8 +66,8 @@ export function useAnimalCalculator() {
             if (params.objective === 'Mantenimiento') state = 'Mantenimiento';
 
             // Assume weight is current weight
-            const adgTarget = 1.2; // Default target
-            const reqs = NutritionEngine.calculateRequirements(animal.weight, adgTarget, ageMonths, state);
+            const adgTarget = breed.adg_feedlot || 1.2; // Use breed potential as target baseline
+            const reqs = NutritionEngine.calculateRequirements(animal.weight, adgTarget, ageMonths, state, animal.sex || 'Macho');
 
             // 2. Real Diet Calculation
             let dietToAnalyze = params.feeds || [];

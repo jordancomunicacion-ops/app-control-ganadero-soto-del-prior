@@ -7,6 +7,7 @@ import { useAnimalCalculator } from '@/hooks/useAnimalCalculator';
 import { FEED_DATABASE, FeedItem } from '../services/feedDatabase';
 import { NutritionEngine } from '../services/nutritionEngine';
 import { LifecycleEngine, ReproductiveState } from '../services/lifecycleEngine';
+import { BreedManager, Breed } from '../services/breedManager';
 
 export function Calculator() {
     const { read } = useStorage();
@@ -253,10 +254,14 @@ export function Calculator() {
                             {selectedAnimal && (
                                 <div className="bg-green-50 p-4 rounded-lg text-sm space-y-2 border border-green-100">
                                     <div className="flex justify-between border-b border-green-200 pb-2">
-                                        <span className="text-green-800">Raza:</span>
-                                        <span className="font-bold text-green-900">{selectedAnimal.breed}</span>
+                                        <span className="text-green-800">Crotal:</span>
+                                        <span className="font-bold text-green-900">{formatCrotal(selectedAnimal.id)}</span>
                                     </div>
                                     <div className="flex justify-between">
+                                        <span className="text-green-800">Raza Base:</span>
+                                        <span className="font-bold text-green-900">{selectedAnimal.breed || '?'}</span>
+                                    </div>
+                                    <div className="flex justify-between pt-2">
                                         <span className="text-green-800">Peso Actual:</span>
                                         <span className="font-bold text-green-900">{selectedAnimal.weight} kg</span>
                                     </div>

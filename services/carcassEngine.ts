@@ -9,6 +9,7 @@ export interface CarcassResult {
     bms: number; // 1-12 (Standard Scale)
     conformation: string; // S, E, U, R, O, P
     synergy_bonus_applied: number;
+    is_premium: boolean;
 }
 
 export const CarcassEngine = {
@@ -197,7 +198,9 @@ export const CarcassEngine = {
             marbling_score: parseFloat(finalMarblingScore.toFixed(1)),
             bms: this.clamp(bms, 1, 12),
             conformation: conf,
-            synergy_bonus_applied: options.synergyBonuses?.marbling || 0
+            synergy_bonus_applied: options.synergyBonuses?.marbling || 0,
+            // Premium Logic: Conformation U/E/S AND Marbling (BMS) >= 5
+            is_premium: score >= 4 && bms >= 5
         };
     }
 };
