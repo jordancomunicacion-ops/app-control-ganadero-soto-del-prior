@@ -40,69 +40,131 @@ export const NutritionEngine = {
         min_age_months: 14,
         max_bellota_percent: 40,
         min_fdn_bellota: 28,
-        min_protein_bellota: 12
+        min_protein_bellota: 12,
+        // Types
+        TYPE_ENCINA: 'ENCINA', // High Oleic
+        TYPE_ROBLE: 'ROBLE'    // High Tannins
     },
 
     /**
      * Calculate KPI Targets based on Objective, Breed, and System
+     * Refactor A5: "La dieta recomendada = función de (etapa × tipo_funcional × entorno × manejo)"
      */
     calculateKPITargets(
-        animal: { breed: string, sex: string, weight: number, ageMonths: number },
+        animal: { breed: string, sex: string, weight: number, ageMonths: number, functionalType?: string, stage?: string },
         objective: string,
         system: string
     ): KPITargets {
-        // Defaults (Maintenance)
+        // Defaults (Maintenance / Rustica Base)
         let targets: KPITargets = {
-            adg: 0.1, fcr: 0, energyDensity: 1.8, proteinDensity: 8.5, fiberMin: 40, maxConcentrate: 20
+            adg: 0.1, fcr: 0, energyDensity: 2.0, proteinDensity: 10, fiberMin: 35, maxConcentrate: 30
         };
 
-        // 1. OBJECTIVE BASED
-        if (objective === 'Crecimiento Moderado' || objective === 'Recría') {
-            targets = { adg: 0.8, fcr: 7.5, energyDensity: 2.4, proteinDensity: 14, fiberMin: 30, maxConcentrate: 50 };
-            if (animal.sex === 'Macho') targets.adg = 1.0;
-        }
-        else if (objective === 'Máximo Crecimiento') {
-            targets = { adg: 1.4, fcr: 6.0, energyDensity: 2.7, proteinDensity: 15, fiberMin: 20, maxConcentrate: 70 };
-        }
-        else if (objective.includes('Engorde') || objective.includes('Acabado')) {
-            // Finishing: High Energy, lower Protein requirement than growth, FCV worsens
-            targets = { adg: 1.5, fcr: 6.5, energyDensity: 2.9, proteinDensity: 12, fiberMin: 15, maxConcentrate: 80 };
+        const fType = animal.functionalType || 'rustica_adaptada';
+        const currentStage = animal.stage || (animal.ageMonths < 8 ? 'recria' : 'terminado');
 
-            // Wagyu Logic: Slower gain preferred for marbling? 
-            // Actually, usually high energy but long period.
-            if (animal.breed === 'Wagyu') {
-                targets.adg = 0.9; // Slower gain
-                targets.energyDensity = 3.0; // Very high energy (Starch/Fat)
+        // --- REGLAS DETERMINISTAS POR TIPO FUNCIONAL (A5) ---
+
+        // 1. Razas Infiltración (Wagyu, Angus-High)
+        if (fType === 'infiltracion') {
+            if (currentStage === 'terminado' || objective.includes('Engorde')) {
+                // Objetivo Calidad > Velocidad
+                targets.energyDensity = 2.9; // High Energy for marbling
+                targets.proteinDensity = 12; // Lower protein to avoid late frame growth
+                targets.fiberMin = 15;       // Risk of acidosis managed by alerts
                 targets.maxConcentrate = 85;
+                targets.adg = 0.9;           // Slower, physiological gain
+                targets.fcr = 8.5;           // High FCR expected (fat deposition cost)
+            } else {
+                // Recría: Preparar estructura
+                targets.energyDensity = 2.4;
+                targets.proteinDensity = 14;
+                targets.adg = 0.8;
             }
         }
-        else if (objective === 'Lactancia') {
-            targets = { adg: -0.2, fcr: 0, energyDensity: 2.6, proteinDensity: 16, fiberMin: 28, maxConcentrate: 60 };
+
+        // 2. Crecimiento Magro (Charolais, Limousin)
+        else if (fType === 'crecimiento_magro') {
+            if (currentStage === 'terminado' || objective.includes('Engorde')) {
+                // Maximizando músculo
+                targets.energyDensity = 2.8;
+                targets.proteinDensity = 14.5; // High protein for muscle
+                targets.fiberMin = 18;
+                targets.maxConcentrate = 80;
+                targets.adg = 1.6;             // Aggressive gain
+                targets.fcr = 5.8;             // Efficient conversion expected
+            } else {
+                targets.energyDensity = 2.5;
+                targets.proteinDensity = 16;   // Max frame growth
+                targets.adg = 1.1;
+                targets.fcr = 5.5;
+            }
         }
 
-        // 2. SYSTEM CONSTRAINTS
-        if (system.includes('Extensivo') || system.includes('Pastoreo')) {
-            // Pasture limits intake density and ADG potential
-            targets.adg = Math.min(targets.adg, 0.9);
-            targets.maxConcentrate = 40; // Supplementation limit
+        // 3. Rústica / Adaptada (Morucha, Avileña)
+        else if (fType === 'rustica_adaptada') {
+            // Prioridad: Coste bajo, fibra, salud
+            targets.energyDensity = 2.2;
+            targets.proteinDensity = 11;
+            targets.fiberMin = 30;         // High fiber health
+            targets.maxConcentrate = 40;   // Low supplement
+            targets.adg = 0.7;             // Moderate gain
+            targets.fcr = 7.5;             // Pasture efficiency
+
+            if (system.includes('Montanera')) {
+                targets.adg = 1.0;         // Boost in montanera
+                targets.energyDensity = 2.8;
+            }
         }
-        else if (system.includes('Montanera')) {
-            // Bellota is high energy
-            targets.energyDensity = Math.max(targets.energyDensity, 2.8);
-            targets.adg = 1.2; // Good gain on acorns but not feedlot level
+
+        // 4. Aptitud Lechera (Simmental, Pardo)
+        else if (fType === 'aptitud_lechera') {
+            // Prioridad: Soporte a lactancia y crecimiento estructura
+            targets.energyDensity = 2.6;
+            targets.proteinDensity = 15;   // High protein requirement
+            targets.fiberMin = 25;
+            targets.maxConcentrate = 60;
+            targets.adg = 1.2;
+            targets.fcr = 6.5;
         }
-        else if (system.includes('Ecológico')) {
-            // Efficiency usually lower due to lack of optimized additives/GMOs
-            targets.fcr *= 1.1;
+
+        // 5. Cárnica General (Limousin, Blonde)
+        else if (fType === 'carnica_general') {
+            // Balance entre crecimiento y estructura
+            targets.energyDensity = 2.7;
+            targets.proteinDensity = 14;
+            targets.fiberMin = 20;
+            targets.maxConcentrate = 70;
+            targets.adg = 1.4;
+            targets.fcr = 6.2;
+        }
+
+        // 6. Doble Propósito (Retinta Estándar, Avileña buena)
+        else if (fType === 'doble_proposito') {
+            targets.energyDensity = 2.4;
+            targets.proteinDensity = 12.5;
+            targets.fiberMin = 28;
+            targets.maxConcentrate = 50;
+            targets.adg = 0.9;
+            targets.fcr = 7.2;
+        }
+
+        // 4. Composito (F1s) - Hybrid Vigor logic handled by higher ADG targets implicitly or adjustment
+        if (fType === 'composito') {
+            // Intermediate/Best of both: e.g. F1 Wagyu x Morucha
+            targets.adg *= 1.1; // 10% Heterosis boost on target
+            targets.fcr *= 0.95; // Better efficiency
+        }
+
+        // --- SYSTEM CONSTRAINTS (Overrides) ---
+        if (system.includes('Extensivo') && !system.includes('Montanera')) {
+            targets.maxConcentrate = Math.min(targets.maxConcentrate, 30);
+            targets.adg = Math.min(targets.adg, 0.8);
         }
 
         return targets;
     },
 
-    /**
-     * Generate Smart Diet Recommendation
-     * Returns a list of ingredients and amounts to meet targets.
-     */
     /**
      * Generate Smart Diet Recommendation
      * Returns a list of ingredients and amounts to meet targets.
@@ -133,6 +195,7 @@ export const NutritionEngine = {
             const remaining = dmiLimit - currentDmi;
 
             // Bellota (80% of rest) - ID: BELLHO_01
+            // Default generic name, UI will refine type logic
             const bellotaAmount = remaining * 0.80;
             diet.push({ feed_id: 'BELLHO_01', feed_name: 'Bellota de Encina', dm_kg: parseFloat(bellotaAmount.toFixed(1)) });
 
@@ -172,10 +235,17 @@ export const NutritionEngine = {
         }
 
         let remainingDmi = dmiLimit - currentDmi;
-        let energyAmount = remainingDmi * 0.6; // 60% of remaining
+        // Basic Logic from targets (Regla A5 details here are implicitly handled by targets.maxConcentrate and energyDensity)
+        // If targets.maxConcentrate is low (Rustica), we limit energy filler
+        let energyAmount = remainingDmi * 0.6; // Default
 
-        // If Finishing/Engorde, increase energy
-        if (targets.energyDensity > 2.8) energyAmount = remainingDmi * 0.8;
+        // Adjust based on targets (Simplistic solver)
+        if (targets.energyDensity > 2.6) {
+            energyAmount = remainingDmi * 0.8; // High energy
+        }
+        if (targets.maxConcentrate < 60) {
+            energyAmount = Math.min(energyAmount, dmiLimit * (targets.maxConcentrate / 100));
+        }
 
         diet.push({ feed_id: energyId, feed_name: energyName, dm_kg: parseFloat(energyAmount.toFixed(1)) });
         currentDmi += energyAmount;
@@ -246,7 +316,8 @@ export const NutritionEngine = {
         rationIngredients: { type: string, dm_kg: number, percent_dm: number, feed_name: string }[],
         totalFDN: number,
         totalCP: number,
-        bellotaPercent: number
+        bellotaPercent: number,
+        options: { bellotaType?: string } = {}
     ): DietAlert[] {
         // ... (Preserved validation logic) ...
         const alerts: DietAlert[] = [];
@@ -269,13 +340,19 @@ export const NutritionEngine = {
             if (bellotaPercent > 40) alerts.push({ code: 'BELLOTA_TOXICITY', level: 'critical', message: '⚠️ Exceso Bellota >40%.', action: '⬇️ Limitar.' });
             if (totalFDN < 28) alerts.push({ code: 'BELLOTA_FIBER', level: 'critical', message: '⛔ Montanera: Fibra <28%.', action: '⬆️ Paja Obligatoria.' });
             if (totalCP < 12) alerts.push({ code: 'BELLOTA_PROTEIN', level: 'warning', message: '⛔ Montanera: Proteína Baja.', action: '⬆️ Suplementar.' });
+
+            // NEW: Roble specific alert
+            if (options.bellotaType === 'ROBLE' && totalFDN < 30) {
+                alerts.push({ code: 'BELLOTA_FIBER', level: 'warning', message: '🍂 Bellota Roble: Alta en Taninos.', action: '⬆️ Vigilar estreñimiento.' });
+            }
         }
         return alerts;
     },
 
     calculateSynergies(
         rationIngredients: { feed_name: string }[],
-        animal: { sex: string, ageMonths: number }
+        animal: { sex: string, ageMonths: number },
+        options: { bellotaType?: string } = {}
     ): SynergyResult[] {
         const results: SynergyResult[] = [];
         const names = rationIngredients.map(i => i.feed_name.toLowerCase());
@@ -285,9 +362,20 @@ export const NutritionEngine = {
         if (hasBellota && hasLecithin) {
             let boost = 0.5;
             if (animal.sex === 'Castrado' || animal.sex === 'Buey') boost = 0.8;
+
+            // NEW: Type specific boost
+            let desc = '🔥 Bellota + Lecitina: Infiltración mejorada.';
+            if (options.bellotaType === 'ENCINA') {
+                boost += 0.4; // 1.2 Total for Castrado
+                desc = '🔥 Bellota Encina (Alto Oleico): Infiltración Máxima.';
+            } else if (options.bellotaType === 'ROBLE') {
+                // Std boost
+                desc = '🍂 Bellota Roble (Taninos): Sabor Intenso.';
+            }
+
             results.push({
                 active: true, name: 'ACIDOS_GRASOS_EMULSIONADOS', bonus_marbling: boost, bonus_yield: 1.5,
-                description: '🔥 Bellota + Lecitina: Infiltración mejorada.'
+                description: desc
             });
         }
         return results;
@@ -336,6 +424,10 @@ export const NutritionEngine = {
         const totalEnergy = dietEnergy * dmi;
         const energyForGain = totalEnergy - nemReq;
         let estADG = energyForGain * 0.35;
+
+        // Functional Type Effect? 
+        // Logic generally handled via breed.adg_feedlot cap, but could be enhanced here.
+        // For MVP, keeping standard breed params is fine as targets drive the diet design.
 
         if (options.activeSynergies?.includes('ACIDOS_GRASOS_EMULSIONADOS')) estADG *= 1.10;
         if (estADG > 0) estADG = Math.min(estADG, breed.adg_feedlot * 1.2);

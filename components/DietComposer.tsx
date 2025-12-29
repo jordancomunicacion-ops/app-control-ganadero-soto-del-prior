@@ -29,6 +29,9 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
     const [availableFeeds, setAvailableFeeds] = useState<FeedItem[]>(FEED_DATABASE);
     const [selectedFeedId, setSelectedFeedId] = useState('');
 
+    // NEW: Bellota Type State
+    const [bellotaType, setBellotaType] = useState<string>('ENCINA'); // ENCINA | ROBLE
+
     // Results State
     const [stats, setStats] = useState<any>(null);
     const [alerts, setAlerts] = useState<DietAlert[]>([]);
@@ -42,7 +45,7 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
     // --- Calculations ---
     useEffect(() => {
         calculateDiet();
-    }, [ration, animal]);
+    }, [ration, animal, bellotaType]); // Added bellotaType dep
 
     const calculateDiet = () => {
         // 1. Aggregates
@@ -53,7 +56,10 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
         let totalFDN_kg = 0;
         let bellotaKg = 0;
 
+
+
         const ingredientsForEngine: any[] = [];
+        let hasBellota = false;
 
         ration.forEach(item => {
             const kg = item.kg_as_fed;
@@ -66,7 +72,10 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
             totalProteinG += (item.feed.protein_percent / 100 * kgDM * 1000);
             totalFDN_kg += (item.feed.fiber_percent / 100 * kgDM);
 
-            if (item.feed.name.toLowerCase().includes('bellota')) bellotaKg += kgDM;
+            if (item.feed.name.toLowerCase().includes('bellota')) {
+                bellotaKg += kgDM;
+                hasBellota = true;
+            }
 
             ingredientsForEngine.push({
                 feed_name: item.feed.name,
@@ -92,7 +101,8 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
             ingredientsForEngine,
             dietFDN,
             dietCP,
-            bellotaPct
+            bellotaPct,
+            { bellotaType } // NEW
         );
         setAlerts(newAlerts);
 
@@ -108,7 +118,11 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
             breedCode: breed.code
         };
 
-        const activeSynergies = NutritionEngine.calculateSynergies(ingredientsForEngine, { sex: animal.sex, ageMonths: age });
+        const activeSynergies = NutritionEngine.calculateSynergies(
+            ingredientsForEngine,
+            { sex: animal.sex, ageMonths: age },
+            { bellotaType } // NEW
+        );
         setSynergies(activeSynergies);
 
         // ADG Prediction
@@ -166,7 +180,8 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
             cp: dietCP,
             fdn: dietFDN,
             cost: ration.reduce((sum, i) => sum + (i.kg_as_fed * i.feed.cost_per_kg), 0),
-            env
+            env,
+            hasBellota // Store for UI
         });
     };
 
@@ -238,6 +253,46 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
                             </button>
                         </div>
                     </div>
+
+                    {/* NEW: Bellota Type Selector */}
+                    {stats?.hasBellota && (
+                        <div className="bg-green-50 border border-green-200 p-4 rounded-lg shadow-sm animate-in fade-in slide-in-from-top-2">
+                            <h4 className="flex items-center gap-2 text-sm font-bold text-green-900 mb-3">
+                                🌲 Origen de Montanera (Bellota)
+                            </h4>
+                            <div className="flex gap-4">
+                                <label className={`flex-1 cursor-pointer border rounded-lg p-3 transition-all ${bellotaType === 'ENCINA' ? 'bg-white border-green-500 ring-2 ring-green-100 shadow' : 'bg-transparent border-green-200 hover:bg-white'}`}>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <input
+                                            type="radio"
+                                            name="bellotaType"
+                                            value="ENCINA"
+                                            checked={bellotaType === 'ENCINA'}
+                                            onChange={() => setBellotaType('ENCINA')}
+                                            className="text-green-600 focus:ring-green-500"
+                                        />
+                                        <span className="font-bold text-gray-800 text-sm">Bellota Encina</span>
+                                    </div>
+                                    <div className="text-xs text-green-700 font-medium pl-6">Perfil: Alto Oleico</div>
+                                </label>
+
+                                <label className={`flex-1 cursor-pointer border rounded-lg p-3 transition-all ${bellotaType === 'ROBLE' ? 'bg-white border-green-500 ring-2 ring-green-100 shadow' : 'bg-transparent border-green-200 hover:bg-white'}`}>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <input
+                                            type="radio"
+                                            name="bellotaType"
+                                            value="ROBLE"
+                                            checked={bellotaType === 'ROBLE'}
+                                            onChange={() => setBellotaType('ROBLE')}
+                                            className="text-green-600 focus:ring-green-500"
+                                        />
+                                        <span className="font-bold text-gray-800 text-sm">Bellota Roble</span>
+                                    </div>
+                                    <div className="text-xs text-green-700 font-medium pl-6">Perfil: Taninos</div>
+                                </label>
+                            </div>
+                        </div>
+                    )}
 
                     {/* List */}
                     <div className="space-y-2">

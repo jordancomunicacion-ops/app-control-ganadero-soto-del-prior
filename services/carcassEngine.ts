@@ -56,10 +56,20 @@ export const CarcassEngine = {
             effectiveBreed.marbling_potential = (options.fatherBreed.marbling_potential + options.motherBreed.marbling_potential) / 2;
             effectiveBreed.yield_potential = ((options.fatherBreed.yield_potential || 0.58) + (options.motherBreed.yield_potential || 0.58)) / 2;
 
-            // MATERNAL EFFECT (Wagyu Mother > Wagyu Father for Marbling)
-            // Rationale: Metabolic programming during gestation/lactation from high-fat breed mother
-            if (options.motherBreed.code === 'WAG' || options.motherBreed.name.includes('Wagyu')) {
+            // MATERNAL EFFECT (Epigenetics & Metabolic Programming)
+            // 1. Marbling: High fat mothers program offspring for better fat deposition
+            if (options.motherBreed.marbling_potential >= 4) {
                 effectiveBreed.marbling_potential += 0.5;
+            }
+
+            // 2. Milk: High milk mothers ensure better structural development (weaning weight)
+            // Bonus to conformation potential if mother is good milker
+            if (options.motherBreed.milk_potential >= 4) {
+                effectiveBreed.conformation_potential = (effectiveBreed.conformation_potential || 3) + 0.3;
+            }
+            // Penalty if mother is poor milker (stunted growth start)
+            if (options.motherBreed.milk_potential <= 1) {
+                effectiveBreed.conformation_potential = (effectiveBreed.conformation_potential || 3) - 0.2;
             }
 
             // HETEROSIS (Hybrid Vigor) - Boosts Yield/Resilience slightly
