@@ -50,16 +50,26 @@ export function StorageProvider({ children }: { children: React.ReactNode }) {
         try {
           // If we are not writing events, maybe we can clear events to make space for critical data
           if (key !== 'events') {
+            console.warn('Clearing "events" history to free up space for critical data.');
             localStorage.removeItem('events');
-            console.log('Cleared "events" to free up space.');
-            localStorage.setItem(key, JSON.stringify(value)); // Retry
-            return;
+
+            // Retry write
+            try {
+              localStorage.setItem(key, JSON.stringify(value));
+              console.log(`Successfully recovered write for "${key}" after cleanup.`);
+              return;
+            } catch (secondErr) {
+              console.error(`Emergency write failed for "${key}" even after cleanup. Payload size: ${JSON.stringify(value).length} chars.`, secondErr);
+            }
+          } else {
+            console.error("Critical: Cannot write 'events'. Storage full.");
           }
         } catch (retryErr) {
-          console.error("Emergency cleanup failed:", retryErr);
+          console.error("Emergency cleanup and retry sequence failed:", retryErr);
         }
+      } else {
+        console.error(`Error writing key "${key}":`, err);
       }
-      console.error(`Error writing key "${key}":`, err);
     }
   };
 

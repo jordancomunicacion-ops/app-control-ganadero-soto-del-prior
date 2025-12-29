@@ -72,7 +72,8 @@ export function DataSeeder() {
         );
         const isFreshImport = animals.length > 0 && events.length === 0; // Loose check for events
 
-        const shouldRunEnrichment = (isFreshImport || hasBadData) && !seededRef.current;
+        const isSeededStorage = read<string>('isSeeded', 'false') === 'true';
+        const shouldRunEnrichment = (isFreshImport || hasBadData) && !seededRef.current && !isSeededStorage;
 
         if (shouldRunEnrichment && !changed) {
             console.log("Starting Data Enrichment & Reparation Engine...");
@@ -511,6 +512,7 @@ export function DataSeeder() {
             write(fincasKey, fincas);
             write('events', events);
             console.log('Advanced Data Seeding & Migration Completed');
+            write('isSeeded', 'true');
         }
 
         seededRef.current = true;

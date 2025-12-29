@@ -1,4 +1,7 @@
 import { CarcassQualityEngine } from './carcassQualityEngine';
+import { BreedManager } from './breedManager';
+import { WeightEngine } from './weightEngine';
+import { NutritionEngine } from './nutritionEngine';
 
 export interface EventData {
     type: string;
@@ -194,18 +197,61 @@ export const EventManager = {
             adgObs = (weight - lastW) / daysDiff;
         }
 
-        // Mock data for Carcass Engine
+        // Recuperar Raza y Sistema Real
         const weatherTemp = 20;
         const thi = CarcassQualityEngine.calculateTHI(weatherTemp, 50);
-        const dietE = 2.0;
-        let breedData = {};
-        // User should ensure breeds are loaded or pass them. 
-        // For now we assume no breed data or empty object if not passed.
+        const breed = BreedManager.getBreedByName(animal.breed);
+        const system = WeightEngine.inferSystem(animal);
 
-        const ageMonths = (curDate.getTime() - new Date(animal.birthDate).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+        // Calcular parámetros nutricionales reales (Targets)
+        const ageInMonthsForTargets = (curDate.getTime() - new Date(animal.birthDate).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
 
-        const carcass = CarcassQualityEngine.estimateCarcassResult({ ageMonths }, weight, adgObs, dietE, thi, breedData);
-        const quality = CarcassQualityEngine.calculateQualityIndex({ ageMonths, currentWeight: weight }, breedData, dietE, adgObs, thi, 10, 0, 0);
+        const bioTypeMap: Record<string, string> = {
+            'British': 'infiltracion',
+            'Continental': 'crecimiento_magro',
+            'Rustic_European': 'rustica_adaptada',
+            'Dairy': 'aptitud_lechera',
+            'Indicus': 'rustica_adaptada',
+            'Composite': 'composito'
+        };
+        const fType = (breed && bioTypeMap[breed.biological_type]) || 'rustica_adaptada';
+
+        const kpiTargets = NutritionEngine.calculateKPITargets({
+            breed: animal.breed,
+            sex: animal.sex,
+            weight: weight,
+            ageMonths: ageInMonthsForTargets,
+            functionalType: fType
+        }, 'Engorde', system);
+
+        const dietE = kpiTargets.energyDensity;
+
+        // Opciones de Calidad (Bellota, etc)
+        const monthOfYear = curDate.getMonth();
+        const isBellotaSeason = [9, 10, 11, 0, 1].includes(monthOfYear);
+        const isMontanera = system.includes('Montanera');
+
+        const qualityOptions = {
+            isBellota: isMontanera && isBellotaSeason,
+            highOleic: isMontanera && isBellotaSeason && (animal.farm || '').includes('SOTO'),
+            hasLecithin: isMontanera // Asumimos protocolo Montanera (Bellota + Soja)
+        };
+
+        const ageMonths = ageInMonthsForTargets;
+
+        // Estimaciones
+        const carcass = CarcassQualityEngine.estimateCarcassResult({ ageMonths /*, system */ }, weight, adgObs, dietE, thi, breed || {});
+        const quality = CarcassQualityEngine.calculateQualityIndex(
+            { ageMonths, currentWeight: weight, sex: animal.sex },
+            breed || {},
+            dietE,
+            adgObs,
+            thi,
+            150, // Días en cebo estandar (estimado)
+            0,
+            1,
+            qualityOptions
+        );
 
         if (!animal.monthlyRecords) animal.monthlyRecords = [];
         animal.monthlyRecords.push({
@@ -219,6 +265,11 @@ export const EventManager = {
             diet_energy: dietE,
             thi: thi
         });
+
+        // LIMIT HISTORY SIZE: Keep last 12 months only to prevent Storage Quota Errors
+        if (animal.monthlyRecords.length > 12) {
+            animal.monthlyRecords = animal.monthlyRecords.slice(-12);
+        }
 
         // Schedule Next
         const nextWeighDate = new Date(date);
