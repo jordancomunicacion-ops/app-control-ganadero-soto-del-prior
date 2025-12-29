@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useStorage } from '@/context/StorageContext';
 import { EventManager } from '@/services/eventManager';
+import { CarcassQualityEngine } from '@/services/carcassQualityEngine';
 
 export function DataSeeder() {
     const { read, write, isLoaded } = useStorage();
@@ -72,11 +73,13 @@ export function DataSeeder() {
         );
         const isFreshImport = animals.length > 0 && events.length === 0; // Loose check for events
 
-        const isSeededStorage = read<string>('isSeeded', 'false') === 'true';
-        const shouldRunEnrichment = (isFreshImport || hasBadData) && !seededRef.current && !isSeededStorage;
+        const isSeededStorage = read<string>('isSeeded_V3', 'false') === 'true'; // Forced V3
+
+        // Force Enrichent always for this fix step
+        const shouldRunEnrichment = !isSeededStorage; // (isFreshImport || hasBadData) && !isSeededStorage;
 
         if (shouldRunEnrichment && !changed) {
-            console.log("Starting Data Enrichment & Reparation Engine...");
+            console.log("Starting Data Enrichment & Reparation Engine V3 (Weight Recalc)...");
             // RESET EVENTS for clean regeneration if we are repairing bad data
             if (hasBadData) {
                 console.log("Bad data detected - Wiping events for fresh regeneration.");
@@ -177,15 +180,15 @@ export function DataSeeder() {
                 const now = new Date();
 
                 // A. Genetic Potential (Base Gain per Day)
-                // Limousin/Cross standard: 0.7 to 1.2 kg/day depending on genetics
-                // We assign a fixed "Genetic Factor" to this animal if not already present? 
-                // For now, deterministic random based on clean ID or just Math.random() since it's a seed.
-                // Let's make it slighty random but consistent if we re-ran strictly (which we don't here).
                 const geneticBase = 0.85 + (Math.random() * 0.35); // Range: 0.85 - 1.20 kg/day
 
                 const birthWeight = 40;
                 let simWeight = birthWeight;
                 let currentDate = new Date(birthDate);
+
+                // Initialize records
+                if (!animal.monthlyRecords) animal.monthlyRecords = [];
+                const newRecords: any[] = [];
 
                 // Start simulation from birth
                 const months: any[] = [];
@@ -207,18 +210,70 @@ export function DataSeeder() {
                     }
 
                     const climatic = getClimateFactor(m);
-                    const diet = getDietFactor(animal, m, ageMonths);
+                    const diet = getDietFactor(animal, m, ageMonths); // Diet Factor (1.0 - 1.5)
+
+                    // Approximate Diet Energy Mcal based on Diet Factor
+                    // 1.0 -> 2.0 Mcal (Pasto)
+                    // 1.5 -> 2.9 Mcal (Bellota/High Energy)
+                    const dietEnergy = 2.0 + ((diet - 1.0) * 1.8);
 
                     const combinedFactor = stateFactor * climatic * diet;
                     const daysInMonth = 30.44;
-                    const monthlyGain = geneticBase * combinedFactor * daysInMonth;
+                    const monthlyGain = geneticBase * combinedFactor * daysInMonth; // kg gained this month
+                    const adgObs = monthlyGain / daysInMonth;
 
                     simWeight += monthlyGain;
 
+                    // METRICS CALCULATION (Using Fixed Logic)
+                    // 1. Estimate Carcass (Yield)
+                    const thi = (m >= 5 && m <= 8) ? 78 : 65; // Simple THI approx
+                    const breedData = {
+                        rc_base: 0.58,
+                        marbling_potential: 4, // Default to good genetics
+                        adg_feedlot: 1.2
+                    };
+
+                    const carcass = CarcassQualityEngine.estimateCarcassResult(
+                        { ageMonths, system: 'Extensivo', sex: animal.sex },
+                        simWeight, adgObs, dietEnergy, thi, breedData
+                    );
+
+                    // 2. Calculate Quality (Passing rc_percent!)
+                    const quality = CarcassQualityEngine.calculateQualityIndex(
+                        { ageMonths, currentWeight: simWeight, sex: animal.sex, rc_percent: carcass.rc_percent },
+                        breedData,
+                        dietEnergy,
+                        adgObs,
+                        thi,
+                        150, // Days on feed (simulated)
+                        0,
+                        1,
+                        { isBellota: diet > 1.2, hasLecithin: diet > 1.2 }
+                    );
+
                     // Track for events
-                    months.push({ date: new Date(currentDate), m, diet, simWeight });
+                    months.push({ date: new Date(currentDate), m, diet, simWeight, adgObs, carcass, quality, dietEnergy, thi });
+
+                    // Store Monthly Record (Simulated)
+                    // Only keep last 24m to save space/memory if needed, or all if pruning handles it.
+                    // We'll add to array and relying on the Pruning Logic added earlier to trim at save time
+                    newRecords.push({
+                        date: new Date(currentDate).toISOString().split('T')[0],
+                        weightKg: Math.floor(simWeight),
+                        adg: parseFloat(adgObs.toFixed(2)),
+                        rc_est: carcass.rc_percent,
+                        carcass_weight_est: carcass.carcass_weight,
+                        meat_quality_index: quality.iq_score,
+                        marbling_est: quality.marbling_est,
+                        diet_energy: parseFloat(dietEnergy.toFixed(2)),
+                        thi: thi
+                    });
+
                     currentDate.setMonth(currentDate.getMonth() + 1);
                 }
+
+                // Update Animal Records
+                animal.monthlyRecords = newRecords;
 
                 // B. Generate Events from Timeline
                 months.forEach((step, idx) => {
@@ -247,7 +302,7 @@ export function DataSeeder() {
                             animalId: animal.id,
                             animalCrotal: animal.crotal || animal.id,
                             date: step.date.toISOString().split('T')[0],
-                            desc: `Pesaje de Control: ${Math.floor(step.simWeight)}kg`,
+                            desc: `Pesaje de Control: ${Math.floor(step.simWeight)}kg (Grasa: ${step.quality.marbling_est})`,
                             weight: Math.floor(step.simWeight),
                             status: 'completed'
                         });
@@ -259,6 +314,9 @@ export function DataSeeder() {
                 animal.currentWeight = finalWeight;
                 animal.weight = finalWeight; // Update base prop too for consistency
 
+                // Get last step for final event details
+                const lastStep = months[months.length - 1];
+
                 // Final Weighing Event
                 historyEvents.push({
                     id: generateUUID(),
@@ -266,7 +324,7 @@ export function DataSeeder() {
                     animalId: animal.id,
                     animalCrotal: animal.crotal || animal.id,
                     date: new Date().toISOString().split('T')[0],
-                    desc: `Pesaje Actual (Recalculado): ${finalWeight}kg`,
+                    desc: `Pesaje Actual (Recalculado): ${finalWeight}kg. SEUROP: ${lastStep?.carcass.rc_percent}%`,
                     weight: finalWeight,
                     status: 'completed'
                 });
@@ -364,8 +422,8 @@ export function DataSeeder() {
                         if (exitDate > now) exitDate.setTime(now.getTime() - (1000 * 60 * 60 * 24 * 10));
 
                         // OPTIMIZATION: STORAGE QUOTA PROTECTION
-                        // Only persist Ghost Calves active in the last 18 months
-                        const isRecent = (now.getTime() - exitDate.getTime()) < (1000 * 60 * 60 * 24 * 30 * 18);
+                        // Only persist Ghost Calves active in the last 12 months (Strict)
+                        const isRecent = (now.getTime() - exitDate.getTime()) < (1000 * 60 * 60 * 24 * 30 * 12);
 
                         let slaughterData = {};
                         if (fate === 'Sacrificado') {
@@ -501,6 +559,29 @@ export function DataSeeder() {
             return a;
         });
 
+        // 6. AGGRESSIVE CLEANUP (Storage Protection)
+        // Remove Ghost animals older than 12 months (reduced from 18)
+        const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
+        const nowMs = new Date().getTime();
+        const prunedAnimals = cleanAnimals.filter(a => {
+            if (!a.isGhost) return true;
+            if (a.status === 'Activo') return true;
+            const exitTime = new Date(a.exitDate || a.date || a.createdAt).getTime();
+            return (nowMs - exitTime) < ONE_YEAR_MS;
+        });
+
+        // Prune monthlyRecords if excessive
+        prunedAnimals.forEach(a => {
+            if (a.monthlyRecords && a.monthlyRecords.length > 12) {
+                a.monthlyRecords = a.monthlyRecords.slice(-12);
+            }
+        });
+
+        if (cleanAnimals.length !== prunedAnimals.length) {
+            console.log(`Pruned ${cleanAnimals.length - prunedAnimals.length} old ghost animals to save space.`);
+            changed = true;
+        }
+
         // Detect if we removed duplicates or changed statuses
         if (cleanAnimals.length !== animals.length) {
             console.log(`Removed ${animals.length - cleanAnimals.length} duplicates.`);
@@ -508,11 +589,18 @@ export function DataSeeder() {
         }
 
         if (changed || fincasChanged || statusChanged) {
-            write(animalsKey, cleanAnimals);
+            // First try to write isSeeded to prevent loop if main write fails
+            write('isSeeded_V3', 'true');
+
+            write(animalsKey, prunedAnimals);
             write(fincasKey, fincas);
+            // Limit events to last 1000 if massive
+            if (events.length > 1000) {
+                events = events.slice(-1000);
+                console.warn("Truncating events to last 1000 to prevent overflow.");
+            }
             write('events', events);
             console.log('Advanced Data Seeding & Migration Completed');
-            write('isSeeded', 'true');
         }
 
         seededRef.current = true;

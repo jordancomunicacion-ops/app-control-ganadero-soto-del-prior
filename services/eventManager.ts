@@ -242,7 +242,7 @@ export const EventManager = {
         // Estimaciones
         const carcass = CarcassQualityEngine.estimateCarcassResult({ ageMonths /*, system */ }, weight, adgObs, dietE, thi, breed || {});
         const quality = CarcassQualityEngine.calculateQualityIndex(
-            { ageMonths, currentWeight: weight, sex: animal.sex },
+            { ageMonths, currentWeight: weight, sex: animal.sex, rc_percent: carcass.rc_percent },
             breed || {},
             dietE,
             adgObs,

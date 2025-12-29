@@ -278,8 +278,15 @@ export const NutritionEngine = {
     ): DietRequirement {
         // ... (Same as before, good baseline) ...
         // Re-implementing essentially the same logic for compatibility
+        // DMI (Dry Matter Intake) Estimation Curve
+        // Standard: 2.5% for growing calves.
+        // Finishing (>400kg): 2.2%.
+        // Heavy Finishing / Oxen (>700kg): Drops due to physical capacity and fatness (1.8% - 2.0%)
         let dmi_pct = 0.025;
-        if (state === 'Cebo' && weight > 400) dmi_pct = 0.022;
+        if (weight > 400) dmi_pct = 0.022;
+        if (weight > 700) dmi_pct = 0.019; // Optimized for heavy oxen
+        if (state === 'Mantenimiento' && weight > 600) dmi_pct = 0.018;
+
         const dmi_capacity_kg = weight * dmi_pct;
 
         const metabolicWeight = Math.pow(weight, 0.75);
