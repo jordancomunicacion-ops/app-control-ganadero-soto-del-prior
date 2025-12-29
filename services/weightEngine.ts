@@ -95,26 +95,101 @@ export const WeightEngine = {
         const now = new Date();
 
         // 1. DETERMINE GENETIC POTENTIAL (Asymptote W_inf)
-        const breed = BreedManager.getBreedByName(animal.breed);
+        // 1. DETERMINE GENETIC POTENTIAL (Asymptote W_inf)
+        let breed = BreedManager.getBreedByName(animal.breed);
+
+        // --- 1.1 ROBUST DETECTION (Copied from Inventory) ---
+        // Normalize: "Betizú" -> "betizu"
+        const rawBreed = animal.breed || '';
+        const normalizedBreed = rawBreed.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+        if (!breed && normalizedBreed) {
+            if (normalizedBreed.includes('betizu')) {
+                breed = {
+                    id: 'MANUAL_BETIZU', code: 'BET', name: 'Betizu',
+                    biological_type: 'Rustic_European', weight_female_adult: 320, weight_male_adult: 450,
+                    adg_feedlot: 0.6, slaughter_age_months: 36
+                } as any;
+            }
+            else if (normalizedBreed.includes('limousin') || normalizedBreed.includes('limusin')) {
+                breed = {
+                    id: 'MANUAL_LIM', code: 'LIM', name: 'Limousin',
+                    biological_type: 'Continental', weight_female_adult: 700, weight_male_adult: 1100,
+                    adg_feedlot: 1.4, slaughter_age_months: 18
+                } as any;
+            }
+            else if (normalizedBreed.includes('charol')) {
+                breed = {
+                    id: 'MANUAL_CHA', code: 'CHA', name: 'Charolais',
+                    biological_type: 'Continental', weight_female_adult: 800, weight_male_adult: 1200,
+                    adg_feedlot: 1.5, slaughter_age_months: 18
+                } as any;
+            }
+            else if (normalizedBreed.includes('avile')) {
+                breed = {
+                    id: 'MANUAL_AVI', code: 'AVI', name: 'Avileña',
+                    biological_type: 'Rustic_European', weight_female_adult: 550, weight_male_adult: 900,
+                    adg_feedlot: 1.1, slaughter_age_months: 24
+                } as any;
+            }
+            else if (normalizedBreed.includes('retinta')) {
+                breed = {
+                    id: 'MANUAL_RET', code: 'RET', name: 'Retinta',
+                    biological_type: 'Rustic_European', weight_female_adult: 580, weight_male_adult: 950,
+                    adg_feedlot: 1.1, slaughter_age_months: 24
+                } as any;
+            }
+            else if (normalizedBreed.includes('morucha')) {
+                breed = {
+                    id: 'MANUAL_MOR', code: 'MOR', name: 'Morucha',
+                    biological_type: 'Rustic_European', weight_female_adult: 550, weight_male_adult: 900,
+                    adg_feedlot: 1.1, slaughter_age_months: 24
+                } as any;
+            }
+            else if (normalizedBreed.includes('frison')) {
+                breed = {
+                    id: 'MANUAL_FRI', code: 'FRI', name: 'Frisona',
+                    biological_type: 'Dairy', weight_female_adult: 650, weight_male_adult: 1000,
+                    adg_feedlot: 1.2, slaughter_age_months: 22
+                } as any;
+            }
+            else if (normalizedBreed.includes('wagyu')) {
+                breed = {
+                    id: 'MANUAL_WAG', code: 'WAG', name: 'Wagyu',
+                    biological_type: 'British', weight_female_adult: 550, weight_male_adult: 850,
+                    adg_feedlot: 0.9, slaughter_age_months: 30
+                } as any;
+            }
+            else if (normalizedBreed.includes('mestiz') || normalizedBreed.includes('cruzad')) {
+                breed = {
+                    id: 'MANUAL_MIX', code: 'MIX', name: 'Mestiza',
+                    biological_type: 'Rustic_European', weight_female_adult: 580, weight_male_adult: 950,
+                    adg_feedlot: 1.2, slaughter_age_months: 24
+                } as any;
+            }
+        }
+
         let adultWeight = 600; // Default
         let maturationRate = 0.0020; // Default
 
         if (breed) {
             adultWeight = animal.sex === 'Hembra' ? breed.weight_female_adult : breed.weight_male_adult;
 
-            // Adjust Maturation Rate based on breed type
-            // Angus/Hereford (Early) vs Charolais/Limousin (Late)
-            if (breed.slaughter_age_months < 20) maturationRate = K_MATURITY_EARLY; // Early
-            else maturationRate = K_MATURITY_LATE; // Late
+            // Adjust Maturation Rate based on breed type / biological type
+            if (breed.biological_type === 'Rustic_European') {
+                maturationRate = 0.0018; // Slower maturity
+            } else if (breed.biological_type === 'Continental') {
+                maturationRate = 0.0022; // Fast growth but late maturity? Actually they grow fast.
+            } else if (breed.biological_type === 'British' || breed.slaughter_age_months < 20) {
+                maturationRate = 0.0025; // Early maturity (Angus)
+            }
         }
 
-        // Adjust Asymptote for Oxen (Castration allows continued bone growth)
-        // Check if eventually becomes Buey to adjust potential? 
-        // Or adjust dynamically? Let's adjust potential if currently Buey.
+        // Adjust Asymptote for Oxen
         const isEventuallyBuey = animal.category === 'Buey' || animal.sex === 'Castrado';
         if (isEventuallyBuey) {
             adultWeight = adultWeight * 1.25; // 25% larger frame potential
-            maturationRate = maturationRate * 0.8; // Grows slower/longer
+            maturationRate = maturationRate * 0.85; // Grows slower/longer
         }
 
         // 2. SIMULATION LOOP

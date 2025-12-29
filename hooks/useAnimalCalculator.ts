@@ -55,10 +55,65 @@ export function useAnimalCalculator() {
                 }
             }
 
-            // Fallback
+            // Fallback & Robust Detection
             if (!breed) {
-                breed = BreedManager.getBreedByName(animal.breed) || BreedManager.getAllBreeds()[0];
+                // Try Exact Match
+                breed = BreedManager.getBreedByName(animal.breed);
+
+                // --- ROBUST DETECTION (Synced with Inventory/WeightEngine) ---
+                const rawBreed = animal.breed || '';
+                const normalizedBreed = rawBreed.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+                if (!breed && normalizedBreed) {
+                    if (normalizedBreed.includes('betizu')) {
+                        breed = {
+                            id: 'MANUAL_BETIZU', code: 'BET', name: 'Betizu (Calc)',
+                            biological_type: 'Rustic_European', weight_female_adult: 320, weight_male_adult: 450,
+                            adg_feedlot: 0.6, slaughter_age_months: 36
+                        } as any;
+                    }
+                    else if (normalizedBreed.includes('limousin') || normalizedBreed.includes('limusin')) {
+                        breed = {
+                            id: 'MANUAL_LIM', code: 'LIM', name: 'Limousin (Calc)',
+                            biological_type: 'Continental', weight_female_adult: 700, weight_male_adult: 1100,
+                            adg_feedlot: 1.4, slaughter_age_months: 18
+                        } as any;
+                    }
+                    else if (normalizedBreed.includes('charol')) {
+                        breed = {
+                            id: 'MANUAL_CHA', code: 'CHA', name: 'Charolais (Calc)',
+                            biological_type: 'Continental', weight_female_adult: 800, weight_male_adult: 1200,
+                            adg_feedlot: 1.5, slaughter_age_months: 18
+                        } as any;
+                    }
+                    else if (normalizedBreed.includes('avile')) {
+                        breed = {
+                            id: 'MANUAL_AVI', code: 'AVI', name: 'Avileña (Calc)',
+                            biological_type: 'Rustic_European', weight_female_adult: 550, weight_male_adult: 900,
+                            adg_feedlot: 1.1, slaughter_age_months: 24
+                        } as any;
+                    }
+                    else if (normalizedBreed.includes('retinta')) {
+                        breed = {
+                            id: 'MANUAL_RET', code: 'RET', name: 'Retinta (Calc)',
+                            biological_type: 'Rustic_European', weight_female_adult: 580, weight_male_adult: 950,
+                            adg_feedlot: 1.1, slaughter_age_months: 24
+                        } as any;
+                    }
+                    else if (normalizedBreed.includes('morucha')) {
+                        breed = {
+                            id: 'MANUAL_MOR', code: 'MOR', name: 'Morucha (Calc)',
+                            biological_type: 'Rustic_European', weight_female_adult: 550, weight_male_adult: 900,
+                            adg_feedlot: 1.1, slaughter_age_months: 24
+                        } as any;
+                    }
+                    // Fallback to "Generic" if absolute failure
+                    if (!breed) breed = BreedManager.getAllBreeds()[0];
+                }
             }
+
+            // TS Safety Guarantee
+            if (!breed) throw new Error("No se pudo determinar la raza del animal.");
 
             // 1. Calculate Diet Requirements (New API)
             // Map objective to internal state labels if needed
@@ -120,7 +175,7 @@ export function useAnimalCalculator() {
             setResults({
                 diet: dietToAnalyze,
                 projectedGain: predictedADG,
-                dmiTarget: 10, // Approx
+                dmiTarget: reqs.dmi_capacity_kg,
                 dmiActual: totalDMI,
                 totalCost,
                 totalKg,

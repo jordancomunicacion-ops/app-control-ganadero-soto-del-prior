@@ -51,7 +51,7 @@ export const NutritionEngine = {
      * Refactor A5: "La dieta recomendada = función de (etapa × tipo_funcional × entorno × manejo)"
      */
     calculateKPITargets(
-        animal: { breed: string, sex: string, weight: number, ageMonths: number, functionalType?: string, stage?: string },
+        animal: { breed: string, sex: string, weight: number, ageMonths: number, functionalType?: string, stage?: string, biological_type?: string },
         objective: string,
         system: string
     ): KPITargets {
@@ -60,14 +60,24 @@ export const NutritionEngine = {
             adg: 0.1, fcr: 0, energyDensity: 2.0, proteinDensity: 10, fiberMin: 35, maxConcentrate: 30
         };
 
-        const fType = animal.functionalType || 'rustica_adaptada';
+        // Auto-detect Functional Type from Biological Type (if not explicit)
+        let fType = animal.functionalType || 'rustica_adaptada';
+
+        if (!animal.functionalType && animal.biological_type) {
+            if (animal.biological_type === 'Rustic_European') fType = 'rustica_adaptada';
+            else if (animal.biological_type === 'Continental') fType = 'crecimiento_magro'; // Charolais like
+            else if (animal.biological_type === 'British') fType = 'infiltracion'; // Angus
+            else if (animal.biological_type === 'Dairy') fType = 'aptitud_lechera';
+            else if (animal.biological_type === 'Indicus') fType = 'rustica_adaptada';
+        }
+
         const currentStage = animal.stage || (animal.ageMonths < 8 ? 'recria' : 'terminado');
 
         // --- REGLAS DETERMINISTAS POR TIPO FUNCIONAL (A5) ---
 
         // 1. Razas Infiltración (Wagyu, Angus-High)
         if (fType === 'infiltracion') {
-            if (currentStage === 'terminado' || objective.includes('Engorde')) {
+            if (currentStage === 'terminado' || objective.includes('Engorde') || objective.includes('Eficiencia')) {
                 // Objetivo Calidad > Velocidad
                 targets.energyDensity = 2.9; // High Energy for marbling
                 targets.proteinDensity = 12; // Lower protein to avoid late frame growth
@@ -85,7 +95,7 @@ export const NutritionEngine = {
 
         // 2. Crecimiento Magro (Charolais, Limousin)
         else if (fType === 'crecimiento_magro') {
-            if (currentStage === 'terminado' || objective.includes('Engorde')) {
+            if (currentStage === 'terminado' || objective.includes('Engorde') || objective.includes('Eficiencia')) {
                 // Maximizando músculo
                 targets.energyDensity = 2.8;
                 targets.proteinDensity = 14.5; // High protein for muscle
@@ -156,6 +166,18 @@ export const NutritionEngine = {
             targets.fcr *= 0.95; // Better efficiency
         }
 
+        // --- OBJECTIVE OVERRIDES ---
+        if (objective === 'Eficiencia Económica') {
+            // Reduce max ADG potential slightly to prioritize cheaper feed
+            targets.adg *= 0.9;
+            targets.maxConcentrate *= 0.8; // Reduce expensive feed limit
+            targets.energyDensity = Math.max(2.0, targets.energyDensity * 0.95);
+        } else if (objective === 'Mantenimiento') {
+            targets.energyDensity = 2.0;
+            targets.adg = 0.1;
+            targets.maxConcentrate = 10;
+        }
+
         // --- SYSTEM CONSTRAINTS (Overrides) ---
         if (system.includes('Extensivo') && !system.includes('Montanera')) {
             targets.maxConcentrate = Math.min(targets.maxConcentrate, 30);
@@ -207,11 +229,18 @@ export const NutritionEngine = {
         }
 
         // --- STANDARD LOGIC ---
+        // Basic Solver: Fill Fiber > Fill Energy > Fill Protein
 
         // 1. BASE: FORAGE
         let forageId = 'paja';
         let forageName = 'Paja de Cereales';
         let forageAmount = dmiLimit * 0.2;
+
+        // If High Performance (Marbling/Feedlot) -> Less Forage
+        if (targets.energyDensity > 2.7) forageAmount = dmiLimit * 0.12;
+
+        // If Rustica/Maintenance -> More Forage
+        if (targets.energyDensity < 2.3) forageAmount = dmiLimit * 0.50;
 
         if (system.includes('Extensivo')) {
             forageId = 'F01';
@@ -227,6 +256,12 @@ export const NutritionEngine = {
         // 2. FILLER: ENERGY
         let energyId = 'C01'; // Maiz
         let energyName = 'Maíz (Grano)';
+
+        // Use Barley for Rustic? (Cheaper/Lower Energy?)
+        if (targets.energyDensity < 2.5) {
+            energyId = 'C02'; // Cebada
+            energyName = 'Cebada';
+        }
 
         if (system.includes('Ecológico')) {
             energyId = 'C01'; // Assuming Corn is allowed or swapping to Tritordeum if ID known. 
@@ -423,6 +458,13 @@ export const NutritionEngine = {
     ): number {
         // Preserved
         let nemReq = 0.077 * Math.pow(weight, 0.75);
+
+        // Biological Type Adjustments (Consistent with Inventory)
+        if (breed.biological_type === 'Rustic_European') nemReq *= 0.9;
+        else if (breed.biological_type === 'Continental') nemReq *= 1.05;
+        else if (breed.biological_type === 'Dairy') nemReq *= 1.25;
+        else if (breed.biological_type === 'Indicus') nemReq *= 0.85;
+
         if (options.currentMonth !== undefined) {
             const m = options.currentMonth;
             if (m >= 5 && m <= 8 && (breed.heat_tolerance || 5) < 5) nemReq *= 1.25; // Summer

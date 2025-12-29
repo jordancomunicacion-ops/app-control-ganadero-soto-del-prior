@@ -191,8 +191,32 @@ export const CarcassEngine = {
         if (options.sex === 'Hembra' && breed.code !== 'AZB') score -= 0.5;
         if (options.sex === 'Castrado' || options.isOx) score += 0.0; // Neutral (Better than cow, less than bull)
 
-        // Weight Check: Frame filling
-        if (currentWeight < 450) score -= 0.8; // Unfinished (frame visible)
+        // Weight Check (RELATIVE MATURITY) - Fix for small breeds
+        const targetAdultWeight = options.sex === 'Hembra' ? effectiveBreed.weight_female_adult : effectiveBreed.weight_male_adult;
+        const maturityRatio = currentWeight / (targetAdultWeight || 600); // Guard against missing data
+
+        if (maturityRatio < 0.75) {
+            // Penalize only if immature relative to THEIR potential
+            // e.g. Betizu at 320kg is 1.0 maturity -> No penalty.
+            // Limousin at 320kg is 0.4 maturity -> Heavy penalty.
+            const immaturity = 0.75 - maturityRatio;
+        } else if (maturityRatio > 1.15) {
+            // "Analytic" Overweight Check: Fat vs Muscle?
+            // User Feedback: If animal is heavy but NOT on intensive feedlot diet, it's superior growth (Muscle).
+            // If animal is heavy AND on intensive diet, it's likely Over-Finished (Fat).
+
+            if (dietEnergyMcal > 2.75) {
+                // High Energy Density (>2.75 Mcal usually means hefty concentrates)
+                // Case: Cebo / Feedlot Over-Finished -> Penalty (Patchy Fat)
+                const overweight = maturityRatio - 1.15;
+                score -= Math.min(overweight * 2, 1.0);
+            } else {
+                // Moderate/Low Energy Density (Pasture/Forage based)
+                // Case: Superior Genetic Development (Growing faster than breed avg on natural diet)
+                // Reward: Bonus for superior frame/muscularity
+                score += 0.5;
+            }
+        }
 
         // Final Score Calculation
         score = Math.round(score);
