@@ -147,7 +147,8 @@ export const CarcassQualityEngine = {
         if (isBellota && hasLecithin) {
             let synergyBonus = 0.25;
             // Is Ox check approximation
-            if (animal.sex === 'Macho' && (animal.ageMonths || 0) > 30) synergyBonus = 0.6;
+            // Is Ox check (Castrado or Old Bull)
+            if ((animal.sex === 'Macho' || animal.sex === 'Castrado') && (animal.ageMonths || 0) > 30) synergyBonus = 0.6;
             Marbling_1_5 += synergyBonus;
         }
 

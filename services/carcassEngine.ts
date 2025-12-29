@@ -91,6 +91,7 @@ export const CarcassEngine = {
         // Sex Adjustment (Biology)
         if (options.sex === 'Macho') baseYield += 0.02; // Bulls are denser/leaner
         if (options.sex === 'Hembra') baseYield -= 0.015; // Females have more visceral fat waste
+        if (options.sex === 'Castrado' || options.isOx) baseYield -= 0.005; // Steers/Oxen slightly less yield than bulls
 
         // Physiological Checks
         // Energy Diet pushes "Finish" (Fat cover increases dressing percentage slightly until overfat)
@@ -135,6 +136,14 @@ export const CarcassEngine = {
                 const tolerance = effectiveBreed.heat_tolerance || 5;
                 if (tolerance < 5) marblingScoreInternal -= 0.5; // Stress penalty
             }
+
+        }
+
+        // F. Castration/Ox Bonus (Marbling)
+        // Castrates deposit fat much better than Bulls
+        if (options.sex === 'Castrado' || options.isOx) {
+            marblingScoreInternal += 0.5; // Significant bonus for steer/ox
+            if (ageMonths > 36) marblingScoreInternal += 0.3; // Old ox bonus
         }
 
         // Cap Logic for Internal Score (approx 1-6 range internally before BMS map)
@@ -180,6 +189,7 @@ export const CarcassEngine = {
         // Bulls are blockier (+0.5), Cows angular (-0.5)
         if (options.sex === 'Macho') score += 0.5;
         if (options.sex === 'Hembra' && breed.code !== 'AZB') score -= 0.5;
+        if (options.sex === 'Castrado' || options.isOx) score += 0.0; // Neutral (Better than cow, less than bull)
 
         // Weight Check: Frame filling
         if (currentWeight < 450) score -= 0.8; // Unfinished (frame visible)
