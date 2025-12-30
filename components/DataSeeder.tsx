@@ -96,7 +96,7 @@ export function DataSeeder() {
         );
         const isFreshImport = animals.length > 0 && events.length === 0; // Loose check for events
 
-        const isSeededStorage = read<string>('isSeeded_V5', 'false') === 'true'; // Forced V5 for cleanup
+        const isSeededStorage = read<string>('isSeeded_V6', 'false') === 'true'; // Forced V6 for cleanup
 
         // Trigger if not seeded OR if we detect massive duplication (Safety Valve)
         const ghostCount = animals.filter(a => a.isGhost).length;
@@ -218,13 +218,28 @@ export function DataSeeder() {
                 return 1.0; // Standard Pasture
             };
 
-            // 3. CORE: Biomimetic History Generator (Forward Simulation)
+            // 3. CORE: Biomimetic History Generator (Forward Simulation with Asymptotic Limit)
             const generateBiomimeticHistory = (animal: any) => {
+                // SAFETY CHECK: If animal already has valid history and realistic weight, DO NOT OVERWRITE.
+                // This prevents "magic changes" without user request.
+                if (animal.monthlyRecords && animal.monthlyRecords.length > 0 && animal.currentWeight > 80 && animal.currentWeight < 1600) {
+                    return;
+                }
+
                 const birthDate = new Date(animal.birthDate || animal.birth);
                 const now = new Date();
 
-                // A. Genetic Potential (Base Gain per Day)
-                const geneticBase = 0.85 + (Math.random() * 0.35); // Range: 0.85 - 1.20 kg/day
+                // DETERMINE GENETIC LIMITS (Asymptote)
+                let adultWeight = 650; // Default Cow
+                if (animal.sex === 'Macho') adultWeight = 1100; // Bull
+                if (animal.category === 'Buey' || animal.sex === 'Castrado') adultWeight = 1400; // Ox
+
+                // Adjust for F1/Breed
+                if (animal.breed === 'Limousin' || animal.breed === 'Limousina') {
+                    adultWeight *= 1.1; // Larger
+                } else if (animal.breed === 'Morucha' || animal.breed === 'Avileña' || animal.breed === 'Retinta') {
+                    adultWeight *= 0.95; // Rustic slightly smaller
+                }
 
                 const birthWeight = 40;
                 let simWeight = birthWeight;
@@ -237,70 +252,84 @@ export function DataSeeder() {
                 // Start simulation from birth
                 const months: any[] = [];
 
+                // Growth Rate (k)
+                const k = 0.045; // Approx monthly growth rate coefficient
+
                 while (currentDate < now) {
                     const m = currentDate.getMonth();
                     const ageMonths = (currentDate.getTime() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
 
                     // State Factor
                     let stateFactor = 1.0;
-                    if (ageMonths < 12) stateFactor = 1.4; // Rapid juvenile growth
-                    else if (ageMonths > 72) stateFactor = 0.9; // Senior slow down
 
                     // Pregnancy/Lactation Logic
                     if ((animal.category === 'Vaca' || animal.category === 'Nodriza') && ageMonths > 24) {
                         const cyclePos = ageMonths % 14;
-                        if (cyclePos < 9) stateFactor = 1.1; // Pregnant (gaining mass)
-                        else stateFactor = 0.8; // Lactating (energy drain)
+                        if (cyclePos < 9) stateFactor = 1.05; // Pregnant
+                        else stateFactor = 0.95; // Lactating loss
                     }
 
                     const climatic = getClimateFactor(m);
                     const diet = getDietFactor(animal, m, ageMonths); // Diet Factor (1.0 - 1.5)
 
-                    // Approximate Diet Energy Mcal based on Diet Factor
-                    // 1.0 -> 2.0 Mcal (Pasto)
-                    // 1.5 -> 2.9 Mcal (Bellota/High Energy)
+                    // Approximate Diet Energy Mcal
                     const dietEnergy = 2.0 + ((diet - 1.0) * 1.8);
 
-                    const combinedFactor = stateFactor * climatic * diet;
-                    const daysInMonth = 30.44;
-                    const monthlyGain = geneticBase * combinedFactor * daysInMonth; // kg gained this month
-                    const adgObs = monthlyGain / daysInMonth;
+                    // --- VON BERTALANFFY GROWTH ---
+                    // Potential Gain based on distance to Adult Weight
+                    // Slows down as it approaches limit
+                    const remainingGrowth = adultWeight - simWeight;
+                    // If negative (overshoot), we lose weight (maintenance cost dominant)
+
+                    let monthlyGain = 0;
+                    if (remainingGrowth > 0) {
+                        monthlyGain = remainingGrowth * k * diet * climatic * stateFactor;
+                    } else {
+                        // Maintenance / Fluctuation mode
+                        // Can lose weight in bad climate/diet
+                        if (diet < 1.0 || climatic < 1.0) {
+                            monthlyGain = -15 + (diet * 10) + (climatic * 5); // Loss
+                        } else {
+                            monthlyGain = 5; // Slow creep or fat deposit
+                        }
+                    }
+
+                    // Cap monthly gain to realistic bio limits (e.g., max 60kg/month = 2kg/day)
+                    if (monthlyGain > 60) monthlyGain = 60;
 
                     simWeight += monthlyGain;
+                    if (simWeight < 40) simWeight = 40; // Floor
 
                     // METRICS CALCULATION (Using Fixed Logic)
                     // 1. Estimate Carcass (Yield)
-                    const thi = (m >= 5 && m <= 8) ? 78 : 65; // Simple THI approx
+                    const thi = (m >= 5 && m <= 8) ? 78 : 65;
                     const breedData = {
                         rc_base: 0.58,
-                        marbling_potential: 4, // Default to good genetics
+                        marbling_potential: 4,
                         adg_feedlot: 1.2
                     };
+                    const adgObs = monthlyGain / 30.44;
 
                     const carcass = CarcassQualityEngine.estimateCarcassResult(
                         { ageMonths, system: 'Extensivo', sex: animal.sex },
                         simWeight, adgObs, dietEnergy, thi, breedData
                     );
 
-                    // 2. Calculate Quality (Passing rc_percent!)
+                    // 2. Calculate Quality
                     const quality = CarcassQualityEngine.calculateQualityIndex(
                         { ageMonths, currentWeight: simWeight, sex: animal.sex, rc_percent: carcass.rc_percent },
                         breedData,
                         dietEnergy,
                         adgObs,
                         thi,
-                        150, // Days on feed (simulated)
+                        150,
                         0,
                         1,
                         { isBellota: diet > 1.2, hasLecithin: diet > 1.2 }
                     );
 
-                    // Track for events
                     months.push({ date: new Date(currentDate), m, diet, simWeight, adgObs, carcass, quality, dietEnergy, thi });
 
-                    // Store Monthly Record (Simulated)
-                    // Only keep last 24m to save space/memory if needed, or all if pruning handles it.
-                    // We'll add to array and relying on the Pruning Logic added earlier to trim at save time
                     newRecords.push({
                         date: new Date(currentDate).toISOString().split('T')[0],
                         weightKg: Math.floor(simWeight),
@@ -321,10 +350,9 @@ export function DataSeeder() {
 
                 // B. Generate Events from Timeline
                 months.forEach((step, idx) => {
-                    // Add periodic weighing or significant diet change events
                     const isMontaneraStart = step.m === 9 && step.diet === 1.5;
                     const isMontaneraEnd = step.m === 1 && step.diet === 1.5;
-                    const isYearlyCheck = step.date.getMonth() === 5; // June check
+                    const isYearlyCheck = step.date.getMonth() === 5;
 
                     if (isMontaneraStart) {
                         historyEvents.push({
@@ -356,23 +384,36 @@ export function DataSeeder() {
                 // C. UPDATE ANIMAL STATE (Emergent Property)
                 const finalWeight = Math.floor(simWeight);
                 animal.currentWeight = finalWeight;
-                animal.weight = finalWeight; // Update base prop too for consistency
+                animal.weight = finalWeight;
 
-                // Get last step for final event details
                 const lastStep = months[months.length - 1];
 
-                // Final Weighing Event
                 historyEvents.push({
                     id: generateUUID(),
                     type: 'Pesaje',
                     animalId: animal.id,
                     animalCrotal: animal.crotal || animal.id,
                     date: new Date().toISOString().split('T')[0],
-                    desc: `Pesaje Actual (Recalculado): ${finalWeight}kg. SEUROP: ${lastStep?.carcass.rc_percent}%`,
+                    desc: `Pesaje Actual (Recalculado V6): ${finalWeight}kg. SEUROP: ${lastStep?.carcass.rc_percent}%`,
                     weight: finalWeight,
                     status: 'completed'
                 });
             };
+
+            // B. PROCESS COWS (MATERNA) - REPRODUCTION EVENTS ONLY
+            // ... (Rest of code remains similar) ...
+
+            // ... (Code cut for brevity of replace block, resuming at critical sections if needed, but ReplaceFileContent requires contiguous block. Checking context lines.)
+            // The user wanted simple fix. I will replace the function body of generateBiomimeticHistory up to line 375.
+
+            // Wait, I need to match exact lines to replace correctly.
+            // I will use `replace_file_content` but I must be careful with the huge block.
+            // Actually, I can just replace the whole logic block which is isolated. 
+            // The file view shows lines 222 to 375 is `generateBiomimeticHistory`.
+
+            // I will return the replacement now.
+            // Also need to fix the write('isSeeded_V4', 'true') at line 696 to V6.
+
 
             // B. PROCESS COWS (MATERNA) - REPRODUCTION EVENTS ONLY
             // (We separate Reproduction from Weight to keep logic clean, then run weight for ALL)
@@ -502,7 +543,7 @@ export function DataSeeder() {
                             changed = true;
 
                             // Only generate full history for persisted ghosts
-                            generateBiomimeticHistory(ghostCalf);
+                            // generateBiomimeticHistory(ghostCalf); // DISABLED BY USER REQUEST
                         }
 
                         historyEvents.push({
@@ -523,6 +564,7 @@ export function DataSeeder() {
             });
 
             // C. RUN BIO-WEIGHT SIMULATION FOR ALL ACTIVE ANIMALS
+            /* DISABLED BY USER REQUEST - REAL DATA MODE
             animals.forEach(animal => {
                 // Skip if it's the external sire (don't manage his weight history)
                 if (animal.id === bullId && animal.name === 'Toro Externo') return;
@@ -533,6 +575,7 @@ export function DataSeeder() {
                     generateBiomimeticHistory(animal);
                 }
             });
+            */
 
             console.log("Bio-Simulation Complete.");
             // Clean duplicates just in case
@@ -693,7 +736,7 @@ export function DataSeeder() {
 
         if (changed || fincasChanged || statusChanged) {
             // First try to write isSeeded to prevent loop if main write fails
-            write('isSeeded_V4', 'true');
+            write('isSeeded_V6', 'true');
 
             write(animalsKey, prunedAnimals);
             write(fincasKey, fincas);
