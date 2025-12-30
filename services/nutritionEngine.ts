@@ -365,10 +365,12 @@ export const NutritionEngine = {
         const fdnPct = (metrics.totalFDN / metrics.totalDMI); // As decimal (0.30 = 30%)
         const cpPct = (metrics.totalProteinVal / 10 / metrics.totalDMI); // As decimal (0.12 = 12%)
 
+        const safeSystem = String(system || '');
+
         // 1. ACIDOSIS RISK
         // General Rule: FDN < 28% is risk in Extensive. Feedlots tolerate down to 15% with management.
         let minFdn = 0.28;
-        if (system.includes('Cebo') || system.includes('Intensivo')) minFdn = 0.15;
+        if (safeSystem.includes('Cebo') || safeSystem.includes('Intensivo')) minFdn = 0.15;
 
         if (fdnPct < minFdn) {
             alerts.push({
@@ -402,7 +404,7 @@ export const NutritionEngine = {
         }
 
         // 3. BELLOTA SPECIFIC RISKS
-        if (system.includes('Montanera')) {
+        if (safeSystem.includes('Montanera')) {
             const bellotaKg = activeFeeds.filter(f => f.item.name.toLowerCase().includes('bellota')).reduce((s, f) => s + (f.amount * (f.item.dm_percent / 100)), 0);
             const bellotaPct = bellotaKg / metrics.totalDMI;
 

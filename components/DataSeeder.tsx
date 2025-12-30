@@ -96,7 +96,7 @@ export function DataSeeder() {
         );
         const isFreshImport = animals.length > 0 && events.length === 0; // Loose check for events
 
-        const isSeededStorage = read<string>('isSeeded_V6', 'false') === 'true'; // Forced V6 for cleanup
+        const isSeededStorage = read<string>('isSeeded_V10', 'false') === 'true'; // Forced V10 for cleanup
 
         // Trigger if not seeded OR if we detect massive duplication (Safety Valve)
         const ghostCount = animals.filter(a => a.isGhost).length;
@@ -167,6 +167,11 @@ export function DataSeeder() {
                     console.log(`Clearing invalid paternity: ${a.id} had Ox father ${a.fatherId}`);
                     a.fatherId = null;
                     a.father = null;
+                }
+
+                // FIX: Remove double F1 in breed name and apply F2 nomenclature
+                if (a.breed && (a.breed.includes('F1 F1') || a.breed.match(/F1.*F1/))) {
+                    a.breed = a.breed.replace(/F1 F1/g, 'F2').replace(/F1.*F1/g, 'F2');
                 }
             });
 
@@ -528,7 +533,9 @@ export function DataSeeder() {
                                 crotal: ghostId,
                                 name: `(H) ${isFemale ? 'Novilla' : 'Ternero'} ${cycleCount}`,
                                 farm: cow.farm || 'SOTO del PRIOR',
-                                breed: (cow.breed === 'Limousin' || cow.breed === 'Limousina') ? 'Limousin' : `F1 ${cow.breed || 'Cruzada'} x Limousin`,
+                                breed: (cow.breed === 'Limousin' || cow.breed === 'Limousina') ? 'Limousin' :
+                                    (cow.breed && cow.breed.includes('F1')) ? `F2 ${cow.breed.replace('F1', '').trim()} x Limousin` :
+                                        `F1 ${cow.breed || 'Cruzada'} x Limousin`,
                                 sex: isFemale ? 'Hembra' : 'Macho',
                                 birthDate: calvingDate.toISOString().split('T')[0],
                                 motherId: cow.id,
@@ -661,15 +668,22 @@ export function DataSeeder() {
         const activeEvents = ['Sacrificio', 'Muerte', 'Venta', 'Salida'];
 
         const cleanAnimals = mergedAnimals.map((a: any) => {
-            // FIX: Ensure Crotal Exists
-            if (!a.crotal) {
-                // Generate deterministic fake crotal based on ID hash or random
-                const numericHash = a.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
-                const suffix = (numericHash % 10000).toString().padStart(4, '0');
-                a.crotal = `ES0${new Date().getFullYear()}${suffix}`; // Simple mock
-                // Better mock:
-                const rand = Math.floor(Math.random() * 9000) + 1000;
-                a.crotal = `ES099000${rand}`;
+            // FIX: Ensure Crotal Exists AND is Valid
+            const isFakeCrotal = a.crotal && a.crotal.startsWith('ES099');
+            const hasValidId = a.id && a.id.startsWith('ES') && a.id.length > 10;
+
+            if (!a.crotal || (isFakeCrotal && hasValidId)) {
+                // 1. Check if ID is already a valid Crotal (ES...)
+                if (hasValidId) {
+                    a.crotal = a.id;
+                } else if (!a.crotal) {
+                    // 2. Generate deterministic fake crotal based on ID hash or random
+                    const numericHash = a.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
+                    const suffix = (numericHash % 10000).toString().padStart(4, '0');
+                    // Use a clearly "Mock" range if we must
+                    const rand = Math.floor(Math.random() * 9000) + 1000;
+                    a.crotal = `ES099000${rand}`;
+                }
             }
             // Check events for this animal
             const animalEvents = events.filter(e => e.animalId === a.id);
@@ -736,7 +750,7 @@ export function DataSeeder() {
 
         if (changed || fincasChanged || statusChanged) {
             // First try to write isSeeded to prevent loop if main write fails
-            write('isSeeded_V6', 'true');
+            write('isSeeded_V10', 'true');
 
             write(animalsKey, prunedAnimals);
             write(fincasKey, fincas);
