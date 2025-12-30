@@ -14,6 +14,7 @@ import { ReportsManager } from '@/components/ReportsManager';
 import { UsersManager } from '@/components/UsersManager';
 import { UserProfile } from '@/components/UserProfile';
 import { DataSeeder } from '@/components/DataSeeder';
+import { DataManager } from '@/components/DataManager';
 
 
 
@@ -55,7 +56,7 @@ export function LivestockApp({ session }: { session: any }) {
             {activeTab === 'reports' && <ReportsManager />}
             {activeTab === 'users' && <UsersManager />}
             {activeTab === 'profile' && <UserProfile />}
-            {activeTab === 'data' && <div className="p-4 bg-white rounded shadow">Data Import/Export (Coming Soon)</div>}
+            {activeTab === 'data' && <DataManager />}
         </AppShell>
     );
 }

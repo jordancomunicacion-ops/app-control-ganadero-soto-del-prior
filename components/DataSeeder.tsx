@@ -20,10 +20,33 @@ export function DataSeeder() {
         let events = read<any[]>('events', []);
         let fincas = read<any[]>(fincasKey, []);
 
+        let changed = false;
+
+        if (fincas.length === 0) {
+            fincas.push({
+                id: 'finca-default-001',
+                name: 'SOTO del PRIOR',
+                municipio: 'Guadalupe',
+                municipioCode: '095',
+                provinciaCode: '10', // Cáceres
+                poligono: '1',
+                parcela: '1',
+                superficie: 153940, // ~15.39 ha
+                recintos: [],
+                coords: { lat: 39.452, lng: -5.332 }, // Guadalupe coords
+                license: 'ES100950000001',
+                maxHeads: 90,
+                soilId: 'franco_arenoso',
+                corrals: 4,
+                feedingSystem: 'extensivo'
+            });
+            changed = true;
+        }
+
         const targetOxenCrotals = ['ES104332181960', 'ES338908386379', 'ES026542351161'];
         const targetCowsCrotals = ['ES000000000001', 'ES000000000002', 'ES000000000003', 'ES000000000004'];
 
-        let changed = false;
+
 
         const generateUUID = () => {
             return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -73,10 +96,14 @@ export function DataSeeder() {
         );
         const isFreshImport = animals.length > 0 && events.length === 0; // Loose check for events
 
-        const isSeededStorage = read<string>('isSeeded_V3', 'false') === 'true'; // Forced V3
+        const isSeededStorage = read<string>('isSeeded_V5', 'false') === 'true'; // Forced V5 for cleanup
 
-        // Force Enrichent always for this fix step
-        const shouldRunEnrichment = !isSeededStorage; // (isFreshImport || hasBadData) && !isSeededStorage;
+        // Trigger if not seeded OR if we detect massive duplication (Safety Valve)
+        const ghostCount = animals.filter(a => a.isGhost).length;
+        const totalCount = animals.length;
+        const isDuplicatesDetected = totalCount > 100 && ghostCount > (totalCount * 0.8);
+
+        const shouldRunEnrichment = !isSeededStorage || isDuplicatesDetected;
 
         if (shouldRunEnrichment && !changed) {
             console.log("Starting Data Enrichment & Reparation Engine V3 (Weight Recalc)...");
@@ -86,6 +113,23 @@ export function DataSeeder() {
                 events = [];
             }
             let historyEvents: any[] = [...events];
+
+            // 0. EMERGENCY PURGE (Before any processing to prevent crash)
+            if (isDuplicatesDetected) {
+                console.warn("CRITICAL: Massive duplication detected. Purging ghosts immediately.");
+                const real = animals.filter(a => !a.isGhost);
+                // Keep only last 50 ghosts to be safe, or just 0
+                const ghosts = animals.filter(a => a.isGhost).slice(-20);
+                animals = [...real, ...ghosts];
+                console.log("Purge Result: Reduced animals to " + animals.length);
+
+                // Deep clean events too
+                events = events.slice(-500); // Keep last 500
+                write('events', events);
+                write('isSeeded_V5', 'true');
+            }
+
+            // 1. PRE-CLEANUP: FIX NAMES, CATEGORIES & FARM
 
             // 0. PRE-CLEANUP: FIX NAMES, CATEGORIES & FARM
             const oxenIds = new Set<string>(); // Gather known oxen IDs first
@@ -527,15 +571,63 @@ export function DataSeeder() {
             }
         });
 
-        // 5. Sanitation: Dedup & Event Consistency
+        // 5. Sanitation: Dedup by ID AND Name (Merge duplicates)
         const uniqueAnimalsMap = new Map();
+        // First pass: unique by ID
         animals.forEach(a => {
             uniqueAnimalsMap.set(a.id, a);
         });
 
+        // Second pass: unique by Name (keep latest) to fix "Double Seeding"
+        const uniqueByName = new Map();
+        Array.from(uniqueAnimalsMap.values()).forEach((a: any) => {
+            const key = (a.name || 'unknown').trim().toUpperCase();
+            // If exists, keep the one with more data or latest
+            if (uniqueByName.has(key)) {
+                const existing = uniqueByName.get(key);
+                // Prefer the one with a real Crotal or ID
+                if (!existing.crotal && a.crotal) {
+                    uniqueByName.set(key, a);
+                }
+                // Or just overwrite if we assume later is better? 
+                // Let's stick to keeping the first one encountered if we iterate backwards, or logic:
+                // Actually, let's keep the one that looks "older" (real seed) vs new gen?
+                // Simple logic: Overwrite.
+                // uniqueByName.set(key, a); 
+                // WAIT: If we have multiple "BUEY_MORU_01" with different IDs, we want to keep ONE.
+            } else {
+                uniqueByName.set(key, a);
+            }
+        });
+
+        // Rebuild uniqueAnimalsMap from Unique Names (Aggressive Dedup)
+        // Only do this for manually named animals (BUEY_, TORO_, VACA_)
+        // UUID-named animals are likely distinct.
+        const mergedAnimals = Array.from(uniqueAnimalsMap.values()).filter((a: any) => {
+            const nameIdx = (a.name || '').toUpperCase();
+            // If this animal is the "chosen one" in the name map, keep it.
+            // But we need to be careful not to merge "Novilla 1" and "Novilla 1" if they are different cycles?
+            // The issue refers to "BUEY_..." types likely.
+            if (nameIdx.includes('BUEY') || nameIdx.includes('TORO') || nameIdx.includes('VACA')) {
+                return uniqueByName.get(nameIdx).id === a.id;
+            }
+            return true;
+        });
+
         let statusChanged = false;
         const activeEvents = ['Sacrificio', 'Muerte', 'Venta', 'Salida'];
-        const cleanAnimals = Array.from(uniqueAnimalsMap.values()).map((a: any) => {
+
+        const cleanAnimals = mergedAnimals.map((a: any) => {
+            // FIX: Ensure Crotal Exists
+            if (!a.crotal) {
+                // Generate deterministic fake crotal based on ID hash or random
+                const numericHash = a.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
+                const suffix = (numericHash % 10000).toString().padStart(4, '0');
+                a.crotal = `ES0${new Date().getFullYear()}${suffix}`; // Simple mock
+                // Better mock:
+                const rand = Math.floor(Math.random() * 9000) + 1000;
+                a.crotal = `ES099000${rand}`;
+            }
             // Check events for this animal
             const animalEvents = events.filter(e => e.animalId === a.id);
 
@@ -588,9 +680,20 @@ export function DataSeeder() {
             changed = true;
         }
 
+        // 7. EMERGENCY GHOST PURGE (Duplicate Storm Fix)
+        if (cleanAnimals.filter(a => a.isGhost).length > 200) {
+            console.warn("Detected Ghost Explosion. Purging ALL ghosts for safety reset.");
+            // Keep only non-ghosts
+            const onlyReal = cleanAnimals.filter(a => !a.isGhost);
+            // Replace array
+            cleanAnimals.length = 0;
+            cleanAnimals.push(...onlyReal);
+            changed = true;
+        }
+
         if (changed || fincasChanged || statusChanged) {
             // First try to write isSeeded to prevent loop if main write fails
-            write('isSeeded_V3', 'true');
+            write('isSeeded_V4', 'true');
 
             write(animalsKey, prunedAnimals);
             write(fincasKey, fincas);

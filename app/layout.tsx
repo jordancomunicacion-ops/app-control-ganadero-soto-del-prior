@@ -16,9 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Soto del Prior - Control Ganadero",
   description: "Gestión avanzada de ganadería",
-  icons: {
-    icon: "/icon.png",
-  },
+  // icons handled by app/icon.png convention
 };
 
 export default function RootLayout({

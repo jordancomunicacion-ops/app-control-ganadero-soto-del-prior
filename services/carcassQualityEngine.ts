@@ -47,7 +47,7 @@ export const CarcassQualityEngine = {
         const C = AppConfig.carcass.rc_adjust;
 
         // Base RC
-        let rcBase = parseFloat(breedData.rc_base);
+        let rcBase = parseFloat(breedData.yield_potential || breedData.rc_base);
         if (isNaN(rcBase)) {
             const sys = (animal.system || 'Intensivo').toLowerCase();
             if (sys.includes('pastoreo')) rcBase = AppConfig.carcass.defaults.rc_grazing;
@@ -174,11 +174,11 @@ export const CarcassQualityEngine = {
 
     estimateConformation(yieldPct: number) {
         if (!yieldPct) return 'R';
-        if (yieldPct >= 62) return 'S';
-        if (yieldPct >= 60) return 'E';
-        if (yieldPct >= 57) return 'U';
-        if (yieldPct >= 55) return 'R';
-        if (yieldPct >= 50) return 'O';
+        if (yieldPct >= 64) return 'S';
+        if (yieldPct >= 62) return 'E';
+        if (yieldPct >= 60) return 'U';
+        if (yieldPct >= 57) return 'R';
+        if (yieldPct >= 54) return 'O';
         return 'P';
     }
 };

@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { NutritionEngine } from '../services/nutritionEngine';
 import { CarcassEngine } from '../services/carcassEngine';
+import { LifecycleEngine } from '../services/lifecycleEngine';
 import { BreedManager, Breed } from '../services/breedManager';
+import { PriceEngine } from '../services/priceEngine';
+
 
 export function useAnimalCalculator() {
     const [breeds, setBreeds] = useState<Record<string, Breed>>({});
@@ -24,6 +27,7 @@ export function useAnimalCalculator() {
         objective: string;
         system: string;
         feeds?: any[];
+        events?: any[];
         overrideBreed?: Breed; // Support for simulating different breeds/crosses
     }) => {
         setLoading(true);
@@ -33,8 +37,8 @@ export function useAnimalCalculator() {
         try {
             const { animal, system } = params;
 
-            // Age in Months
-            const ageMonths = (new Date().getTime() - new Date(animal.birth).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+            // Age in Months (Robust Check)
+            const ageMonths = LifecycleEngine.getAgeInMonths(animal.birth_date || animal.birth || animal.birthDate);
 
             // Determine Effective Breed
             let breed = params.overrideBreed || BreedManager.getBreedById(animal.breed);
@@ -57,72 +61,57 @@ export function useAnimalCalculator() {
 
             // Fallback & Robust Detection
             if (!breed) {
-                // Try Exact Match
-                breed = BreedManager.getBreedByName(animal.breed);
-
-                // --- ROBUST DETECTION (Synced with Inventory/WeightEngine) ---
+                // Try Exact Match or Robust Normalization
                 const rawBreed = animal.breed || '';
                 const normalizedBreed = rawBreed.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-                if (!breed && normalizedBreed) {
-                    if (normalizedBreed.includes('betizu')) {
-                        breed = {
-                            id: 'MANUAL_BETIZU', code: 'BET', name: 'Betizu (Calc)',
-                            biological_type: 'Rustic_European', weight_female_adult: 320, weight_male_adult: 450,
-                            adg_feedlot: 0.6, slaughter_age_months: 36
-                        } as any;
+                // Try to find in database first (robust search)
+                const dbBreeds = BreedManager.getAllBreeds();
+                breed = dbBreeds.find(b =>
+                    normalizedBreed.includes(b.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")) ||
+                    normalizedBreed.includes(b.code.toLowerCase())
+                );
+
+                // If still not found and it's a generic "Cruzado", try parents one last time
+                if (!breed && (normalizedBreed.includes('cruzad') || normalizedBreed.includes('mestiz'))) {
+                    const fatherId = animal.genotype?.fatherBreedId || animal.fatherBreedId;
+                    const motherId = animal.genotype?.motherBreedId || animal.motherBreedId;
+                    if (fatherId && motherId) {
+                        breed = BreedManager.calculateHybrid(fatherId, motherId) as any;
                     }
-                    else if (normalizedBreed.includes('limousin') || normalizedBreed.includes('limusin')) {
-                        breed = {
-                            id: 'MANUAL_LIM', code: 'LIM', name: 'Limousin (Calc)',
-                            biological_type: 'Continental', weight_female_adult: 700, weight_male_adult: 1100,
-                            adg_feedlot: 1.4, slaughter_age_months: 18
-                        } as any;
-                    }
-                    else if (normalizedBreed.includes('charol')) {
-                        breed = {
-                            id: 'MANUAL_CHA', code: 'CHA', name: 'Charolais (Calc)',
-                            biological_type: 'Continental', weight_female_adult: 800, weight_male_adult: 1200,
-                            adg_feedlot: 1.5, slaughter_age_months: 18
-                        } as any;
-                    }
-                    else if (normalizedBreed.includes('avile')) {
-                        breed = {
-                            id: 'MANUAL_AVI', code: 'AVI', name: 'Avileña (Calc)',
-                            biological_type: 'Rustic_European', weight_female_adult: 550, weight_male_adult: 900,
-                            adg_feedlot: 1.1, slaughter_age_months: 24
-                        } as any;
-                    }
-                    else if (normalizedBreed.includes('retinta')) {
-                        breed = {
-                            id: 'MANUAL_RET', code: 'RET', name: 'Retinta (Calc)',
-                            biological_type: 'Rustic_European', weight_female_adult: 580, weight_male_adult: 950,
-                            adg_feedlot: 1.1, slaughter_age_months: 24
-                        } as any;
-                    }
-                    else if (normalizedBreed.includes('morucha')) {
-                        breed = {
-                            id: 'MANUAL_MOR', code: 'MOR', name: 'Morucha (Calc)',
-                            biological_type: 'Rustic_European', weight_female_adult: 550, weight_male_adult: 900,
-                            adg_feedlot: 1.1, slaughter_age_months: 24
-                        } as any;
-                    }
-                    // Fallback to "Generic" if absolute failure
-                    if (!breed) breed = BreedManager.getAllBreeds()[0];
+                }
+
+                // Final Fallback: If no breed data, use a balanced "Synthetic Cross" (Limousin x Retinta profile)
+                if (!breed) {
+                    breed = {
+                        id: 'GENERIC_CROSS', code: 'CROSS', name: 'Cruzado (Genérico)',
+                        subspecies: 'Cruzado', biological_type: 'Composite',
+                        weight_female_adult: 600, weight_male_adult: 950,
+                        adg_feedlot: 1.2, slaughter_age_months: 20,
+                        conformation_potential: 4, // R+/U-
+                        marbling_potential: 3, // Average
+                        yield_potential: 0.58,
+                        heat_tolerance: 6, milk_potential: 3
+                    } as any;
                 }
             }
 
             // TS Safety Guarantee
             if (!breed) throw new Error("No se pudo determinar la raza del animal.");
 
+            // Ensure weight is numeric and localized to the most accurate property
+            const currentWeight = parseFloat(animal.currentWeight || animal.weight || 0);
+
             // 1. Calculate Diet Requirements (New API)
             // Map objective to internal state labels if needed
             let state: any = 'Cebo';
             if (params.objective === 'Mantenimiento') state = 'Mantenimiento';
+            if (params.objective.includes('Recría')) state = 'Mantenimiento'; // Use maintenance-like fiber for weaning/recria moderate
+            if (params.objective.includes('Cebo') || params.objective.includes('Engorde')) state = 'Cebo';
 
             // Assume weight is current weight
             const adgTarget = breed.adg_feedlot || 1.2; // Use breed potential as target baseline
-            const reqs = NutritionEngine.calculateRequirements(animal.weight, adgTarget, ageMonths, state, animal.sex || 'Macho');
+            const reqs = NutritionEngine.calculateRequirements(currentWeight, adgTarget, ageMonths, state, animal.sex || 'Macho');
 
             // 2. Real Diet Calculation
             let dietToAnalyze = params.feeds || [];
@@ -140,6 +129,7 @@ export function useAnimalCalculator() {
 
             let totalEnergyMcal = 0;
             let totalProteinG = 0;
+            let totalFDN = 0;
             let totalDMI = 0;
 
             dietToAnalyze.forEach(item => {
@@ -147,30 +137,57 @@ export function useAnimalCalculator() {
                 totalDMI += kgMS;
                 totalEnergyMcal += kgMS * (item.energy_mcal || 0);
                 totalProteinG += kgMS * ((item.protein_percent || 0) * 10);
+                totalFDN += kgMS * ((item.fiber_percent || item.ndf_percent || item.fdn_percent || 0) / 100); // Check multiple keys for FDN
             });
 
             // 3. Performance Prediction (New API)
             // Avg Energy Density
             const dietEnergyDensity = totalDMI > 0 ? (totalEnergyMcal / totalDMI) : 0;
 
-            const predictedADG = NutritionEngine.predictPerformance(breed, dietEnergyDensity, totalDMI, animal.weight);
+            const predictedADG = NutritionEngine.predictPerformance(breed, dietEnergyDensity, totalDMI, currentWeight);
 
             // 4. Carcass Estimation (New API)
             const carcass = CarcassEngine.calculateCarcass(
-                animal.weight + (predictedADG * 90), // Projected weight
-                ageMonths + 3,
+                animal.weight + (predictedADG * 30), // Projected weight (30 days)
+                ageMonths + 1,
                 breed,
                 dietEnergyDensity,
                 predictedADG,
                 {
-                    isBellota: NutritionEngine.checkBellotaCompliance({ ageMonths }, new Date().getMonth()).compliant,
-                    isOx: animal.sex === 'Macho' && ageMonths > 24
+                    isBellota: system.toLowerCase().includes('montanera') || system.toLowerCase().includes('bellota'),
+                    isOx: (animal.sex === 'Macho' || animal.sex === 'Castrado') && ageMonths > 24,
+                    sex: animal.sex || 'Macho'
                 }
             );
 
             // 5. Environmental & Efficiency (New API)
             const dietPb = totalDMI > 0 ? (totalProteinG / 10 / totalDMI) : 0; // Back to %
-            const nitrogenBalance = NutritionEngine.calculateNitrogenBalance(animal.weight, predictedADG, dietPb, totalDMI);
+            const nitrogenBalance = NutritionEngine.calculateNitrogenBalance(currentWeight, predictedADG, dietPb, totalDMI) as any;
+
+            // 6. Advanced Financials
+            const historicalEventCosts = (params.events || []).reduce((sum, e) => sum + (parseFloat(e.cost) || 0), 0);
+
+            // Historical Feed Cost: sum from monthlyRecords if they have cost
+            // Fallback: estimate based on average cost per kg if not present
+            const historicalFeedCosts = (animal.monthlyRecords || []).reduce((sum: number, record: any) => {
+                const recordCost = record.totalCost || (record.w || record.weightKg || 0) * 0.02 * 0.25 * 30; // rough estimate if missing
+                return sum + recordCost;
+            }, 0);
+
+            const futureFeedCost = totalCost * 30;
+            const totalAccumulatedCost = historicalEventCosts + historicalFeedCosts + futureFeedCost;
+
+            const salesProjection = PriceEngine.calculateSalesPrice(
+                {
+                    ageMonths: ageMonths + 1,
+                    sex: animal.sex,
+                    isCastrated: animal.sex === 'Castrado',
+                    isParida: animal.status === 'Parto' || animal.category === 'Nodriza'
+                },
+                carcass.carcass_weight,
+                carcass.conformation,
+                Math.round(carcass.marbling_score) // Round to nearest integer for SEUROP lookup (e.g. 3 instead of 3.4)
+            );
 
             setResults({
                 diet: dietToAnalyze,
@@ -179,19 +196,53 @@ export function useAnimalCalculator() {
                 dmiActual: totalDMI,
                 totalCost,
                 totalKg,
+                historicalCosts: {
+                    events: historicalEventCosts,
+                    feed: historicalFeedCosts,
+                    total: historicalEventCosts + historicalFeedCosts
+                },
+                financials: {
+                    projectedSales: salesProjection.totalValue,
+                    pricePerKg: salesProjection.pricePerKg,
+                    category: salesProjection.categoryCode,
+                    totalCost: totalAccumulatedCost,
+                    margin: salesProjection.totalValue - totalAccumulatedCost
+                },
                 fcr: predictedADG > 0 ? (totalCost / predictedADG) : 0,
                 energyTarget: reqs.em_mcal * totalDMI, // Reqs logic implies density * intake
                 energyActual: totalEnergyMcal,
                 proteinPercent: dietPb,
-                imbalances: [
-                    totalEnergyMcal < (reqs.em_mcal * totalDMI * 0.9) ? '⚠️ Energía insuficiente' : '',
-                    dietPb < reqs.pb_percent ? `⚠️ Proteína baja (Req: ${reqs.pb_percent}%)` : ''
-                ].filter(Boolean),
+                alerts: NutritionEngine.validateDiet(
+                    dietToAnalyze.map(f => ({ item: f, amount: f.amount })),
+                    {
+                        totalDMI,
+                        totalFDN,
+                        totalProteinVal: totalProteinG, // grams
+                        totalEnergy: totalEnergyMcal,
+                        reqs
+                    },
+                    params.system
+                ),
+                imbalances: [], // Deprecated
                 carcass: {
                     conformation_est: carcass.conformation,
                     marbling_est: carcass.marbling_score,
                     is_premium: carcass.is_premium,
-                    rc_percent: carcass.rc_percent
+                    rc_percent: carcass.rc_percent,
+                    limitingFactor: (() => {
+                        // Logic to determine what's holding back growth
+                        const reqEnergy = reqs.em_mcal * totalDMI; // approx needed
+                        const reqProtein = (reqs.pb_percent / 100) * totalDMI * 1000; // grams needed
+
+                        const energyRatio = reqEnergy > 0 ? totalEnergyMcal / reqEnergy : 1;
+                        const proteinRatio = reqProtein > 0 ? (totalProteinG) / reqProtein : 1;
+
+                        if (predictedADG >= (breed.adg_feedlot || 1.4)) return 'Genética (Máx)';
+                        if (totalDMI >= (reqs.dmi_capacity_kg * 0.95) && energyRatio < 1 && proteinRatio < 1) return 'Ingesta (Llenado)';
+
+                        if (energyRatio < proteinRatio) return 'Energía';
+                        return 'Proteína';
+                    })()
                 },
                 envImpact: nitrogenBalance
             });

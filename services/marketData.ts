@@ -7,20 +7,21 @@ export interface MarketPrice {
     last_updated: string;
 }
 
-// Defaults based on MAPA 2024 (approx)
+// Defaults based on Lonja de Salamanca / Ternera Charra (Dec 2025)
 export const DEFAULT_PRICES: MarketPrice[] = [
-    { category: 'Añojo', class_seurop: 'E', price_eur_kg_canal: 5.60, trend: 'up', last_updated: '2024-12-01' },
-    { category: 'Añojo', class_seurop: 'U', price_eur_kg_canal: 5.45, trend: 'up', last_updated: '2024-12-01' },
-    { category: 'Añojo', class_seurop: 'R', price_eur_kg_canal: 5.30, trend: 'stable', last_updated: '2024-12-01' },
-    { category: 'Añojo', class_seurop: 'O', price_eur_kg_canal: 4.90, trend: 'down', last_updated: '2024-12-01' },
+    { category: 'Añojo', class_seurop: 'E', price_eur_kg_canal: 7.94, trend: 'up', last_updated: '2025-12-30' },
+    { category: 'Añojo', class_seurop: 'U', price_eur_kg_canal: 7.79, trend: 'up', last_updated: '2025-12-30' },
+    { category: 'Añojo', class_seurop: 'R', price_eur_kg_canal: 7.58, trend: 'stable', last_updated: '2025-12-30' },
+    { category: 'Añojo', class_seurop: 'O', price_eur_kg_canal: 7.45, trend: 'down', last_updated: '2025-12-30' },
 
-    { category: 'Ternera', class_seurop: 'E', price_eur_kg_canal: 5.80, trend: 'up', last_updated: '2024-12-01' },
-    { category: 'Ternera', class_seurop: 'U', price_eur_kg_canal: 5.65, trend: 'up', last_updated: '2024-12-01' },
-    { category: 'Ternera', class_seurop: 'R', price_eur_kg_canal: 5.45, trend: 'stable', last_updated: '2024-12-01' },
+    { category: 'Ternera', class_seurop: 'E', price_eur_kg_canal: 8.03, trend: 'up', last_updated: '2025-12-30' },
+    { category: 'Ternera', class_seurop: 'U', price_eur_kg_canal: 7.91, trend: 'up', last_updated: '2025-12-30' },
+    { category: 'Ternera', class_seurop: 'R', price_eur_kg_canal: 7.79, trend: 'stable', last_updated: '2025-12-30' },
+    { category: 'Ternera', class_seurop: 'O', price_eur_kg_canal: 7.63, trend: 'down', last_updated: '2025-12-30' },
 
-    { category: 'Vaca', class_seurop: 'R', price_eur_kg_canal: 4.20, trend: 'stable', last_updated: '2024-12-01' },
-    { category: 'Vaca', class_seurop: 'O', price_eur_kg_canal: 3.50, trend: 'down', last_updated: '2024-12-01' },
-    { category: 'Vaca', class_seurop: 'P', price_eur_kg_canal: 2.80, trend: 'down', last_updated: '2024-12-01' }
+    { category: 'Vaca', class_seurop: 'R', price_eur_kg_canal: 7.60, trend: 'stable', last_updated: '2025-12-30' },
+    { category: 'Vaca', class_seurop: 'O', price_eur_kg_canal: 7.20, trend: 'down', last_updated: '2025-12-30' },
+    { category: 'Vaca', class_seurop: 'P', price_eur_kg_canal: 6.40, trend: 'down', last_updated: '2025-12-30' }
 ];
 
 export const MarketData = {

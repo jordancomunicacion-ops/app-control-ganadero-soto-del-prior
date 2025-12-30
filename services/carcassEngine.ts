@@ -74,37 +74,38 @@ export const CarcassEngine = {
             }
 
             // HETEROSIS (Hybrid Vigor) - Boosts Yield/Resilience slightly
-            effectiveBreed.yield_potential = (effectiveBreed.yield_potential || 0.58) + 0.02; // +2% yield for hybrids
+            effectiveBreed.yield_potential = (effectiveBreed.yield_potential || 0.58) + 0.01; // +1% yield for hybrids
         }
 
         // --- 1. YIELD CALCULATION (Rendimiento Canal) ---
         // Base Yield comes strictly from Genetics (e.g. Limousin 62%, Angus 58%)
         // If data missing, fallback to Type-based Assumption
-        let baseYield = effectiveBreed.yield_potential || 0.55;
+        let baseYield = effectiveBreed.yield_potential || 0.53;
         if (!effectiveBreed.yield_potential) {
-            if (breed.code === 'AZB') baseYield = 0.65; // Hyper-muscular
-            else if (breed.code === 'LIM' || breed.code === 'BDA') baseYield = 0.61;
-            else if (breed.code === 'CHA') baseYield = 0.60;
-            else if (breed.code === 'ANG' || breed.code === 'HER') baseYield = 0.57;
+            if (breed.code === 'AZB') baseYield = 0.63; // Hyper-muscular
+            else if (breed.code === 'LIM' || breed.code === 'BDA') baseYield = 0.59;
+            else if (breed.code === 'CHA') baseYield = 0.58;
+            else if (breed.code === 'ANG' || breed.code === 'HER') baseYield = 0.55;
         }
 
         // Sex Adjustment (Biology)
-        if (options.sex === 'Macho') baseYield += 0.02; // Bulls are denser/leaner
-        if (options.sex === 'Hembra') baseYield -= 0.015; // Females have more visceral fat waste
-        if (options.sex === 'Castrado' || options.isOx) baseYield -= 0.005; // Steers/Oxen slightly less yield than bulls
+        if (options.sex === 'Macho') baseYield += 0.01; // Bulls slightly denser
+        if (options.sex === 'Hembra') baseYield -= 0.02; // Females have more visceral waste
+        if (options.sex === 'Castrado' || options.isOx) baseYield -= 0.01;
 
         // Physiological Checks
-        // Energy Diet pushes "Finish" (Fat cover increases dressing percentage slightly until overfat)
-        const energyFactor = this.norm(dietEnergyMcal, 2.0, 3.0) * 0.02;
+        // Energy Diet pushes "Finish"
+        const energyFactor = this.norm(dietEnergyMcal, 1.5, 3.0) * 0.012; // Max +1.2% (Reduced from 2%)
 
         // Age Factor: Maturity fills the frame
-        const ageFactor = this.norm(ageMonths, 12, 36) * 0.015;
+        const ageFactor = this.norm(ageMonths, 12, 36) * 0.010; // Max +1.0% (Reduced from 1.5%)
 
         // Synergy (Metabolic Efficiency Bonus)
         const synergyYield = options.synergyBonuses ? (options.synergyBonuses.yield_percent / 100) : 0;
 
         let rc = baseYield + energyFactor + ageFactor + synergyYield;
-        rc = this.clamp(rc, 0.48, 0.72); // Biological Extremes
+        console.log('[CarcassEngine] Yield Calc:', { baseYield, energyFactor, ageFactor, synergyYield, rc, breedCode: breed.code });
+        rc = this.clamp(rc, 0.45, 0.70); // Realistic Biological Extremes
 
         // --- 2. MARBLING (Intramuscular Fat) ---
         // Dynamics: Genetics (Base) + Diet (Fuel) + Climate (Condition)
@@ -114,8 +115,8 @@ export const CarcassEngine = {
 
         // B. Diet Energy (The "Finisher" Factor)
         // Exponential curve: High energy allows expression of genetic potential
-        const energyFactorMarbling = this.norm(dietEnergyMcal, 2.0, 3.2); // 0..1
-        const dietBonus = energyFactorMarbling * 2.5; // Max +2.5 points from diet alone
+        const energyFactorMarbling = this.norm(dietEnergyMcal, 1.6, 3.0); // Starts at 1.6 instead of 2.0
+        const dietBonus = energyFactorMarbling * 2.0; // Max +2.0 points from diet alone
         marblingScoreInternal += dietBonus;
 
         // C. Age/Weight (Maturity)
@@ -124,6 +125,10 @@ export const CarcassEngine = {
         marblingScoreInternal *= (0.5 + (maturity * 0.5)); // 50% penalty if very young, 100% potential if mature
 
         // D. Synergies (e.g. Bellota)
+        if (options.isBellota) {
+            marblingScoreInternal += 0.8; // Significant boost for acorn-fed finishers
+        }
+
         if (options.synergyBonuses?.marbling) {
             marblingScoreInternal += options.synergyBonuses.marbling;
         }
@@ -166,7 +171,7 @@ export const CarcassEngine = {
         let score = pot;
 
         // B. Diet Impact (The "Angus to S" Factor)
-        const dietBonusConformation = this.norm(dietEnergyMcal, 2.2, 3.0) * 1.5; // Max +1.5 points
+        const dietBonusConformation = this.norm(dietEnergyMcal, 1.8, 2.8) * 1.5; // More responsive range 1.8-2.8
         score += dietBonusConformation;
 
         // C. Climate Adaptation (Genetics vs Environment)

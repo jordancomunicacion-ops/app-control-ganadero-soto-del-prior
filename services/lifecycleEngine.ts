@@ -20,6 +20,18 @@ export interface LifecycleAlert {
 
 export const LifecycleEngine = {
     /**
+     * Helper: Calculate Age in Months from Birth Date string
+     */
+    getAgeInMonths(birthDateStr: string): number {
+        if (!birthDateStr) return 0; // or default?
+        const birth = new Date(birthDateStr);
+        const today = new Date();
+        const diffTime = Math.abs(today.getTime() - birth.getTime());
+        const diffMonths = diffTime / (1000 * 60 * 60 * 24 * 30.44);
+        return parseFloat(diffMonths.toFixed(1));
+    },
+
+    /**
      * Determine Reproductive Status based on Event History
      * State Machine: Inseminación -> Cubierta -> Diagnóstico(+) -> Gestante -> Parto -> Postparto -> Vacía
      */

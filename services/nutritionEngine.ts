@@ -77,7 +77,7 @@ export const NutritionEngine = {
 
         // 1. Razas Infiltración (Wagyu, Angus-High)
         if (fType === 'infiltracion') {
-            if (currentStage === 'terminado' || objective.includes('Engorde') || objective.includes('Eficiencia')) {
+            if (currentStage === 'terminado' || objective.includes('Engorde') || objective.includes('Cebo') || objective.includes('Eficiencia')) {
                 // Objetivo Calidad > Velocidad
                 targets.energyDensity = 2.9; // High Energy for marbling
                 targets.proteinDensity = 12; // Lower protein to avoid late frame growth
@@ -95,7 +95,7 @@ export const NutritionEngine = {
 
         // 2. Crecimiento Magro (Charolais, Limousin)
         else if (fType === 'crecimiento_magro') {
-            if (currentStage === 'terminado' || objective.includes('Engorde') || objective.includes('Eficiencia')) {
+            if (currentStage === 'terminado' || objective.includes('Engorde') || objective.includes('Cebo') || objective.includes('Eficiencia')) {
                 // Maximizando músculo
                 targets.energyDensity = 2.8;
                 targets.proteinDensity = 14.5; // High protein for muscle
@@ -355,39 +355,118 @@ export const NutritionEngine = {
     },
 
     validateDiet(
-        rationIngredients: { type: string, dm_kg: number, percent_dm: number, feed_name: string }[],
-        totalFDN: number,
-        totalCP: number,
-        bellotaPercent: number,
-        options: { bellotaType?: string } = {}
+        activeFeeds: { item: any, amount: number }[], // Item + Fresh Amount
+        metrics: { totalDMI: number, totalFDN: number, totalProteinVal: number, totalEnergy: number, reqs: DietRequirement },
+        system: string
     ): DietAlert[] {
-        // ... (Preserved validation logic) ...
         const alerts: DietAlert[] = [];
-        // Logic is good, just simplified copy for brevity in this replacement
-        // Ideally we keep the exact logic from previous file.
-        // Re-copying the implementation to ensure no regression.
-        const concentratesPct = rationIngredients
-            .filter(i => i.type === 'Concentrado' || i.type === 'Proteico')
-            .reduce((sum, i) => sum + i.percent_dm, 0);
+        if (metrics.totalDMI <= 0) return alerts;
 
-        if (concentratesPct > 60) {
-            alerts.push({ code: 'ACIDOSIS', level: 'critical', message: '⚠️ Riesgo Acidosis: Concentrado >60%.', action: '⬇️ Bajar Granos.' });
+        const fdnPct = (metrics.totalFDN / metrics.totalDMI); // As decimal (0.30 = 30%)
+        const cpPct = (metrics.totalProteinVal / 10 / metrics.totalDMI); // As decimal (0.12 = 12%)
+
+        // 1. ACIDOSIS RISK
+        // General Rule: FDN < 28% is risk in Extensive. Feedlots tolerate down to 15% with management.
+        let minFdn = 0.28;
+        if (system.includes('Cebo') || system.includes('Intensivo')) minFdn = 0.15;
+
+        if (fdnPct < minFdn) {
+            alerts.push({
+                code: 'ACIDOSIS',
+                level: 'critical',
+                message: `Riesgo de Acidosis: Fibra muy baja (${(fdnPct * 100).toFixed(1)}%). Mínimo recomendado: ${(minFdn * 100).toFixed(0)}%.`,
+                action: 'Aumente la proporción de forraje o fibra efectiva.'
+            });
         }
-        if (totalFDN < 20) {
-            alerts.push({ code: 'LOW_FIBER', level: 'critical', message: '⚠️ Fibra <20%. Riesgo parada.', action: '⬆️ Paja.' });
+        else if (fdnPct < (minFdn + 0.04)) { // Warning zone
+            alerts.push({
+                code: 'LOW_FIBER',
+                level: 'warning',
+                message: `Fibra ajustada (${(fdnPct * 100).toFixed(1)}%). Vigile la rumia.`,
+                action: 'Considere añadir algo más de paja o heno.'
+            });
         }
 
-        const isMontaneraMode = bellotaPercent > 0;
-        if (isMontaneraMode) {
-            if (bellotaPercent > 40) alerts.push({ code: 'BELLOTA_TOXICITY', level: 'critical', message: '⚠️ Exceso Bellota >40%.', action: '⬇️ Limitar.' });
-            if (totalFDN < 28) alerts.push({ code: 'BELLOTA_FIBER', level: 'critical', message: '⛔ Montanera: Fibra <28%.', action: '⬆️ Paja Obligatoria.' });
-            if (totalCP < 12) alerts.push({ code: 'BELLOTA_PROTEIN', level: 'warning', message: '⛔ Montanera: Proteína Baja.', action: '⬆️ Suplementar.' });
+        // 2. METEORISMO (Bloat)
+        // Heuristic: If Legumes > 50% OR FDN < 20% (Double Trigger)
+        const legumeKg = activeFeeds.filter(f => f.item.category === 'Leguminosa' || f.item.name.includes('Alfalfa') || f.item.name.includes('Trébol')).reduce((s, f) => s + (f.amount * (f.item.dm_percent / 100)), 0);
+        const legumePct = legumeKg / metrics.totalDMI;
 
-            // NEW: Roble specific alert
-            if (options.bellotaType === 'ROBLE' && totalFDN < 30) {
-                alerts.push({ code: 'BELLOTA_FIBER', level: 'warning', message: '🍂 Bellota Roble: Alta en Taninos.', action: '⬆️ Vigilar estreñimiento.' });
+        if (legumePct > 0.5 || (legumePct > 0.3 && fdnPct < 0.22)) {
+            alerts.push({
+                code: 'BLOAT',
+                level: 'critical',
+                message: 'Alto Riesgo de Meteorismo (Hinchazón).',
+                action: 'Exceso de leguminosas. Añada paja o aceite/bloque anti-meteorismo.'
+            });
+        }
+
+        // 3. BELLOTA SPECIFIC RISKS
+        if (system.includes('Montanera')) {
+            const bellotaKg = activeFeeds.filter(f => f.item.name.toLowerCase().includes('bellota')).reduce((s, f) => s + (f.amount * (f.item.dm_percent / 100)), 0);
+            const bellotaPct = bellotaKg / metrics.totalDMI;
+
+            const forageKg = activeFeeds.filter(f => f.item.category === 'Forraje').reduce((s, f) => s + (f.amount * (f.item.dm_percent / 100)), 0);
+            const foragePct = forageKg / metrics.totalDMI;
+
+            // BELLOTA_FIBER
+            if (bellotaPct > 0 && foragePct < 0.10) {
+                alerts.push({
+                    code: 'BELLOTA_FIBER',
+                    level: 'critical',
+                    message: 'Falta de Fibra en Montanera.',
+                    action: 'La bellota no tiene fibra efectiva. El animal DEBE comer hierba o paja.'
+                });
+            }
+
+            // BELLOTA_PROTEIN
+            // If Bellota is high (>60%) and CP is low (<10%), muscle growth will stop.
+            if (bellotaPct > 0.6 && cpPct < 0.10) {
+                alerts.push({
+                    code: 'BELLOTA_PROTEIN',
+                    level: 'warning',
+                    message: 'Déficit Proteico en Montanera.',
+                    action: 'La bellota es energética pero baja en proteína. Suplemente con torta de girasol/soja si busca crecimiento.'
+                });
+            }
+
+            // BELLOTA_TOXICITY (Tannins)
+            // Mock check: If 'Roble' type (higher tannin) is selected > 50%
+            const robleKg = activeFeeds.filter(f => f.item.name.toLowerCase().includes('roble')).reduce((s, f) => s + (f.amount * (f.item.dm_percent / 100)), 0);
+            if (robleKg / metrics.totalDMI > 0.5) {
+                alerts.push({
+                    code: 'BELLOTA_TOXICITY',
+                    level: 'warning',
+                    message: 'Precaución: Exceso de Taninos (Roble).',
+                    action: 'Carga alta de bellota amarga. Vigile el estreñimiento o rechazo.'
+                });
             }
         }
+
+        // 4. NITROGEN EFFICIENCY & POLLUTION
+        const requiredCP = metrics.reqs.pb_percent / 100; // e.g. 0.13
+
+        // Low Efficiency: We are feeding LESS protein than needed (-2% margin)
+        if (cpPct < (requiredCP - 0.02)) {
+            alerts.push({
+                code: 'LOW_N_EFF',
+                level: 'critical',
+                message: `Déficit de Proteína (${(cpPct * 100).toFixed(1)}% vs ${(requiredCP * 100).toFixed(1)}%).`,
+                action: 'El crecimiento se detendrá. Añada proteaginosas.'
+            });
+        }
+
+        // Pollution: We are feeding TOO MUCH protein (> +4% margin)
+        // Costly and polluting.
+        if (cpPct > (requiredCP + 0.04)) {
+            alerts.push({
+                code: 'HIGH_POLLUTION',
+                level: 'warning',
+                message: `Exceso de Nitrógeno (+${((cpPct - requiredCP) * 100).toFixed(1)}%). Contaminante y caro.`,
+                action: 'Reduzca la proteína para mejorar la eficiencia económica y ambiental.'
+            });
+        }
+
         return alerts;
     },
 
