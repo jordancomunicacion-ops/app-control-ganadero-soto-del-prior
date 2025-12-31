@@ -94,21 +94,41 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
         const dietCP = totalDM > 0 ? (totalProteinG / 1000 / totalDM) * 100 : 0;
         const dietMcal = totalDM > 0 ? totalMcal / totalDM : 0;
         const dietFDN = totalDM > 0 ? (totalFDN_kg / totalDM) * 100 : 0;
-        const bellotaPct = totalDM > 0 ? (bellotaKg / totalDM) * 100 : 0;
+        // const bellotaPct = totalDM > 0 ? (bellotaKg / totalDM) * 100 : 0; // Calculated but unused directly in new signature
+
+        // --- NEW: Calculate Requirements for Validation ---
+        const age = calculateAgeMonths(animal.birth || animal.birthDate);
+        const breed = BreedManager.getBreedByName(animal.breed) || BreedManager.getAllBreeds()[0];
+        const adgTarget = breed.adg_feedlot || 1.2;
+
+        const reqs = NutritionEngine.calculateRequirements(
+            animal.weight || animal.currentWeight || 400,
+            adgTarget,
+            age,
+            'Cebo', // Defaulting to Cebo/Growth for composer
+            animal.sex || 'Macho'
+        );
 
         // Validation
+        const activeFeeds = ration.map(r => ({ item: r.feed, amount: r.kg_as_fed }));
+        const metrics = {
+            totalDMI: totalDM,
+            totalFDN: totalFDN_kg, // kg
+            totalProteinVal: totalProteinG, // grams
+            totalEnergy: totalMcal, // Total Mcal
+            reqs: reqs
+        };
+
+        const system = hasBellota ? 'Montanera' : 'Intensivo'; // Simple inference
+
         const newAlerts = NutritionEngine.validateDiet(
-            ingredientsForEngine,
-            dietFDN,
-            dietCP,
-            bellotaPct,
-            { bellotaType } // NEW
+            activeFeeds,
+            metrics,
+            system
         );
         setAlerts(newAlerts);
 
         // Synergies
-        const breed = BreedManager.getBreedByName(animal.breed) || BreedManager.getAllBreeds()[0];
-        const age = calculateAgeMonths(animal.birth || animal.birthDate);
         const currentMonth = new Date().getMonth(); // 0-11
 
         // Tolerance context for synergies
