@@ -1,0 +1,535 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// --- Core Hospitality Models ---
+
+model Hotel {
+  id        String   @id @default(uuid())
+  name      String
+  domain    String?  @unique
+  timezone  String   @default("UTC")
+  currency  String   @default("EUR")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  roomTypes RoomType[]
+  bookings  Booking[]
+  ratePlans RatePlan[]
+  seasons   Season[]
+  users     User[]
+  
+  // Widget Config
+  widgetConfig WidgetConfig?
+  
+  // Restrictions Global
+  restrictions Restriction[]
+  
+  // Synergy
+  waitlistEntries HotelWaitlist[]
+}
+
+model WidgetConfig {
+  id          String   @id @default(uuid())
+  hotelId     String   @unique
+  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+  
+  primaryColor   String  @default("#3b82f6") // Blue-500
+  secondaryColor String  @default("#1e40af") // Blue-800
+  customCss      String? 
+  
+  showLogo       Boolean @default(true)
+  title          String? // Override default title
+}
+
+model RoomType {
+  id          String   @id @default(uuid())
+  hotelId     String
+  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+  name        String
+  description String?
+  basePrice   Decimal  @default(0)
+  capacity    Int      @default(2)
+  amenities   String?    // Stored as JSON string
+  
+  rooms       Room[]
+  icalFeeds   ICalFeed[]
+  
+  // Relations for Rates & Channels
+  dailyPrices      DailyPrice[]
+  restrictions     Restriction[]
+  channelMappings  ChannelMapping[]
+  waitlistEntries  HotelWaitlist[] // Synergy
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Room {
+  id          String   @id @default(uuid())
+  roomTypeId  String
+  roomType    RoomType @relation(fields: [roomTypeId], references: [id])
+  name        String   // "101", "Villa A"
+  isActive    Boolean  @default(true)
+  
+  bookingRooms BookingRoom[]
+}
+
+// --- Guests & CRM (NEW) ---
+model Guest {
+  id          String   @id @default(uuid())
+  firstName   String
+  lastName    String?
+  email       String?  @unique // Optional unique, some guests might not have email or share
+  phone       String?
+  docType     String?  // DNI, PASSPORT
+  docNumber   String?
+  country     String?
+  notes       String?
+  score       Int      @default(0) // 0-100 (Synergy)
+  tags        String?  // JSON/CSV (Synergy)
+  
+  bookings    Booking[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// --- Rates & Availability Engines (ADVANCED) ---
+
+model RatePlan {
+  id          String   @id @default(uuid())
+  hotelId     String
+  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+  name        String   // "Standard", "Non-Refundable", "Long Stay"
+  description String?
+  isDefault   Boolean  @default(false)
+  
+  cancellationPolicy String? // "Free up to 7 days..."
+  mealsIncluded      String? // "None", "Breakfast"
+
+  // Payment Policy
+  requireCreditCard  Boolean @default(false)
+  noShowFee          Decimal @default(0)
+
+  dailyPrices      DailyPrice[]
+  restrictions     Restriction[]
+  channelMappings  ChannelMapping[]
+}
+
+model Season {
+  id          String   @id @default(uuid())
+  hotelId     String
+  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+  name        String   // "High Season"
+  startDate   DateTime
+  endDate     DateTime
+  priceMultiplier Decimal @default(1.0)
+}
+
+// Granular Pricing: Price per RoomType per Date per RatePlan
+model DailyPrice {
+  id          String   @id @default(uuid())
+  roomTypeId  String
+  roomType    RoomType @relation(fields: [roomTypeId], references: [id])
+  
+  ratePlanId  String
+  ratePlan    RatePlan @relation(fields: [ratePlanId], references: [id])
+  
+  date        DateTime // YYYY-MM-DD
+  price       Decimal 
+  
+  @@unique([roomTypeId, ratePlanId, date])
+}
+
+// Avirato-Style Restrictions
+// Priority: Specific (Rate+Room+Date) > Room+Date > Hotel+Date
+model Restriction {
+  id          String   @id @default(uuid())
+  hotelId     String
+  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+
+  roomTypeId  String?
+  roomType    RoomType? @relation(fields: [roomTypeId], references: [id])
+  
+  ratePlanId  String?
+  ratePlan    RatePlan? @relation(fields: [ratePlanId], references: [id])
+  
+  date        DateTime // YYYY-MM-DD
+  
+  // Controls
+  minStay     Int?
+  maxStay     Int?
+  closedToArrival Boolean @default(false) // CTA
+  closedToDeparture Boolean @default(false) // CTD
+  stopSell    Boolean @default(false)     // Close sales entirely
+  
+  @@index([hotelId, date])
+}
+
+// --- Booking Module ---
+
+model Booking {
+  id            String   @id @default(uuid())
+  hotelId       String
+  hotel         Hotel    @relation(fields: [hotelId], references: [id])
+  
+  referenceCode String   @unique // "RES-XXXX"
+  
+  // Linked Guest Profile
+  guestId       String?
+  guest         Guest?   @relation(fields: [guestId], references: [id])
+
+  // Fallback if no guest profile created yet (API/Widget entry)
+  guestName     String
+  guestEmail    String?
+  guestPhone    String?
+  
+  status        String @default("PENDING") // PENDING, CONFIRMED, CHECKED_IN, CHECKED_OUT, CANCELLED
+  source        String @default("DIRECT") // DIRECT, BOOKING_COM, AIRBNB, WALK_IN
+  
+  totalPrice    Decimal
+  currency      String   @default("EUR")
+  isPaid        Boolean  @default(false)
+  
+  // Stripe Integration
+  stripeCustomerId      String?
+  stripePaymentMethodId String? 
+  stripePaymentIntentId String?
+  
+  checkInDate   DateTime
+  checkOutDate  DateTime
+  nights        Int
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  bookingRooms  BookingRoom[]
+  payments      Payment[]
+  
+  // External OTA Info
+  otaId         String?  // Booking.com ID
+  otaRawData    String?  // JSON debug
+}
+
+// Specific Unit Assignment
+model BookingRoom {
+  id          String   @id @default(uuid())
+  bookingId   String
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  roomId      String
+  room        Room     @relation(fields: [roomId], references: [id])
+  
+  priceSnapshot Decimal // Price recorded for this specific room/night calc
+  date          DateTime // Specific date for this room assignment
+}
+
+// --- Channel Manager (Level 2: Bidirectional) ---
+
+model Channel {
+  id          String   @id @default(uuid())
+  name        String   // "Booking.com", "Airbnb"
+  type        String   // "API", "ICAL"
+  isEnabled   Boolean  @default(true)
+  
+  mappings    ChannelMapping[]
+}
+
+model ChannelMapping {
+  id          String   @id @default(uuid())
+  channelId   String
+  channel     Channel  @relation(fields: [channelId], references: [id])
+  
+  roomTypeId  String
+  roomType    RoomType @relation(fields: [roomTypeId], references: [id])
+  
+  ratePlanId  String?
+  ratePlan    RatePlan? @relation(fields: [ratePlanId], references: [id])
+  
+  externalId  String   // The ID on Booking.com (e.g. "4829102")
+  externalName String? // Helper name
+  
+  syncEnabled Boolean  @default(true)
+}
+
+model SyncLog {
+  id          String   @id @default(uuid())
+  channel     String
+  action      String   // "PUSH_RATE", "PULL_BOOKING"
+  status      String   // "SUCCESS", "ERROR"
+  details     String?
+  timestamp   DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  domain    String   // "HOTEL", "RESTAURANT"
+  entity    String   // "Booking", "ResBooking", "RatePlan"
+  entityId  String
+  action    String   // "CREATE", "UPDATE", "CANCEL", "SYNC"
+  actor     String   // "User:admin", "System:Cron", "OTA:Booking.com"
+  metadata  String?  // JSON details
+  timestamp DateTime @default(now())
+}
+
+model ICalFeed {
+  id          String   @id @default(uuid())
+  roomTypeId  String
+  roomType    RoomType @relation(fields: [roomTypeId], references: [id])
+  
+  url         String
+  name        String?
+  source      String
+  
+  lastSync    DateTime?
+  isActive    Boolean  @default(true)
+}
+
+// --- CRM & Finance ---
+
+model Payment {
+  id          String   @id @default(uuid())
+  bookingId   String
+  booking     Booking  @relation(fields: [bookingId], references: [id])
+  amount      Decimal
+  gateway     String   // "stripe"
+  transactionId String?
+  status      String   // "succeeded"
+  createdAt   DateTime @default(now())
+}
+
+model User {
+  id          String   @id @default(uuid())
+  hotelId     String?
+  hotel       Hotel?   @relation(fields: [hotelId], references: [id])
+  email       String   @unique
+  password    String   
+  role        String   @default("ADMIN")
+}
+
+// --- Restaurant Models (Preserved) ---
+model Restaurant {
+  id        String   @id @default(uuid())
+  name      String
+  currency  String   @default("EUR")
+  zones     Zone[]
+  bookings  ResBooking[]
+  waitlist  RestaurantWaitlist[]
+}
+
+model Zone {
+  id           String   @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  name         String   // "Interior", "Terraza"
+  index        Int      @default(0) // Sorting order
+  isActive     Boolean  @default(true)
+  tables       Table[]
+}
+
+model Table {
+  id        String   @id @default(uuid())
+  zoneId    String
+  zone      Zone     @relation(fields: [zoneId], references: [id])
+  name      String   // "Mesa 1"
+  capacity  Int      @default(4)
+  
+  // Visual Plan Coords
+  x         Int      @default(0)
+  y         Int      @default(0)
+  width     Int      @default(60) // px or grid units
+  height    Int      @default(60)
+  shape     String   @default("RECTANGLE") // RECTANGLE, ROUND
+  rotation  Int      @default(0)
+  
+  isActive  Boolean  @default(true)
+  minPax    Int      @default(1)
+  maxPax    Int      @default(4)
+
+  resBookings ResBooking[]
+  tableHolds  TableHold[] 
+}
+
+model ResBooking {
+   id           String   @id @default(uuid())
+   restaurantId String
+   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+   
+   tableId      String?
+   table        Table?   @relation(fields: [tableId], references: [id])
+   
+   // Guest Info
+   guestName    String
+   guestPhone   String?
+   guestEmail   String?
+   pax          Int
+   
+   date         DateTime // Date + Time
+   duration     Int      @default(90) // Minutes
+
+   status       String   @default("CONFIRMED") // PENDING, CONFIRMED, SEATED, FINISHED, CANCELLED, NO_SHOW
+   
+   // CRM & Metadata
+   tags         String?  // JSON array ["VIP", "ALLERGIES"]
+   notes        String?
+   origin       String   @default("MANUAL") // GOOGLE, WEB, PHONE, WALK_IN
+      // Stripe Integration
+    stripeCustomerId      String?
+    stripePaymentMethodId String?
+    
+    smsSent      Boolean  @default(false)
+   emailSent    Boolean  @default(false)
+
+   createdAt    DateTime @default(now())
+   updatedAt    DateTime @updatedAt // Added
+   
+   // Synergy: Architectural Upgrades
+   idempotencyKey String? @unique
+   channelId      String?
+   channel        RestaurantChannel? @relation(fields: [channelId], references: [id])
+}
+
+model RestaurantChannel {
+  id        String   @id @default(uuid())
+  name      String   // Google, TheFork, Direct
+  commission Decimal @default(0)
+  resBookings ResBooking[]
+}
+
+model ResPolicy {
+  id          String @id @default(uuid())
+  name        String // "Standard", "Strict"
+  cancelHours Int    // 24
+  noShowFee   Decimal @default(0)
+  requireCreditCard Boolean @default(true) 
+  isActive    Boolean @default(true)
+}
+
+model TableHold {
+  id        String   @id @default(uuid())
+  tableId   String
+  table     Table    @relation(fields: [tableId], references: [id])
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model RestaurantWaitlist {
+  id           String   @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  
+  name         String
+  phone        String?
+  pax          Int
+  notes        String?
+  
+  status       String   @default("WAITING") // WAITING, NOTIFIED, SEATED, CANCELLED
+  
+  createdAt    DateTime @default(now())
+  notifiedAt   DateTime?
+}
+
+// Reuse HotelWaitlist for consistency or keep separate? 
+// Provided schema had HotelWaitlist. Keeping it as is.
+model HotelWaitlist {
+  id          String   @id @default(uuid())
+  hotelId     String
+  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+  roomTypeId  String
+  roomType    RoomType @relation(fields: [roomTypeId], references: [id])
+  email       String
+  dateFrom    DateTime
+  dateTo      DateTime
+  requestDate DateTime @default(now())
+  fulfilled   Boolean  @default(false)
+}
+
+// --- CRM & Marketing Verticals (Phase 7) ---
+
+model CustomerProfile {
+  id        String   @id @default(uuid())
+  email     String?  @unique
+  phone     String?  // E.164
+  firstName String?
+  lastName  String?
+  
+  // Segmentation
+  lifecycleStage String  @default("LEAD") // LEAD, CUSTOMER, VIP, CHURNED
+  totalSpend     Decimal @default(0)
+  visitCount     Int     @default(0)
+  lastInteraction DateTime?
+  tags           String? // JSON array
+  
+  // Consent
+  consentEmail    Boolean @default(false)
+  consentWhatsApp Boolean @default(false)
+  
+  // Relations
+  identityLinks IdentityLink[]
+  webVisits     WebVisit[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model IdentityLink {
+  id              String          @id @default(uuid())
+  customerProfileId String
+  customerProfile CustomerProfile @relation(fields: [customerProfileId], references: [id])
+  
+  // Source
+  sourceType      String          // "GUEST", "USER", "RES_BOOKING"
+  sourceId        String
+  mergedAt        DateTime        @default(now())
+}
+
+model WebVisit {
+  id              String          @id @default(uuid())
+  sessionId       String
+  visitorId       String?         // Cookie ID
+  customerProfileId String?
+  customerProfile CustomerProfile? @relation(fields: [customerProfileId], references: [id])
+  
+  url             String
+  referrer        String?
+  userAgent       String?
+  duration        Int             @default(0)
+  timestamp       DateTime        @default(now())
+}
+
+model Campaign {
+  id          String   @id @default(uuid())
+  name        String
+  type        String   // "EMAIL", "WHATSAPP"
+  status      String   // "DRAFT", "SCHEDULED", "SENT"
+  
+  subject     String?
+  content     String   // HTML or Template Name
+  
+  segmentConfig String? // JSON filter rules
+  
+  sentCount   Int      @default(0)
+  openCount   Int      @default(0)
+  clickCount  Int      @default(0)
+  
+  scheduledAt DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model Workflow {
+  id          String   @id @default(uuid())
+  name        String
+  triggerType String   // "EVENT", "DATE"
+  triggerConfig String // JSON details
+  steps       String   // JSON structure of actions
+  isActive    Boolean  @default(false)
+  
+  runCount    Int      @default(0)
+  createdAt   DateTime @default(now())
+}

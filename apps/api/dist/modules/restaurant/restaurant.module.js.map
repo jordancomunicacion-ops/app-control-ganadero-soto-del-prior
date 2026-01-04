@@ -1,0 +1,1 @@
+{"version":3,"file":"restaurant.module.js","sourceRoot":"","sources":["../../../src/modules/restaurant/restaurant.module.ts"],"names":[],"mappings":";;;;;;;;;AAIO,IAAM,gBAAgB,GAAtB,MAAM,gBAAgB;CAAI,CAAA;AAApB,4CAAgB;2BAAhB,gBAAgB;IAJ5B,MAAM,CAAC;QACJ,WAAW,EAAE,CAAC,oBAAoB,CAAC;QACnC,SAAS,EAAE,CAAC,iBAAiB,CAAC;KACjC,CAAC;GACW,gBAAgB,CAAI"}
