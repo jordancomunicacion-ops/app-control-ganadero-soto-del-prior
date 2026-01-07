@@ -12,7 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RestaurantService = void 0;
 const common_1 = require("@nestjs/common");
 let RestaurantService = class RestaurantService {
-    ENGINE_URL = 'http://localhost:4001';
+    ENGINE_URL = 'http://localhost:4005';
     constructor() { }
     async callEngine(method, endpoint, body) {
         try {
@@ -39,36 +39,6 @@ let RestaurantService = class RestaurantService {
     async createRestaurant(data) {
         return this.callEngine('POST', '/restaurant', data);
     }
-    async syncZones(restaurantId, zones) {
-        return this.callEngine('POST', `/restaurant/${restaurantId}/zones/sync`, zones);
-    }
-    async createZone(restaurantId, name) {
-        return this.callEngine('POST', '/restaurant/zones', { restaurantId, name });
-    }
-    async syncTables(zoneId, tables) {
-        return this.callEngine('POST', `/restaurant/zones/${zoneId}/tables/sync`, tables);
-    }
-    async getTables(restaurantId) {
-        return this.callEngine('GET', `/restaurant/${restaurantId}/tables`);
-    }
-    async createTable(zoneId, name, capacity) {
-        return this.callEngine('POST', '/restaurant/tables', { zoneId, name, capacity });
-    }
-    async createPublicReservation(data) {
-        return this.callEngine('POST', '/restaurant/public/reservation', data);
-    }
-    async confirmReservation(id) {
-        return this.callEngine('POST', `/restaurant/reservation/${id}/confirm`);
-    }
-    async cancelReservation(id) {
-        return this.callEngine('POST', `/restaurant/reservation/${id}/cancel`);
-    }
-    async getBookings(restaurantId, date) {
-        return this.callEngine('GET', `/restaurant/${restaurantId}/bookings?date=${date}`);
-    }
-    async createBooking(data) {
-        return this.callEngine('POST', '/restaurant/bookings', data);
-    }
     async getWaitlist(restaurantId) {
         return this.callEngine('GET', `/restaurant/${restaurantId}/waitlist`);
     }
@@ -81,18 +51,4 @@ exports.RestaurantService = RestaurantService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [])
 ], RestaurantService);
-return this.prisma.restaurantWaitlist.create({
-    data: {
-        restaurantId,
-        ...data
-    }
-});
-async;
-getWaitlist(restaurantId, string);
-{
-    return this.prisma.restaurantWaitlist.findMany({
-        where: { restaurantId, status: { in: ['WAITING', 'NOTIFIED'] } },
-        orderBy: { createdAt: 'asc' }
-    });
-}
 //# sourceMappingURL=restaurant.service.js.map

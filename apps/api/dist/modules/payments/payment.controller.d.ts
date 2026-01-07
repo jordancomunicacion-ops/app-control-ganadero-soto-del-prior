@@ -16,14 +16,14 @@ export declare class PaymentController {
         pax: number;
         channelId: string | null;
         restaurantId: string;
+        idempotencyKey: string | null;
+        tableId: string | null;
         duration: number;
         tags: string | null;
         notes: string | null;
         origin: string;
         smsSent: boolean;
         emailSent: boolean;
-        idempotencyKey: string | null;
-        tableId: string | null;
     }>;
     chargeNoShow(bookingId: string): Promise<{
         success: boolean;
