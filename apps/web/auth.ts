@@ -9,13 +9,7 @@ function logDebug(msg: string) {
     console.log(`[AUTH DEBUG] ${msg}`);
 }
 
-const prisma = new PrismaClient({
-    datasources: {
-        db: {
-            url: "file:./dev.db"
-        }
-    }
-});
+const prisma = new PrismaClient();
 
 async function getUser(email: string) {
     const cleanEmail = email.trim().toLowerCase();
@@ -35,17 +29,30 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
     providers: [
         Credentials({
             async authorize(credentials) {
+                console.log("[AUTH] Authorizing request...");
                 const parsedCredentials = z
                     .object({ email: z.string().email(), password: z.string().min(6) })
                     .safeParse(credentials);
 
                 if (parsedCredentials.success) {
                     const { email, password } = parsedCredentials.data;
+                    console.log(`[AUTH] Checking user: ${email}`);
                     const user = await getUser(email);
-                    if (!user) return null;
+                    if (!user) {
+                        console.log("[AUTH] User not found in DB.");
+                        return null;
+                    }
 
-                    const passwordsMatch = await bcrypt.compare(password, user.passwordHash);
-                    if (passwordsMatch) return user;
+                    console.log("[AUTH] User found. Verifying password...");
+                    const passwordsMatch = await bcrypt.compare(password, user.password);
+                    if (passwordsMatch) {
+                        console.log("[AUTH] Password match! Login successful.");
+                        return user;
+                    } else {
+                        console.log("[AUTH] Password mismatch.");
+                    }
+                } else {
+                    console.log("[AUTH] Invalid credentials format.");
                 }
                 return null;
             },

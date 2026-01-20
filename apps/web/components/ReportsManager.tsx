@@ -32,7 +32,8 @@ export function ReportsManager() {
 
                 // Calculate Targets (New API)
                 // Assuming 'Cebo' state for FCR report
-                const dietTargets = NutritionEngine.calculateRequirements(animal.weight, 1.2, ageMonths, 'Cebo');
+                const sexValue = (animal.sex === 'Macho' || animal.sex === 'Hembra' || animal.sex === 'Castrado') ? animal.sex : 'Macho';
+                const dietTargets = NutritionEngine.calculateRequirements(animal.weight, 1.2, ageMonths, 'Cebo', sexValue);
 
                 // Fixed Mock Diet Stats for Estimation (similar to Calculator)
                 const mockDietStats = {

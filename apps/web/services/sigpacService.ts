@@ -121,15 +121,8 @@ export const SigpacService = {
 
         } catch (error) {
             console.error('SigpacService Error:', error);
-            // Fallback mock for testing if offline
-            return {
-                provincia: prov, municipio: muni, poligono: pol, parcela: parc,
-                area_ha: 15.5,
-                use: 'PS', // Pastizal
-                slope_avg: 12,
-                irrigation_coef: 0,
-                coordinates: { lat: 39.40, lon: -6.40 } // Extremadura approx
-            };
+            // Return null to indicate failure instead of misleading mock data
+            return null;
         }
     }
 };

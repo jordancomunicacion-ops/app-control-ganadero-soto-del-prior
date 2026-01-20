@@ -1,0 +1,54 @@
+networks:
+  proxy-net:
+    external: true
+  ganaderia-internal-net:
+    driver: bridge
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: ganaderia-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+    volumes:
+      - ./db_data:/var/lib/postgresql/data
+    networks:
+      - ganaderia-internal-net
+
+  web:
+    build: ./apps/web
+    container_name: ganaderia-web
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+    depends_on:
+      - db
+    networks:
+      - ganaderia-internal-net
+      - proxy-net
+    ports:
+      - "3005:3000"
+    expose:
+      - "3000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ganaderia-web.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.ganaderia-web.entrypoints=websecure"
+      - "traefik.http.routers.ganaderia-web.tls=true"
+      - "traefik.http.routers.ganaderia-web.tls.certresolver=le"
+      - "traefik.http.routers.ganaderia-web.service=ganaderia-web-svc"
+      - "traefik.http.middlewares.ganaderia-forwarded.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.ganaderia-forwarded.headers.customrequestheaders.X-Forwarded-Host=${APP_DOMAIN}"
+      - "traefik.http.routers.ganaderia-web.middlewares=ganaderia-forwarded"
+
+      # Redirect HTTP -> HTTPS
+      - "traefik.http.routers.ganaderia-web-http.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.ganaderia-web-http.entrypoints=web"
+      - "traefik.http.routers.ganaderia-web-http.middlewares=ganaderia-https-redirect"
+      - "traefik.http.middlewares.ganaderia-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.ganaderia-https-redirect.redirectscheme.permanent=true"
+      - "traefik.http.services.ganaderia-web-svc.loadbalancer.server.port=3000"

@@ -17,9 +17,8 @@ export default function Page() {
                 <div className="flex justify-center mb-6">
                     <img src="/logo-icon.png" alt="SOTO DEL PRIOR" className="h-24" />
                 </div>
-                <h1 className="mb-4 text-center text-2xl font-bold text-gray-900">
-                    App Ganadera Login
-                </h1>
+                {/* Visual harmonization: No extra text here */}
+
                 <form action={formAction} className="space-y-4">
                     <div>
                         <label
@@ -66,7 +65,7 @@ export default function Page() {
                         )}
                     </div>
 
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center">
                             <input
                                 id="remember-me"
@@ -88,16 +87,18 @@ export default function Page() {
                         Iniciar Sesión
                     </button>
 
-                    <div className="text-center text-sm mt-4">
-                        <span className="text-gray-500">¿No tienes cuenta? </span>
-                        <Link href="/register" className="font-medium text-green-600 hover:text-green-500">
-                            Regístrate
-                        </Link>
-                    </div>
-                    <div className="text-center text-xs mt-2">
-                        <Link href="/forgot-password" className="font-medium text-gray-500 hover:text-gray-700">
-                            ¿Olvidaste tu contraseña?
-                        </Link>
+                    <div className="text-center text-sm mt-4 space-y-2">
+                        <div>
+                            <span className="text-gray-500">¿No tienes cuenta? </span>
+                            <Link href="/register" className="font-medium text-green-600 hover:text-green-500">
+                                Regístrate
+                            </Link>
+                        </div>
+                        <div>
+                            <Link href="/forgot-password" className="text-gray-500 hover:text-gray-900">
+                                ¿Olvidaste tu contraseña?
+                            </Link>
+                        </div>
                     </div>
                 </form>
             </div>

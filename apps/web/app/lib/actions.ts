@@ -55,7 +55,7 @@ export async function registerUser(prevState: UserFormState | undefined, formDat
             data: {
                 name,
                 email,
-                passwordHash: hashedPassword,
+                password: hashedPassword,
                 role: role as 'USER' | 'ADMIN',
             },
         });

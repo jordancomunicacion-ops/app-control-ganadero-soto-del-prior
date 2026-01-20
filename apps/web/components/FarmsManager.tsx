@@ -42,7 +42,7 @@ export function FarmsManager() {
 
     // Form State
     const [newName, setNewName] = useState('');
-    const [provincia, setProvincia] = useState('10'); // Caceres default
+    const [provincia, setProvincia] = useState('45'); // Toledo default
     const [municipio, setMunicipio] = useState(''); // Code
     const [municipioName, setMunicipioName] = useState('');
     const [poligono, setPoligono] = useState('');
@@ -66,7 +66,7 @@ export function FarmsManager() {
 
     // Lists
     // Simplified lists for demo
-    const provinces = [{ code: '10', name: 'Cáceres' }, { code: '06', name: 'Badajoz' }];
+    // List of municipalities (populated from JSON)
     const [municipalities, setMunicipalities] = useState<any[]>([]);
     const [soilTypes, setSoilTypes] = useState<any[]>([]);
 
@@ -311,7 +311,19 @@ export function FarmsManager() {
     };
 
     const cleanGisData = (data: any) => {
-        if (!data || !data.recintos) return [];
+        // Handle case where we only have aggregate data (no recintos)
+        if (!data) return [];
+        if (!data.recintos || data.recintos.length === 0) {
+            if (data.area_ha) {
+                // Return a single virtual recinto
+                return [{
+                    usage: data.use || 'PR',
+                    area: Math.round(data.area_ha * 10000), // Ha to m2
+                    dn_oid: 0
+                }];
+            }
+            return [];
+        }
         return data.recintos.map((r: any) => ({
             usage: r.uso,
             area: r.superficie * 10000,

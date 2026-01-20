@@ -13,58 +13,63 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: string) => void }
     const [loadingWeather, setLoadingWeather] = useState(true);
     const [animalStats, setAnimalStats] = useState<any>({ males: {}, females: {} });
     const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+    const [selectedTabIndex, setSelectedTabIndex] = useState(0);
+    const [farmsList, setFarmsList] = useState<any[]>([]);
 
     useEffect(() => {
         try {
             // 1. Load Weather
-            // 1. Load Weather for FIRST FARM
+            // 1. Load Weather for SELECTED FARM
             const sessionUser = read('appSession', '');
 
-            // Ensure we read as 'fincas_' + sessionUser (or 'fincas_' + storedUser if stored differently)
-            // But we can stick to what FarmsManager does:
+            // Ensure we read as 'fincas_' + sessionUser
             const farms = read<any[]>(`fincas_${sessionUser}`, []);
+            setFarmsList(farms);
 
             if (!farms || farms.length === 0) {
                 setLoadingWeather(false);
                 setWeather(null);
             } else {
-                let lat = 40.45;
-                let lon = -3.75;
-                let farmName = 'General';
+                // Determine which farm to show based on selected tab
+                const currentFarm = farms[selectedTabIndex] || farms[0];
 
-                // Retrieve coordinates from the first farm if available
-                if (farms[0].coords) {
-                    lat = farms[0].coords.lat;
-                    lon = farms[0].coords.lng;
-                    farmName = farms[0].name;
+                // Default coordinates (Madrid - Center of Spain) if farm has no coords
+                let lat = 40.4168;
+                let lon = -3.7038;
+                let farmName = currentFarm.name || 'General';
 
-                    WeatherService.getCurrentWeather(lat, lon).then(async data => {
-                        // Fetch Forecast
-                        const forecast = await WeatherService.getForecast(lat, lon);
-
-                        // Removed detailLat/detailLon to hide the large picker.
-                        const windyUrl = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&width=650&height=450&zoom=8&level=surface&overlay=wind&product=ecmwf&menu=&message=&marker=true&pressure=&type=map&location=coordinates&detail=&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1`;
-
-                        if (data) {
-                            setWeather({
-                                temp: data.temperature,
-                                condition: data.weather_desc,
-                                location: farmName,
-                                mapUrl: windyUrl,
-                                icon: WeatherService.getWeatherIcon ? WeatherService.getWeatherIcon(data.weather_code) : '⛅',
-                                humidity: data.humidity,
-                                wind: data.wind_speed,
-                                forecast: forecast
-                            });
-                        }
-                        setLoadingWeather(false);
-                    }).catch(err => {
-                        setLoadingWeather(false);
-                    });
-                } else {
-                    setLoadingWeather(false);
-                    setWeather(null);
+                // Retrieve coordinates from the selected farm
+                if (currentFarm.coords && currentFarm.coords.lat && currentFarm.coords.lng) {
+                    lat = currentFarm.coords.lat;
+                    lon = currentFarm.coords.lng;
                 }
+
+                WeatherService.getCurrentWeather(lat, lon).then(async data => {
+                    // Fetch Forecast
+                    const forecast = await WeatherService.getForecast(lat, lon);
+
+                    const windyUrl = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&width=650&height=450&zoom=8&level=surface&overlay=wind&product=ecmwf&menu=&message=&marker=true&pressure=&type=map&location=coordinates&detail=&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1`;
+
+                    if (data) {
+                        setWeather({
+                            temp: data.temperature,
+                            condition: data.weather_desc,
+                            location: farmName,
+                            mapUrl: windyUrl,
+                            icon: WeatherService.getWeatherIcon ? WeatherService.getWeatherIcon(data.weather_code) : '⛅',
+                            humidity: data.humidity,
+                            wind: data.wind_speed,
+                            forecast: forecast
+                        });
+                    } else {
+                        setWeather(null);
+                    }
+                    setLoadingWeather(false);
+                }).catch(err => {
+                    console.error("Weather load error:", err);
+                    setWeather(null);
+                    setLoadingWeather(false);
+                });
             }
 
             // 2. Load Animal Stats
@@ -80,7 +85,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: string) => void }
         } catch (e) {
             // Silent catch for initialization errors
         }
-    }, [read]);
+    }, [read, selectedTabIndex]);
 
     const calculateAnimalStats = (animals: any[]) => {
         const maleCounts: Record<string, number> = {
@@ -158,85 +163,108 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: string) => void }
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
                 {/* Weather Card Column */}
-                {(weather || loadingWeather) && (
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 h-full flex flex-col justify-between">
-                        {/* Top Row: Current Weather */}
-                        <div className="flex justify-between items-start mb-6">
-                            <div>
-                                <p className="text-gray-500 font-bold text-xs uppercase tracking-wider mb-1">Clima en: {weather?.location || '...'}</p>
-                                {loadingWeather ? (
-                                    <p className="text-sm animate-pulse text-gray-400">Cargando...</p>
-                                ) : weather ? (
-                                    <div className="flex items-center gap-4">
-                                        <span className="text-4xl">{weather.icon}</span>
-                                        <div>
-                                            <span className="text-4xl font-extrabold block text-gray-800">{weather.temp}°C</span>
-                                            <span className="text-sm text-gray-500 capitalize font-medium">{weather.condition}</span>
+                <div className="flex flex-col h-full space-y-2">
+                    {/* Tabs for Farms */}
+                    {farmsList.length > 0 && (
+                        <div className="flex space-x-1 overflow-x-auto pb-1">
+                            {farmsList.map((farm, idx) => (
+                                <button
+                                    key={farm.id || idx}
+                                    onClick={() => {
+                                        setSelectedTabIndex(idx);
+                                        setLoadingWeather(true); // Trigger loading state
+                                    }}
+                                    className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors border-t border-l border-r ${selectedTabIndex === idx
+                                        ? 'bg-white text-green-700 border-gray-200 border-b-white z-10 -mb-px shadow-[0_-2px_5px_rgba(0,0,0,0.02)]'
+                                        : 'bg-gray-100 text-gray-500 hover:bg-gray_50 border-transparent hover:text-gray-700'
+                                        }`}
+                                >
+                                    {farm.name}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {(weather || loadingWeather) && (
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 h-full flex flex-col justify-between">
+                            {/* Top Row: Current Weather */}
+                            <div className="flex justify-between items-start mb-6">
+                                <div>
+                                    <p className="text-gray-500 font-bold text-xs uppercase tracking-wider mb-1">Clima en: {weather?.location || '...'}</p>
+                                    {loadingWeather ? (
+                                        <p className="text-sm animate-pulse text-gray-400">Cargando...</p>
+                                    ) : weather ? (
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-4xl">{weather.icon}</span>
+                                            <div>
+                                                <span className="text-4xl font-extrabold block text-gray-800">{weather.temp}°C</span>
+                                                <span className="text-sm text-gray-500 capitalize font-medium">{weather.condition}</span>
+                                            </div>
                                         </div>
+                                    ) : (
+                                        <p className="text-sm text-gray-400">No disponible</p>
+                                    )}
+                                </div>
+                                {weather && (
+                                    <div className="text-right text-xs text-gray-400 font-medium space-y-1 bg-gray-50 px-3 py-2 rounded-lg">
+                                        <p>💧 {weather.humidity}% Humedad</p>
+                                        <p>💨 {weather.wind} km/h Viento</p>
                                     </div>
-                                ) : (
-                                    <p className="text-sm text-gray-400">No disponible</p>
                                 )}
                             </div>
-                            {weather && (
-                                <div className="text-right text-xs text-gray-400 font-medium space-y-1 bg-gray-50 px-3 py-2 rounded-lg">
-                                    <p>💧 {weather.humidity}% Humedad</p>
-                                    <p>💨 {weather.wind} km/h Viento</p>
-                                </div>
-                            )}
-                        </div>
 
-                        {/* Bottom Row: Split View */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 border-t border-gray-100 pt-4 flex-1">
+                            {/* Bottom Row: Split View */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 border-t border-gray-100 pt-4 flex-1">
 
-                            {/* Left: Windy Map */}
-                            {!loadingWeather && weather?.mapUrl && (
-                                <div className="h-48 rounded-lg overflow-hidden border border-gray-200 shadow-sm relative group">
-                                    <div className="absolute top-2 left-2 z-10 bg-white/80 text-gray-700 text-[10px] px-2 py-1 rounded backdrop-blur-md font-bold shadow-sm">
-                                        🌪️ Viento vivo
+                                {/* Left: Windy Map */}
+                                {!loadingWeather && weather?.mapUrl && (
+                                    <div className="h-48 rounded-lg overflow-hidden border border-gray-200 shadow-sm relative group">
+                                        <div className="absolute top-2 left-2 z-10 bg-white/80 text-gray-700 text-[10px] px-2 py-1 rounded backdrop-blur-md font-bold shadow-sm">
+                                            🌪️ Viento vivo
+                                        </div>
+                                        <iframe
+                                            src={weather.mapUrl}
+                                            className="w-full h-full border-none"
+                                            title="Windy Weather Map"
+                                        />
                                     </div>
-                                    <iframe
-                                        src={weather.mapUrl}
-                                        className="w-full h-full border-none"
-                                        title="Windy Weather Map"
-                                    />
-                                </div>
-                            )}
+                                )}
 
-                            {/* Right: Forecast */}
-                            {!loadingWeather && weather?.forecast && (
-                                <div className="flex flex-col justify-between h-48">
-                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Pronóstico 3 Días</p>
-                                    <div className="flex-1 flex flex-col gap-2">
-                                        {weather.forecast.map((d: any, i: number) => (
-                                            <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-100 hover:border-gray-300 transition-colors flex-1">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-xl">{d.icon}</span>
-                                                    <span className="text-sm font-bold text-gray-700 capitalize">
-                                                        {new Date(d.date).toLocaleDateString(undefined, { weekday: 'short' })}
-                                                    </span>
-                                                </div>
-
-                                                <div className="flex items-center gap-3">
-                                                    {d.precip > 0 && (
-                                                        <span className="text-[10px] font-bold text-gray-800 bg-gray-100 px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                                                            ☔ {d.precip}mm
+                                {/* Right: Forecast */}
+                                {!loadingWeather && weather?.forecast && (
+                                    <div className="flex flex-col justify-between h-48">
+                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Pronóstico 3 Días</p>
+                                        <div className="flex-1 flex flex-col gap-2">
+                                            {weather.forecast.map((d: any, i: number) => (
+                                                <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-100 hover:border-gray-300 transition-colors flex-1">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-xl">{d.icon}</span>
+                                                        <span className="text-sm font-bold text-gray-700 capitalize">
+                                                            {new Date(d.date).toLocaleDateString(undefined, { weekday: 'short' })}
                                                         </span>
-                                                    )}
-                                                    <div className="text-sm font-bold text-gray-800">
-                                                        <span className="text-gray-900">{Math.round(d.max)}°</span>
-                                                        <span className="mx-1 text-gray-300">/</span>
-                                                        <span className="text-gray-500">{Math.round(d.min)}°</span>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-3">
+                                                        {d.precip > 0 && (
+                                                            <span className="text-[10px] font-bold text-gray-800 bg-gray-100 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                                                                ☔ {d.precip}mm
+                                                            </span>
+                                                        )}
+                                                        <div className="text-sm font-bold text-gray-800">
+                                                            <span className="text-gray-900">{Math.round(d.max)}°</span>
+                                                            <span className="mx-1 text-gray-300">/</span>
+                                                            <span className="text-gray-500">{Math.round(d.min)}°</span>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
 
                 {/* Animals Card Column */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 h-full">

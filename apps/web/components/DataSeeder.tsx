@@ -26,15 +26,15 @@ export function DataSeeder() {
             fincas.push({
                 id: 'finca-default-001',
                 name: 'SOTO del PRIOR',
-                municipio: 'Guadalupe',
-                municipioCode: '095',
-                provinciaCode: '10', // Cáceres
+                municipio: 'Belvís de la Jara',
+                municipioCode: '020',
+                provinciaCode: '45', // Toledo
                 poligono: '1',
                 parcela: '1',
                 superficie: 153940, // ~15.39 ha
                 recintos: [],
-                coords: { lat: 39.452, lng: -5.332 }, // Guadalupe coords
-                license: 'ES100950000001',
+                coords: { lat: 39.7589, lng: -4.7634 }, // Belvís de la Jara coords
+                license: 'ES450200000001',
                 maxHeads: 90,
                 soilId: 'franco_arenoso',
                 corrals: 4,

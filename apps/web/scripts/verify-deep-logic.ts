@@ -34,7 +34,7 @@ async function runSimulation() {
     console.log(`Bellota Check (Nov, 15m): ${bellotaCheck.compliant ? '✅ Compliant' : '❌ Failed'}`);
 
     // Requirements
-    const reqs = NutritionEngine.calculateRequirements(450, 1.2, 15, 'Cebo');
+    const reqs = NutritionEngine.calculateRequirements(450, 1.2, 15, 'Cebo', 'Macho');
     console.log(`Requirements (450kg, Cebo): PB ${reqs.pb_percent}%, EM ${reqs.em_mcal} Mcal`);
 
     // Nitrogen Balance

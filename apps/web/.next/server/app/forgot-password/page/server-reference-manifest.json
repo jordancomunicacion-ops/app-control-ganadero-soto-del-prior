@@ -1,0 +1,20 @@
+{
+  "node": {
+    "60939ed843a9c755afaa8a287f2e1b9cad4822e1c5": {
+      "workers": {
+        "app/forgot-password/page": {
+          "moduleId": 97678,
+          "async": false,
+          "exportedName": "sendPasswordResetEmail",
+          "filename": "apps/web/app/lib/auth-actions.ts"
+        }
+      },
+      "layer": {
+        "app/forgot-password/page": "action-browser"
+      },
+      "exportedName": "sendPasswordResetEmail",
+      "filename": "apps/web/app/lib/auth-actions.ts"
+    }
+  },
+  "edge": {}
+}

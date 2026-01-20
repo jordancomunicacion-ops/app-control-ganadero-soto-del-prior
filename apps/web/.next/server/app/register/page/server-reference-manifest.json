@@ -1,0 +1,20 @@
+{
+  "node": {
+    "60fc680c355e56bb8d6f55e737383470c2d73f7edd": {
+      "workers": {
+        "app/register/page": {
+          "moduleId": 1112,
+          "async": false,
+          "exportedName": "registerUser",
+          "filename": "apps/web/app/lib/actions.ts"
+        }
+      },
+      "layer": {
+        "app/register/page": "action-browser"
+      },
+      "exportedName": "registerUser",
+      "filename": "apps/web/app/lib/actions.ts"
+    }
+  },
+  "edge": {}
+}
