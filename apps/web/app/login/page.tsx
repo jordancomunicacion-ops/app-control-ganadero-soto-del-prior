@@ -6,10 +6,22 @@ import Link from 'next/link';
 import { Tractor } from 'lucide-react';
 
 export default function Page() {
-    const [errorMessage, formAction, isPending] = useActionState(
+    // @ts-ignore
+    const [state, formAction, isPending] = useActionState(
         authenticate,
         undefined,
     );
+
+    // Client-side redirect
+    // @ts-ignore
+    if (state && typeof state === 'object' && state.success) {
+        if (typeof window !== 'undefined') {
+            window.location.href = '/dashboard';
+        }
+    }
+
+    // @ts-ignore
+    const errorMessage = state && typeof state === 'string' ? state : (state && typeof state === 'object' && state.message && !state.success ? state.message : null);
 
     return (
         <div className="flex h-screen items-center justify-center bg-gray-50">

@@ -19,9 +19,10 @@ interface SidebarProps {
     activeTab: string;
     onTabChange: (tab: string) => void;
     onLogout: () => void;
+    userRole?: string;
 }
 
-export function Sidebar({ activeTab, onTabChange, onLogout }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, onLogout, userRole }: SidebarProps) {
     const { read, write } = useStorage();
     const sessionUser = read('appSession', 'Usuario') as string;
     const userAvatar = read('userAvatar', null);
@@ -58,7 +59,11 @@ export function Sidebar({ activeTab, onTabChange, onLogout }: SidebarProps) {
 
     const users = read<any[]>('users', []);
     const currentUser = users.find((u: any) => u.name === sessionUser);
-    const role = currentUser?.role || 'worker';
+
+    // Better default role logic
+    const isGerenciaName = sessionUser?.toLowerCase().includes('gerencia') || sessionUser === 'gerencia@sotodelprior.com';
+    // Use prop if available, otherwise fallback to storage/defaults
+    const role = userRole || currentUser?.role || (isGerenciaName ? 'admin' : 'worker');
 
     // Hard override for Gerencia to ensure access even if DB is out of sync
     const isGerencia = sessionUser?.toLowerCase().includes('gerencia') || sessionUser === 'gerencia@sotodelprior.com';

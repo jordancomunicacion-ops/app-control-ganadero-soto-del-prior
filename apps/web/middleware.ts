@@ -14,7 +14,7 @@ export default auth((req) => {
         nextUrl.pathname.includes('favicon.ico');
 
     // Logs for the server terminal
-    console.log(`[MIDDLEWARE] Path: ${nextUrl.pathname} | LoggedIn: ${isLoggedIn} | isPublic: ${isPublic}`);
+    console.log(`[MIDDLEWARE] ${req.method} ${nextUrl.pathname} | LoggedIn: ${isLoggedIn} | Cookies: ${req.cookies.getAll().map(c => c.name).join(', ')}`);
 
     if (isPublic) {
         if (isLoggedIn && (nextUrl.pathname === '/login' || nextUrl.pathname === '/register')) {

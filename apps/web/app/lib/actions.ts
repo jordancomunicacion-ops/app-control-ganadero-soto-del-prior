@@ -10,13 +10,27 @@ import { redirect } from 'next/navigation';
 const prisma = new PrismaClient();
 
 export async function authenticate(
-    prevState: string | undefined,
+    prevState: any,
     formData: FormData,
 ) {
     try {
-        await signIn('credentials', formData);
+        console.log('[AUTH ACTION] Attempting sign in...');
+
+        // Use redirect: false to prevent server-side redirect exceptions
+        await signIn('credentials', {
+            redirect: false,
+            email: formData.get('email'),
+            password: formData.get('password'),
+        });
+
+        console.log('[AUTH ACTION] Sign in successful (no redirect)');
+        return { success: true, message: 'Login exitoso' };
+
     } catch (error) {
+        console.error('[AUTH ACTION] Caught error:', error);
+
         if (error instanceof AuthError) {
+            console.log('[AUTH ACTION] Error is AuthError type:', error.type);
             switch (error.type) {
                 case 'CredentialsSignin':
                     return 'Credenciales inválidas.';
@@ -24,7 +38,13 @@ export async function authenticate(
                     return 'Algo salió mal.';
             }
         }
-        throw error;
+
+        // This catch block might not be reached if signIn with redirect:false doesn't throw
+        // But if it does happen to throw a redirect error, re-throw it?
+        // Actually, with redirect:false, it shouldn't throw NEXT_REDIRECT.
+
+        console.error('[AUTH ACTION] Unknown error thrown:', error);
+        return 'Error del servidor.';
     }
 }
 

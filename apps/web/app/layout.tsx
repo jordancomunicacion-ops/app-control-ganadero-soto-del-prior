@@ -24,15 +24,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  if (typeof window !== 'undefined') {
-    // Self-healing: Clear corrupted non-JSON strings from critical keys
-    ['sessionUser', 'appSession'].forEach(key => {
-      const val = localStorage.getItem(key);
-      if (val && !val.startsWith('{') && !val.startsWith('[') && !val.startsWith('"')) {
-        localStorage.removeItem(key);
-      }
-    });
-  }
   return (
     <html lang="es">
       <body

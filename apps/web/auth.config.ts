@@ -6,12 +6,12 @@ export const authConfig = {
     trustHost: true,
     cookies: {
         sessionToken: {
-            name: `next-auth.session-token.ganadera`,
+            name: `ganaderia_token`,
             options: {
                 httpOnly: true,
                 sameSite: 'lax',
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: false,
             },
         },
     },
