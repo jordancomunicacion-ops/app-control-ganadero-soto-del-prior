@@ -69,3 +69,19 @@ export const SPANISH_PROVINCES: Province[] = [
 ];
 
 export const getProvinceName = (code: string) => SPANISH_PROVINCES.find(p => p.code === code)?.name || code;
+
+export const getCoordinatesForCity = async (cityName: string): Promise<{ lat: number, lon: number } | null> => {
+    try {
+        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=es&format=json`);
+        const data = await res.json();
+        if (data.results && data.results.length > 0) {
+            return {
+                lat: data.results[0].latitude,
+                lon: data.results[0].longitude
+            };
+        }
+    } catch (e) {
+        console.error("Geocoding error", e);
+    }
+    return null;
+};

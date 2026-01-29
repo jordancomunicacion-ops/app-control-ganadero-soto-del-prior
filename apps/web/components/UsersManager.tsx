@@ -3,24 +3,44 @@
 import React, { useState } from 'react';
 import { useStorage } from '@/context/StorageContext';
 import { User, Shield, Briefcase, Phone, CreditCard, Calendar, Trash2, Edit2, Search, Plus, Save, X } from 'lucide-react';
+import { getUsers, createUser, updateUserStatus, updateUserProfile, deleteUser } from '@/app/lib/user-actions';
 
 interface FullUser {
+    id: string; // Real ID
     name: string;
-    pass: string;
+    email: string;
+    // ...
+    approved: boolean;
+    // ...
     role: 'admin' | 'vet' | 'worker';
     joined: string;
-    // Extended fields
     firstName?: string;
     lastName?: string;
     dni?: string;
     phone?: string;
     dob?: string;
     jobTitle?: string;
+    pass?: string; // Optional for list
 }
 
-export function UsersManager() {
-    const { read, write } = useStorage();
-    const users = read<FullUser[]>('users', []);
+export function UsersManager({ userId }: { userId?: string }) {
+    const { read } = useStorage();
+    const [users, setUsers] = useState<FullUser[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    // Load from DB
+    React.useEffect(() => {
+        if (userId) {
+            getUsers(userId).then(dbUsers => {
+                setUsers(dbUsers as any[]);
+                setLoading(false);
+            }).catch(err => {
+                console.error(err);
+                setLoading(false);
+            });
+        }
+    }, [userId]);
+
     const sessionUser = read('sessionUser', '');
 
     const [searchTerm, setSearchTerm] = useState('');
@@ -33,25 +53,29 @@ export function UsersManager() {
         jobTitle: 'Peón Ganadero'
     });
 
-    const handleSave = () => {
-        if (!formData.name || !formData.pass) return alert("Usuario y Contraseña son obligatorios");
+    const handleSave = async () => {
+        if (!formData.name || !formData.email) return alert("Usuario y Email son obligatorios");
 
-        let newUsers = [...users];
-
-        if (isCreating) {
-            if (users.find(u => u.name === formData.name)) return alert("El usuario ya existe");
-            newUsers.push({
-                ...formData as FullUser,
-                joined: new Date().toISOString()
-            });
-        } else if (editingUser) {
-            newUsers = newUsers.map(u => u.name === editingUser.name ? { ...u, ...formData } : u);
+        try {
+            if (isCreating) {
+                const created = await createUser({ ...formData, password: formData.pass || '123456' });
+                setUsers([created as any, ...users]);
+            } else if (editingUser) {
+                await updateUserProfile(editingUser.id, formData);
+                // Update local state optimistic
+                setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...formData } as FullUser : u));
+            }
+            setEditingUser(null);
+            setIsCreating(false);
+            setFormData({ role: 'worker', jobTitle: 'Peón Ganadero' });
+        } catch (e: any) {
+            alert("Error: " + e.message);
         }
+    };
 
-        write('users', newUsers);
-        setEditingUser(null);
-        setIsCreating(false);
-        setFormData({ role: 'worker', jobTitle: 'Peón Ganadero' });
+    const handleToggleApproval = async (id: string, currentStatus: boolean) => {
+        await updateUserStatus(id, !currentStatus);
+        setUsers(users.map(u => u.id === id ? { ...u, approved: !currentStatus } : u));
     };
 
     const startEdit = (user: FullUser) => {
@@ -66,10 +90,15 @@ export function UsersManager() {
         setFormData({ role: 'worker', jobTitle: 'Peón Ganadero', pass: '123456' });
     };
 
-    const handleDelete = (name: string) => {
-        if (name === sessionUser) return alert("No puedes eliminar tu propio usuario");
-        if (confirm(`¿Eliminar usuario ${name}?`)) {
-            write('users', users.filter(u => u.name !== name));
+    const handleDelete = async (user: FullUser) => {
+        if (user.name === sessionUser) return alert("No puedes eliminar tu propio usuario");
+        if (confirm(`¿Eliminar usuario ${user.name}?`)) {
+            try {
+                await deleteUser(user.id);
+                setUsers(users.filter(u => u.id !== user.id));
+            } catch (e: any) {
+                alert("Error eliminando: " + e.message);
+            }
         }
     };
 
@@ -137,9 +166,19 @@ export function UsersManager() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                <input
+                                    type="email"
+                                    value={formData.email || ''}
+                                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                    className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña (Dejar vacío si no cambia)</label>
                                 <input
                                     type="password"
+                                    placeholder={!isCreating ? '******' : ''}
                                     value={formData.pass || ''}
                                     onChange={e => setFormData({ ...formData, pass: e.target.value })}
                                     className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none"
@@ -267,6 +306,18 @@ export function UsersManager() {
                                 </span>
                             </div>
 
+                            <div className="mt-2 text-xs">
+                                {user.approved ? (
+                                    <span className="flex items-center gap-1 text-green-700 font-bold">
+                                        ✅ Autorizado
+                                    </span>
+                                ) : (
+                                    <span className="flex items-center gap-1 text-orange-600 font-bold animate-pulse">
+                                        ⏳ Pendiente de Autorización
+                                    </span>
+                                )}
+                            </div>
+
                             <div className="space-y-2 text-sm text-gray-600 mt-4">
                                 <div className="flex items-center gap-2">
                                     <Briefcase className="w-4 h-4 text-gray-400" />
@@ -298,10 +349,19 @@ export function UsersManager() {
                             </button>
                             {user.name !== sessionUser && (
                                 <button
-                                    onClick={() => handleDelete(user.name)}
+                                    onClick={() => handleDelete(user)}
                                     className="text-red-600 font-medium text-xs hover:underline flex items-center gap-1"
                                 >
                                     <Trash2 className="w-3 h-3" /> Eliminar
+                                </button>
+                            )}
+
+                            {user.name !== sessionUser && (
+                                <button
+                                    onClick={() => handleToggleApproval(user.id, user.approved)}
+                                    className={`font-medium text-xs hover:underline flex items-center gap-1 ${user.approved ? 'text-orange-600' : 'text-green-600'}`}
+                                >
+                                    {user.approved ? 'Bloquear' : 'Autorizar Acceso'}
                                 </button>
                             )}
                         </div>

@@ -4,6 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useStorage } from '@/context/StorageContext';
 import { EventManager } from '@/services/eventManager';
 import { LifecycleEngine } from '@/services/lifecycleEngine';
+import { createEvent, getEvents } from '@/app/lib/event-actions';
+import { getFarms } from '@/app/lib/farm-actions';
+import { getAnimals } from '@/app/lib/animal-actions';
 
 const EVENT_TYPES = {
     'Sanitario': ['Saneamiento', 'Tratamiento', 'Vacunación', 'Desparasitación', 'Consulta Vet'],
@@ -48,30 +51,30 @@ export function EventsList() {
         const user = read<string>('sessionUser', '');
         setSessionUser(user);
         if (user) {
-            const allEvents = read<any[]>('events', []);
-            const allFarms = read<any[]>(`fincas_${user}`, []);
-            const allAnimals = read<any[]>(`animals_${user}`, []);
-
-            setFarms(allFarms);
-            setAnimals(allAnimals);
-
-            // Generate Lifecycle Alerts
-            const newAlerts: any[] = [];
-            allAnimals.forEach(animal => {
-                const animalAlerts = LifecycleEngine.getLifecycleAlerts({
-                    ...animal,
-                    birthDate: animal.birth // Ensure property mapping
-                } as any);
-                if (animalAlerts.length > 0) {
-                    newAlerts.push(...animalAlerts.map(a => ({ ...a, crotal: animal.crotal, farm: animal.farm })));
-                }
+            // 1. Load Events from DB (Hybrid: ignoring local storage for events now)
+            getEvents(user).then(dbEvents => {
+                setEvents(dbEvents as any[]);
+                setLoading(false);
             });
-            setAlerts(newAlerts);
 
-            // Sort by date desc
-            const sorted = [...allEvents].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            setEvents(sorted);
-            setLoading(false);
+            // 2. Load Farms & Animals from DB for selectors
+            getFarms(user).then(dbFarms => setFarms(dbFarms as any[]));
+            getAnimals(user).then(dbAnimals => {
+                setAnimals(dbAnimals as any[]);
+
+                // Generate Lifecycle Alerts (Client-side logic preserved)
+                const newAlerts: any[] = [];
+                dbAnimals.forEach((animal: any) => {
+                    const animalAlerts = LifecycleEngine.getLifecycleAlerts({
+                        ...animal,
+                        birthDate: animal.birth // Ensure property mapping
+                    } as any);
+                    if (animalAlerts.length > 0) {
+                        newAlerts.push(...animalAlerts.map(a => ({ ...a, crotal: animal.crotal, farm: animal.farm })));
+                    }
+                });
+                setAlerts(newAlerts);
+            });
         }
     }, [read]);
 
@@ -111,38 +114,70 @@ export function EventsList() {
         // Adaptation for EventManager which expects an 'animal' object usually
         // If it's a farm event, we might need to adjust logic or just pass a dummy animal object with farmId
         if (newEvent.relatedType === 'farm') {
-            // For generic/farm events, we can use handleStandardEvent but need to ensure it doesn't break
-            // if animal is not a real animal. EventManager.handleStandardEvent uses animal.id/crotal.
             const farmName = farms.find(f => f.id === newEvent.relatedId)?.name || 'Finca';
             eventData.animal = { id: newEvent.relatedId, crotal: farmName, farmId: newEvent.relatedId };
         }
 
-        await EventManager.handleStandardEvent(eventData, context);
+        // --- HYBRID INTERCEPTION ---
+        // Instead of calling EventManager.handleStandardEvent directly (which writes to LocalStorage),
+        // we will manually construct the DB payload and call Server Action.
+        // NOTE: EventManager logic for specific business rules (like updating Animal status) is SKIPPED here for simplicity in this migration step,
+        // unless we refactor EventManager to return the changes instead of writing them.
+        // For now, we assume simple event logging.
+        // TODO: Move Business Logic (Status updates, etc) to Server Actions or refactor EventManager.
 
-        // Refresh locally
-        const updatedEvents = read<any[]>('events', []);
-        const sorted = [...updatedEvents].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setEvents(sorted);
-        setShowModal(false);
+        const payload = {
+            type: finalType,
+            date: newEvent.formattedDate,
+            desc: (newEvent.corral ? `[Corral ${newEvent.corral}] ` : '') + newEvent.notes,
+            cost: newEvent.cost,
+            status: 'completed',
+            typeData: {
+                price: newEvent.price,
+                liveWeight: newEvent.weightLive,
+                carcassWeight: newEvent.weightCarcass,
+                yield: newEvent.yield,
+                seuropConf: newEvent.seuropConf,
+                fatCover: newEvent.fatCover
+            },
+            // Relations
+            farmId: newEvent.relatedType === 'farm' ? newEvent.relatedId :
+                newEvent.relatedType === 'animal' ? animals.find(a => a.id === newEvent.relatedId)?.farmId :
+                    farms[0]?.id, // Default to first farm if general? Or error.
+            animalId: newEvent.relatedType === 'animal' ? newEvent.relatedId : undefined
+        };
 
-        // Reset form
-        setNewEvent({
-            category: 'Sanitario',
-            type: 'Saneamiento',
-            date: new Date().toISOString().split('T')[0],
-            formattedDate: new Date().toISOString().split('T')[0],
-            notes: '',
-            cost: '',
-            relatedType: 'none',
-            relatedId: '',
-            corral: '',
-            price: '',
-            weightLive: '',
-            weightCarcass: '',
-            yield: '',
-            seuropConf: '',
-            fatCover: ''
-        });
+        if (!payload.farmId) {
+            alert("Error: No se pudo determinar la finca para este evento.");
+            return;
+        }
+
+        try {
+            const created = await createEvent(payload);
+            setEvents([created as any, ...events]);
+            setShowModal(false);
+
+            // Reset form
+            setNewEvent({
+                category: 'Sanitario',
+                type: 'Saneamiento',
+                date: new Date().toISOString().split('T')[0],
+                formattedDate: new Date().toISOString().split('T')[0],
+                notes: '',
+                cost: '',
+                relatedType: 'none',
+                relatedId: '',
+                corral: '',
+                price: '',
+                weightLive: '',
+                weightCarcass: '',
+                yield: '',
+                seuropConf: '',
+                fatCover: ''
+            });
+        } catch (e: any) {
+            alert("Error guardando evento: " + e.message);
+        }
     };
 
     return (

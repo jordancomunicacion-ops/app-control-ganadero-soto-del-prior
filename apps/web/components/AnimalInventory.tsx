@@ -9,8 +9,11 @@ import { BreedManager } from '@/services/breedManager';
 import { DietComposer } from './DietComposer';
 import { NutritionEngine } from '@/services/nutritionEngine';
 
-export function AnimalInventory() {
-    const { read, write } = useStorage();
+import { createAnimal, getAnimals, deleteAnimal } from '@/app/lib/animal-actions';
+import { getFarms } from '@/app/lib/farm-actions';
+
+export function AnimalInventory({ userId }: { userId?: string }) {
+    const { read, write } = useStorage(); // Keep read for other things/legacy logic if needed
 
     // Helper for Detailed Age
     const calculateAgeDetailed = (birthDateStr: string) => {
@@ -139,7 +142,21 @@ export function AnimalInventory() {
             });
 
 
-            // 2. Smart Synchronization (Fix weights using History)
+            // Load data from DB
+            if (userId) {
+                // Load Animals
+                getAnimals(userId).then(serverAnimals => {
+                    setAnimals(serverAnimals as any[]);
+                });
+
+                // Load Farms (for dropdown)
+                getFarms(userId).then(serverFarms => {
+                    setFarms(serverFarms as any[]);
+                });
+            }
+
+            // Legacy/Sync logic (simplified for now to avoid conflicts)
+            setEvents(read<any[]>('events', []));
             const globalEvents = read<any[]>('events', []);
 
             const syncedAnimals = animalsList.map(a => {
@@ -209,23 +226,32 @@ export function AnimalInventory() {
             return;
         }
 
-        // Check duplicate ID
+        // Check duplicate ID (local check + DB check will happen on create)
         if (animals.find(a => a.id === newAnimal.id)) {
-            alert("Ya existe un animal con ese Crotal");
+            alert("Ya existe un animal con ese Crotal (en vista actual)");
+            return;
+        }
+
+        // Find farm ID
+        const selectedFarmObj = farms.find(f => f.name === newAnimal.farm);
+        if (!selectedFarmObj) {
+            alert("Finca no válida");
             return;
         }
 
         const animalEntry = {
             ...newAnimal,
+            farmId: selectedFarmObj.id, // Important: Send ID
             weight: parseFloat(newAnimal.weight) || 0,
-            category: 'Sin Clasificar', // Logic for category calculation could be added here
+            category: 'Sin Clasificar',
             joined: new Date().toISOString()
         };
 
-
-        const updated = [...animals, animalEntry];
-        setAnimals(updated);
-        write(`animals_${sessionUser}`, updated);
+        if (userId) {
+            createAnimal(animalEntry).then(created => {
+                setAnimals([created as any, ...animals]);
+            }).catch(err => alert("Error guardando animal: " + err.message));
+        }
 
         setShowForm(false);
         setNewAnimal({

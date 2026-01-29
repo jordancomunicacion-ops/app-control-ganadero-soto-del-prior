@@ -65,20 +65,32 @@ export const SigpacService = {
             // Real endpoint: https://sigpac-hubcloud.mapama.es/server/rest/services/SIGPAC/PARCELAS/MapServer/0/query
             const baseUrl = `https://sigpac-hubcloud.mapama.es/server/rest/services/SIGPAC/PARCELAS/MapServer/0/query`;
 
-            // Where clause
-            const where = `PROVINCIA=${prov} AND MUNICIPIO=${muni} AND AGREGADO=0 AND ZONA=0 AND POLIGONO=${pol} AND PARCELA=${parc}`;
+            // First attempt: Strict query (common defaults)
+            let where = `PROVINCIA=${prov} AND MUNICIPIO=${muni} AND AGREGADO=0 AND ZONA=0 AND POLIGONO=${pol} AND PARCELA=${parc}`;
 
-            const params = new URLSearchParams({
+            let params = new URLSearchParams({
                 where: where,
-                outFields: '*', // Get all fields
+                outFields: '*',
                 returnGeometry: 'true',
                 f: 'json'
             });
 
-            const response = await fetch(`${baseUrl}?${params.toString()}`);
+            let response = await fetch(`${baseUrl}?${params.toString()}`);
             if (!response.ok) throw new Error('SIGPAC API Error');
 
-            const data = await response.json();
+            let data = await response.json();
+
+            // Second attempt: If not found, try without strict Agregado/Zona (needed for regions like Navarra)
+            if (!data.features || data.features.length === 0) {
+                console.log(`SIGPAC: Retrying without AGREGADO/ZONA for Prov ${prov}, Muni ${muni}, Pol ${pol}, Parc ${parc}`);
+                where = `PROVINCIA=${prov} AND MUNICIPIO=${muni} AND POLIGONO=${pol} AND PARCELA=${parc}`;
+                params.set('where', where);
+                response = await fetch(`${baseUrl}?${params.toString()}`);
+                if (response.ok) {
+                    data = await response.json();
+                }
+            }
+
             if (!data.features || data.features.length === 0) return null;
 
             const feature = data.features[0];

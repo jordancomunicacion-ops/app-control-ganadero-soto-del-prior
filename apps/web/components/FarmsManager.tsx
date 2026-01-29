@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useStorage } from '@/context/StorageContext';
 import { SigpacService } from '@/services/sigpacService';
 import { WeatherService } from '@/services/weatherService';
-import { SPANISH_PROVINCES } from '@/services/locationService';
+import { SPANISH_PROVINCES, getCoordinatesForCity } from '@/services/locationService';
 import { SoilEngine } from '@/services/soilEngine';
 import { BreedManager } from '@/services/breedManager';
+import { createFarm, getFarms, updateFarm, deleteFarm } from '@/app/lib/farm-actions';
 
 interface Farm {
     id: string;
@@ -26,6 +27,7 @@ interface Farm {
     corrals: number;
     corralNames?: string[];
     feedingSystem?: string;
+    irrigationCoef?: number; // New field
 
     // Recommendations & Analysis
     climateStudy?: any;
@@ -34,8 +36,8 @@ interface Farm {
     f1Recommendation?: any[];
 }
 
-export function FarmsManager() {
-    const { read, write } = useStorage();
+export function FarmsManager({ userId }: { userId?: string }) {
+    const { read } = useStorage(); // Keep read for other things if needed, but remove write for farms
     const [farms, setFarms] = useState<Farm[]>([]);
     const [showForm, setShowForm] = useState(false);
     const [sessionUser, setSessionUser] = useState('');
@@ -81,9 +83,12 @@ export function FarmsManager() {
         const user = read<string>('sessionUser', '');
         setSessionUser(user);
 
-        // Load farms
-        const loadedFarms = read<Farm[]>(`fincas_${user}`, []);
-        setFarms(loadedFarms);
+        // Load farms from DB
+        if (userId) {
+            getFarms(userId).then((data) => {
+                setFarms(data as any[]);
+            });
+        }
 
         // Restore Draft
         const draft = localStorage.getItem(`farm_draft_${user}`);
@@ -244,6 +249,8 @@ export function FarmsManager() {
             return;
         }
         setLoadingSigpac(true);
+        setSearchResult(null); // Fix: Clear previous result to avoid stale data
+
         try {
             // New Service Call
             const data = await SigpacService.fetchParcelData(
@@ -260,9 +267,6 @@ export function FarmsManager() {
                 // Assume 100 heads per 100ha ?
                 if (!maxHeads) setMaxHeads(Math.floor(data.area_ha * 2).toString()); // 2 cows per ha
 
-                // Guess Soil based on Slope/Use (Heuristic)
-                // If steep slope > 20%, probably "Sierra" (not in our basic list, map to closest or leave empty)
-
                 if (data.coordinates) {
                     handleAnalyzeClimate(data.coordinates.lat, data.coordinates.lon);
                 } else {
@@ -272,7 +276,18 @@ export function FarmsManager() {
 
                 alert(`✅ Parcela Localizada: ${data.area_ha.toFixed(2)} ha - Uso: ${data.use}`);
             } else {
-                alert("No se encontró la parcela en SIGPAC");
+                console.log("SIGPAC: Parcel not found, falling back to municipality coordinates for weather.");
+                // Fallback: If SIGPAC fails, at least get weather for the municipality
+                const provName = SPANISH_PROVINCES.find(p => p.code === provincia)?.name || '';
+                const cityQuery = `${municipioName}, ${provName}, Spain`;
+
+                const coords = await getCoordinatesForCity(cityQuery);
+                if (coords) {
+                    handleAnalyzeClimate(coords.lat, coords.lon);
+                    alert("⚠️ No se encontró la parcela exacta en SIGPAC, pero hemos cargado el clima de tu municipio.");
+                } else {
+                    alert("No se encontró la parcela en SIGPAC ni se pudo determinar la ubicación del municipio.");
+                }
             }
         } catch (e) {
             console.error(e);
@@ -336,9 +351,11 @@ export function FarmsManager() {
 
     const handleDeleteFarm = (id: string) => {
         if (confirm("¿Estás seguro de que quieres eliminar esta finca? Esta acción no se puede deshacer.")) {
-            const updated = farms.filter(f => f.id !== id);
-            setFarms(updated);
-            write(`fincas_${sessionUser}`, updated);
+            if (userId) {
+                deleteFarm(id, userId).then(() => {
+                    setFarms(farms.filter(f => f.id !== id));
+                });
+            }
             setSelectedFarm(null);
         }
     };
@@ -369,7 +386,7 @@ export function FarmsManager() {
 
     const [errors, setErrors] = useState<Record<string, boolean>>({});
 
-    const handleSaveFarm = () => {
+    const handleSaveFarm = async () => {
         const newErrors: Record<string, boolean> = {};
         if (!newName) newErrors.name = true;
         if (!license) newErrors.license = true;
@@ -389,6 +406,7 @@ export function FarmsManager() {
 
         if (searchResult) {
             recintos = cleanGisData(searchResult);
+            // Ensure proper sum in m2
             superficie = recintos.reduce((sum: number, r: any) => sum + (r.area || 0), 0);
 
             if (searchResult.lat && searchResult.lon) {
@@ -398,6 +416,14 @@ export function FarmsManager() {
 
         const muniObj = municipalities.find(m => m.codigo == municipio || m.codigo == parseInt(municipio));
         const finalMuniName = muniObj ? muniObj.descripcion : municipioName;
+
+        // Fallback: If no coords from specific SIGPAC, try to resolve Municipality Center
+        if (!coords && finalMuniName) {
+            const fallback = await getCoordinatesForCity(finalMuniName);
+            if (fallback) {
+                coords = { lat: fallback.lat, lng: fallback.lon };
+            }
+        }
 
         const id = editingId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `farm-${Date.now()}`);
 
@@ -413,6 +439,7 @@ export function FarmsManager() {
             recintos: recintos.length ? recintos : (editingId ? farms.find(f => f.id === editingId)?.recintos || [] : []),
             coords: coords || (editingId ? farms.find(f => f.id === editingId)?.coords : undefined),
             slope: searchResult?.slope_avg || (editingId ? farms.find(f => f.id === editingId)?.slope : 0),
+            irrigationCoef: searchResult?.irrigation_coef !== undefined ? searchResult.irrigation_coef : (editingId ? farms.find(f => f.id === editingId)?.irrigationCoef : 0),
 
             license,
             maxHeads: Number(maxHeads),
@@ -426,12 +453,15 @@ export function FarmsManager() {
             f1Recommendation: recommendations.f1s
         };
 
-        const updated = editingId
-            ? farms.map(f => f.id === editingId ? newFarm : f)
-            : [...farms, newFarm];
-
-        setFarms(updated);
-        write(`fincas_${sessionUser}`, updated);
+        if (editingId && userId) {
+            updateFarm(editingId, userId, newFarm).then((updatedFarm) => {
+                setFarms(farms.map(f => f.id === editingId ? updatedFarm as any : f));
+            });
+        } else if (userId) {
+            createFarm(userId, newFarm).then((createdFarm) => {
+                setFarms([createdFarm as any, ...farms]);
+            });
+        }
 
         // Reset
         setNewName('');

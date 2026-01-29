@@ -96,8 +96,16 @@ export function Calculator() {
         setDiet(uiDiet);
     };
 
-    // Auto-calculate effect
+    const [hasCalculated, setHasCalculated] = useState(false);
+
+    // Sync state reset on animal change
     useEffect(() => {
+        setHasCalculated(false);
+        setDiet([]); // Optional: Reset diet on new animal?
+    }, [selectedAnimal]);
+
+    // Manual Calculation Handler
+    const handleSimulate = () => {
         if (selectedAnimal) {
             calculate({
                 animal: selectedAnimal,
@@ -109,8 +117,9 @@ export function Calculator() {
                 })),
                 events: events.filter(e => e.animalId === selectedAnimal.id || e.animalCrotal === selectedAnimal.id)
             });
+            setHasCalculated(true);
         }
-    }, [diet, selectedAnimal, objective, effectiveSystem, events]);
+    };
 
     // Helper: Calculate Age in Months
     const calculateAgeInMonths = (birthDateStr: string) => {
@@ -171,6 +180,22 @@ export function Calculator() {
             setTargets(t);
         }
     }, [selectedAnimal, objective, effectiveSystem]);
+
+    // Dynamic Conformation Helper
+    const getDynamicConformation = () => {
+        if (!results || !targets) return 'R';
+        const base = results.carcass?.conformation_est || 'R';
+        const gainRatio = results.projectedGain / (targets.adg || 1);
+
+        const grades = ['P', 'O', 'R', 'U', 'E', 'S'];
+        let idx = grades.indexOf(base);
+        if (idx === -1) idx = 2; // Default R
+
+        if (gainRatio < 0.90 && idx > 0) idx--; // Downgrade if underfed (<90% of target)
+        if (gainRatio > 1.10 && idx < grades.length - 1) idx++; // Upgrade if overperforming (>110% of target)
+
+        return grades[idx];
+    };
 
     const filteredAnimals = Array.from(new Map(animals.filter(a => a.crotal || a.id).map(a => [a.crotal || a.id, a])).values())
         .filter(a => {
@@ -322,10 +347,110 @@ export function Calculator() {
 
                 {/* Results Panel */}
                 <div className="lg:col-span-2 space-y-6">
-                    {results ? (
+                    {/* Diet Builder First */}
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <div className="flex justify-between items-center mb-4">
+                            <div className="flex items-center gap-3">
+                                <h3 className="text-lg font-bold text-gray-800">Constructor de Dieta</h3>
+                                <button
+                                    onClick={handleSmartDiet}
+                                    className="text-xs bg-green-600 text-white px-3 py-1 rounded-full hover:bg-green-700 shadow-sm transition-colors font-bold flex items-center gap-1"
+                                >
+                                    Generar Dieta
+                                </button>
+                            </div>
+                            <div className="flex gap-2">
+                                <select
+                                    className="border rounded-lg px-2 py-1 text-sm max-w-xs"
+                                    onChange={(e) => {
+                                        if (e.target.value) {
+                                            addToDiet(e.target.value);
+                                            e.target.value = '';
+                                        }
+                                    }}
+                                >
+                                    <option value="">+ Añadir Alimento</option>
+                                    <optgroup label="Forrajes">
+                                        {availableFeeds.filter(f => f.category === 'Forraje').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                    </optgroup>
+                                    <optgroup label="Concentrados">
+                                        {availableFeeds.filter(f => f.category === 'Concentrado').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                    </optgroup>
+                                    <optgroup label="Suplementos">
+                                        {availableFeeds.filter(f => f.category === 'Suplemento').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                    </optgroup>
+                                    <optgroup label="Ecológicos">
+                                        {availableFeeds.filter(f => f.category === 'Ecológico').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                    </optgroup>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-gray-50 text-gray-600">
+                                    <tr>
+                                        <th className="p-3">Ingrediente</th>
+                                        <th className="p-3 w-32">Kg (Fresco)</th>
+                                        <th className="p-3 w-24">Kg (MS)</th>
+                                        <th className="p-3 text-right">Costo</th>
+                                        <th className="p-3 w-10"></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {diet.length === 0 ? (
+                                        <tr><td colSpan={5} className="p-4 text-center text-gray-400 italic">No hay ingredientes.</td></tr>
+                                    ) : (
+                                        diet.map((item, idx) => (
+                                            <tr key={idx} className="group hover:bg-gray-50">
+                                                <td className="p-3 font-medium flex items-center gap-2">
+                                                    <span className={`w-2 h-2 rounded-full ${item.item.category === 'Forraje' ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
+                                                    <div>
+                                                        <p>{item.item.name}</p>
+                                                        <p className="text-xs text-gray-400">{item.item.energy_mcal} Mcal/kg • {item.item.protein_percent}% PB</p>
+                                                    </div>
+                                                </td>
+                                                <td className="p-3">
+                                                    <input
+                                                        type="number"
+                                                        min="0" step="0.5"
+                                                        className="w-full border rounded px-2 py-1 text-center font-bold focus:ring-1 focus:ring-green-500 outline-none"
+                                                        value={item.amount}
+                                                        onChange={(e) => updateAmount(item.item.id, parseFloat(e.target.value) || 0)}
+                                                    />
+                                                </td>
+                                                <td className="p-3 text-gray-500">{(item.amount * (item.item.dm_percent / 100)).toFixed(2)}</td>
+                                                <td className="p-3 text-right text-gray-600">{(item.amount * item.item.cost_per_kg).toFixed(2)} €</td>
+                                                <td className="p-3 text-right">
+                                                    <button onClick={() => removeFromDiet(item.item.id)} className="text-gray-400 hover:text-red-500 transition-colors">✕</button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                                {diet.length > 0 && (
+                                    <tfoot className="border-t font-bold bg-green-50">
+                                        <tr>
+                                            <td className="p-3 text-green-800" colSpan={3}>
+                                                <button
+                                                    onClick={handleSimulate}
+                                                    className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg shadow transition-transform active:scale-95"
+                                                >
+                                                    ▶ Simular Rendimiento
+                                                </button>
+                                            </td>
+                                            <td className="p-3 text-right text-green-800" colSpan={2}>
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                )}
+                            </table>
+                        </div>
+                    </div>
+
+                    {hasCalculated && results ? (
                         <>
                             {/* KPIs */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom-4">
                                 <div className={`p-4 rounded-xl shadow-sm border ${results.projectedGain >= (targets?.adg || 0) ? 'bg-green-50 border-green-200' : 'bg-white border-gray-100'}`}>
                                     <p className="text-gray-500 text-xs uppercase font-bold">GMD Estimada</p>
                                     <p className={`text-3xl font-bold ${results.projectedGain >= (targets?.adg || 0) ? 'text-green-700' : 'text-gray-900'} mt-1`}>
@@ -361,101 +486,8 @@ export function Calculator() {
                                 </div>
                             </div>
 
-                            {/* Diet Builder */}
-                            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                                <div className="flex justify-between items-center mb-4">
-                                    <div className="flex items-center gap-3">
-                                        <h3 className="text-lg font-bold text-gray-800">Constructor de Dieta</h3>
-                                        <button
-                                            onClick={handleSmartDiet}
-                                            className="text-xs bg-green-600 text-white px-3 py-1 rounded-full hover:bg-green-700 shadow-sm transition-colors font-bold flex items-center gap-1"
-                                        >
-                                            Generar Dieta
-                                        </button>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <select
-                                            className="border rounded-lg px-2 py-1 text-sm max-w-xs"
-                                            onChange={(e) => {
-                                                if (e.target.value) {
-                                                    addToDiet(e.target.value);
-                                                    e.target.value = '';
-                                                }
-                                            }}
-                                        >
-                                            <option value="">+ Añadir Alimento</option>
-                                            <optgroup label="Forrajes">
-                                                {availableFeeds.filter(f => f.category === 'Forraje').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                            </optgroup>
-                                            <optgroup label="Concentrados">
-                                                {availableFeeds.filter(f => f.category === 'Concentrado').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                            </optgroup>
-                                            <optgroup label="Suplementos">
-                                                {availableFeeds.filter(f => f.category === 'Suplemento').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                            </optgroup>
-                                            <optgroup label="Ecológicos">
-                                                {availableFeeds.filter(f => f.category === 'Ecológico').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                            </optgroup>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="bg-gray-50 text-gray-600">
-                                            <tr>
-                                                <th className="p-3">Ingrediente</th>
-                                                <th className="p-3 w-32">Kg (Fresco)</th>
-                                                <th className="p-3 w-24">Kg (MS)</th>
-                                                <th className="p-3 text-right">Costo</th>
-                                                <th className="p-3 w-10"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100">
-                                            {diet.length === 0 ? (
-                                                <tr><td colSpan={5} className="p-4 text-center text-gray-400 italic">No hay ingredientes.</td></tr>
-                                            ) : (
-                                                diet.map((item, idx) => (
-                                                    <tr key={idx} className="group hover:bg-gray-50">
-                                                        <td className="p-3 font-medium flex items-center gap-2">
-                                                            <span className={`w-2 h-2 rounded-full ${item.item.category === 'Forraje' ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
-                                                            <div>
-                                                                <p>{item.item.name}</p>
-                                                                <p className="text-xs text-gray-400">{item.item.energy_mcal} Mcal/kg • {item.item.protein_percent}% PB</p>
-                                                            </div>
-                                                        </td>
-                                                        <td className="p-3">
-                                                            <input
-                                                                type="number"
-                                                                min="0" step="0.5"
-                                                                className="w-full border rounded px-2 py-1 text-center font-bold focus:ring-1 focus:ring-green-500 outline-none"
-                                                                value={item.amount}
-                                                                onChange={(e) => updateAmount(item.item.id, parseFloat(e.target.value) || 0)}
-                                                            />
-                                                        </td>
-                                                        <td className="p-3 text-gray-500">{(item.amount * (item.item.dm_percent / 100)).toFixed(2)}</td>
-                                                        <td className="p-3 text-right text-gray-600">{(item.amount * item.item.cost_per_kg).toFixed(2)} €</td>
-                                                        <td className="p-3 text-right">
-                                                            <button onClick={() => removeFromDiet(item.item.id)} className="text-gray-400 hover:text-red-500 transition-colors">✕</button>
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                        <tfoot className="border-t font-bold bg-green-50">
-                                            <tr>
-                                                <td className="p-3 text-green-800">TOTAL</td>
-                                                <td className="p-3 text-green-800">{(results.totalKg || 0).toFixed(2)} kg</td>
-                                                <td className="p-3 text-green-800">{(results.dmiActual || 0).toFixed(2)} kg</td>
-                                                <td className="p-3 text-right text-green-800">{(results.totalCost || 0).toFixed(2)} €</td>
-                                                <td></td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                            </div>
-
                             {/* Analysis & Financials - Stacked vertically */}
-                            <div className="flex flex-col gap-6">
+                            <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-8">
                                 {/* Nutritional Balance */}
                                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                                     <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">Balance Nutricional</h3>
@@ -525,7 +557,7 @@ export function Calculator() {
                                                 <div className="grid grid-cols-4 gap-0 text-center items-end">
                                                     <div className="border-r border-gray-100 h-10 flex flex-col justify-center px-1">
                                                         <p className="text-gray-400 text-[7px] font-black uppercase tracking-[0.2em] mb-1">Clasificación</p>
-                                                        <span className="text-4xl font-black text-gray-900 leading-none tracking-tighter">{results.carcass?.conformation_est || 'R'}</span>
+                                                        <span className="text-4xl font-black text-gray-900 leading-none tracking-tighter">{getDynamicConformation()}</span>
                                                     </div>
                                                     <div className="border-r border-gray-100 h-10 flex flex-col justify-center px-1">
                                                         <p className="text-gray-400 text-[7px] font-black uppercase tracking-[0.2em] mb-1">Infiltración</p>
@@ -599,7 +631,7 @@ export function Calculator() {
                         <div className="flex flex-col items-center justify-center h-full bg-white rounded-xl border-dashed border-2 border-gray-200 p-12 text-gray-400">
                             <span className="text-6xl mb-4">🧬</span>
                             <p className="text-lg font-medium text-gray-500">Simulador de Rendimiento</p>
-                            <p className="text-center text-sm max-w-xs mt-2">Selecciona un animal para ver su potencial.</p>
+                            <p className="text-center text-sm max-w-xs mt-2">Selecciona un animal, configura la dieta y pulsa "Simular" para ver su potencial.</p>
                         </div>
                     )}
                 </div>

@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -12,13 +12,24 @@ model User {
   name          String
   email         String    @unique
   password      String
-  role          String    @default("USER") // ADMIN, USER
+  role          String    @default("USER") // ADMIN, USER, VET
+  approved      Boolean   @default(false)
+  
+  // Extended Profile
+  firstName     String?
+  lastName      String?
+  dni           String?
+  phone         String?
+  jobTitle      String?
+  dob           DateTime?
   
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   resetToken       String?   @unique
   resetTokenExpiry DateTime?
+
+  farms            Farm[]
 }
 
 // 1. Entidades Principales (Referenciales y Estructurales)
@@ -29,9 +40,31 @@ model Farm {
   lat                   Float?
   lon                   Float?
   altitude              Float?
-  defaultManagementSystem String // extensivo, intensivo, mixto, ecologico
+  defaultManagementSystem String? // extensivo, intensivo, mixto, ecologico
   
+  // New Fields from Frontend
+  municipio             String?
+  municipioCode         String?
+  provinciaCode         String?
+  poligono              String?
+  parcela               String?
+  recintos              String?   // JSON
+  coords                String?   // JSON
+  superficie            Float     @default(0)
+  license               String?
+  maxHeads              Int       @default(0)
+  soilId                String?
+  corrals               Int       @default(0)
+  corralNames           String?   // JSON or comma-separated
+  feedingSystem         String?
+  slope                 Float     @default(0)
+
   createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt @default(now())
+
+  // User Relation
+  userId                String?   // Optional for now to avoid breaking existing data, but should be required in strict mode
+  user                  User?     @relation(fields: [userId], references: [id])
   
   // Relaciones
   animals               Animal[]
@@ -103,9 +136,17 @@ model Animal {
   fatherId              String?   // ID Animal Padre
   father                Animal?   @relation("Father", fields: [fatherId], references: [id])
 
-  status                String    // activo, vendido, muerto, sacrificado
+  status                String?    // activo, vendido, muerto, sacrificado
+  
+  // New Fields
+  notes                 String?
+  corral                String?
+  category              String?
+  breedName             String?   // For simple string storage if strict relation not used
+  currentWeight         Float?
 
   createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt @default(now())
 
   // Relaciones Inversas
   childrenAsMother      Animal[]  @relation("Mother")
@@ -214,6 +255,11 @@ model ManagementEvent {
   
   date                  DateTime
   type                  String    // destete, cambio_lote, tratamiento, cambio_dieta, cubricion, parto, entrada_cebo, salida_cebo
+  
+  details               String?   // New: Description/Notes
+  cost                  Float     @default(0)
+  status                String    @default("completed") // scheduled, pending, completed
+  eventData             String?   // JSON for extra data
   
   notes                 String?
 }

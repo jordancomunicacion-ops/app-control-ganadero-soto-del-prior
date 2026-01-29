@@ -57,9 +57,17 @@ async function runSimulation() {
 
     // 5. External Data
     console.log('\n--- 5. EXTERNAL DATA ---');
-    console.log('Fetching SIGPAC (Mocked/Real)...');
-    const parcel = await SigpacService.fetchParcelData(10, 31, 1, 1); // Caceres example
-    if (parcel) console.log(`   SIGPAC: Pol ${parcel.poligono} Parc ${parcel.parcela} - ${parcel.use} (${parcel.area_ha} ha)`);
+    console.log('Fetching SIGPAC (User Farm Navarra)...');
+    // Navarra (31), Fustiñana (108), Polígono (11), Parcela (631)
+    const parcel = await SigpacService.fetchParcelData(31, 108, 11, 631);
+    if (parcel) {
+        console.log(`   ✅ SIGPAC Found: Pol ${parcel.poligono} Parc ${parcel.parcela} - ${parcel.use} (${parcel.area_ha.toFixed(2)} ha)`);
+        if (parcel.coordinates) {
+            console.log(`   Coordinates: ${parcel.coordinates.lat}, ${parcel.coordinates.lon}`);
+        }
+    } else {
+        console.log('   ❌ SIGPAC: Parcel not found (Testing fallback logic next in UI)');
+    }
 
     console.log('Fetching Weather (Mocked/Real)...');
     if (parcel && parcel.coordinates) {

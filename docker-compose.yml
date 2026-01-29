@@ -10,7 +10,7 @@ services:
     container_name: ganaderia-web
     restart: unless-stopped
     environment:
-      - DATABASE_URL=file:/app/prisma/dev.db
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres}@db:5432/ganaderia?schema=public
       - NODE_TLS_REJECT_UNAUTHORIZED=0
       - AUTH_SECRET=${AUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL}
@@ -40,3 +40,22 @@ services:
       - "traefik.http.middlewares.ganaderia-https-redirect.redirectscheme.scheme=https"
       - "traefik.http.middlewares.ganaderia-https-redirect.redirectscheme.permanent=true"
       - "traefik.http.services.ganaderia-web-svc.loadbalancer.server.port=3000"
+      - "traefik.http.services.ganaderia-web-svc.loadbalancer.server.port=3000"
+
+  db:
+    image: postgres:15-alpine
+    container_name: ganaderia-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ganaderia
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - proxy-net
+
+volumes:
+  postgres_data:

@@ -43,9 +43,6 @@ export function LivestockApp({ session }: { session: any }) {
                 const existingIndex = currentUsers.findIndex((u: any) => u.email === userEmail || u.name === sessionUser);
 
                 const updatedUser = {
-                    name: sessionUser,
-                    email: userEmail,
-                    role: serverRole,
                     // Keep existing props if any
                     ...(existingIndex >= 0 ? currentUsers[existingIndex] : {}),
                     // Force update vital props
@@ -111,12 +108,12 @@ export function LivestockApp({ session }: { session: any }) {
         <AppShell activeTab={activeTab} onTabChange={setActiveTab} onLogout={handleLogout} userRole={serverRole}>
             <DataSeeder />
             {activeTab === 'home' && <Dashboard onNavigate={setActiveTab} />}
-            {activeTab === 'farms' && <FarmsManager />}
-            {activeTab === 'animals' && <AnimalInventory />}
+            {activeTab === 'farms' && <FarmsManager userId={session?.user?.id} />}
+            {activeTab === 'animals' && <AnimalInventory userId={session?.user?.id} />}
             {activeTab === 'events' && <EventsList />}
             {activeTab === 'calculator' && <Calculator />}
             {activeTab === 'reports' && <ReportsManager />}
-            {activeTab === 'users' && <UsersManager />}
+            {activeTab === 'users' && <UsersManager userId={session?.user?.id} />}
             {activeTab === 'profile' && <UserProfile />}
             {activeTab === 'data' && <DataManager />}
         </AppShell>

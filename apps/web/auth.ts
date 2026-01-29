@@ -1,15 +1,13 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { authConfig } from './auth.config';
 
 function logDebug(msg: string) {
     console.log(`[AUTH DEBUG] ${msg}`);
 }
-
-const prisma = new PrismaClient();
 
 async function getUser(email: string) {
     const cleanEmail = email.trim().toLowerCase();
@@ -43,6 +41,18 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
                         return null;
                     }
 
+                    // Strict Approval Check
+                    // Exception: gerencia email serves as master admin, capable of bootstrapping
+                    const isMasterAdmin = user.email === 'gerencia@sotodelprior.com';
+                    // @ts-ignore
+                    if (!user.approved && !isMasterAdmin) {
+                        console.log(`[AUTH] User ${user.email} is NOT approved.`);
+                        // Return null to deny login. 
+                        // ideally we'd return an error, but next-auth creds provider is limited. 
+                        // Users will see "CredentialsSignin" error.
+                        return null;
+                    }
+
                     console.log("[AUTH] User found. Verifying password...");
                     const passwordsMatch = await bcrypt.compare(password, user.password);
                     if (passwordsMatch) {
@@ -58,4 +68,23 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
             },
         }),
     ],
+    callbacks: {
+        ...authConfig.callbacks,
+        async jwt({ token, user }) {
+            if (user) {
+                token.id = user.id;
+                // @ts-ignore
+                token.role = user.role;
+            }
+            return token;
+        },
+        async session({ session, token }) {
+            if (token && session.user) {
+                session.user.id = token.id as string;
+                // @ts-ignore
+                session.user.role = token.role as string;
+            }
+            return session;
+        },
+    },
 });
