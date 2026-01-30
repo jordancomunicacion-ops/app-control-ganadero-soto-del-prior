@@ -14,6 +14,7 @@ model User {
   password      String
   role          String    @default("USER") // ADMIN, USER, VET
   approved      Boolean   @default(false)
+  permissions   String[]  @default([]) // IDs of accessible sections: 'farms', 'animals', etc.
   
   // Extended Profile
   firstName     String?

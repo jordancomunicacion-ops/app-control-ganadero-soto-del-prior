@@ -4,6 +4,8 @@ const prisma = new PrismaClient();
 
 async function main() {
     const users = await prisma.user.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 5,
         select: {
             id: true,
             email: true,
@@ -11,24 +13,15 @@ async function main() {
             role: true,
             approved: true,
             createdAt: true
-        },
-        orderBy: {
-            createdAt: 'desc'
         }
     });
 
-    console.log(`Found ${users.length} users:`);
-    users.forEach((u: any) => {
-        console.log(`- ${u.email} (${u.name})`);
-        console.log(`  Role: ${u.role}`);
-        console.log(`  Approved: ${u.approved}`);
-        console.log(`  Created: ${u.createdAt.toISOString()}`);
-        console.log('---');
-    });
+    console.log('Last 5 users:');
+    console.table(users);
 }
 
 main()
-    .catch(e => {
+    .catch((e) => {
         console.error(e);
         process.exit(1);
     })

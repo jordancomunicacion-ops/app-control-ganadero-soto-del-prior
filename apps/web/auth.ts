@@ -24,6 +24,7 @@ async function getUser(email: string) {
 
 export const { auth, signIn, signOut, handlers } = NextAuth({
     ...authConfig,
+    trustHost: true,
     providers: [
         Credentials({
             async authorize(credentials) {
@@ -50,7 +51,8 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
                         // Return null to deny login. 
                         // ideally we'd return an error, but next-auth creds provider is limited. 
                         // Users will see "CredentialsSignin" error.
-                        return null;
+                        console.log(`[AUTH] User ${user.email} is NOT approved.`);
+                        throw new Error('AccessDenied');
                     }
 
                     console.log("[AUTH] User found. Verifying password...");

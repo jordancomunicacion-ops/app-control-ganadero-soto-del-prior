@@ -34,9 +34,22 @@ export async function authenticate(
             switch (error.type) {
                 case 'CredentialsSignin':
                     return 'Credenciales inválidas.';
+                case 'AccessDenied':
+                    return 'Cuenta pendiente de aprobación por el administrador.';
+                case 'CallbackRouteError':
+                    // Often wraps the original error
+                    if (error.cause?.err?.message === 'AccessDenied') {
+                        return 'Cuenta pendiente de aprobación.';
+                    }
+                    return 'Error de autenticación.';
                 default:
                     return 'Algo salió mal.';
             }
+        }
+
+        // Handle standard Error thrown from authorize
+        if (error instanceof Error && error.message === 'AccessDenied') {
+            return 'Tu cuenta está pendiente de aprobación.';
         }
 
         // This catch block might not be reached if signIn with redirect:false doesn't throw

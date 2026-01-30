@@ -23,8 +23,11 @@ services:
     expose:
       - "3000"
     labels:
+      - "traefik.enable=true"
       - "traefik.http.routers.ganaderia-web.rule=Host(`${APP_DOMAIN}`)"
-      - "traefik.http.routers.ganaderia-web.entrypoints=web"
+      - "traefik.http.routers.ganaderia-web.entrypoints=websecure"
+      - "traefik.http.routers.ganaderia-web.tls=true"
+      - "traefik.http.routers.ganaderia-web.tls.certresolver=le"
       - "traefik.http.routers.ganaderia-web.service=ganaderia-web-svc"
       - "traefik.http.services.ganaderia-web-svc.loadbalancer.server.port=3000"
 

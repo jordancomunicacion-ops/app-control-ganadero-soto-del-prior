@@ -20,7 +20,8 @@ export async function getUsers(currentUserId: string) {
     return users.map(u => ({
         ...u,
         pass: '*****', // Hide
-        joined: u.createdAt.toISOString()
+        joined: u.createdAt.toISOString(),
+        permissions: u.permissions || [] // Ensure array
     }));
 }
 
@@ -33,11 +34,12 @@ export async function updateUserStatus(userId: string, approved: boolean) {
 }
 
 export async function updateUserProfile(userId: string, data: any) {
-    const { role, firstName, lastName, dni, phone, jobTitle, dob, password } = data;
+    const { role, firstName, lastName, dni, phone, jobTitle, dob, password, permissions } = data;
 
     const updateData: any = {
         role, firstName, lastName, dni, phone, jobTitle,
-        dob: dob ? new Date(dob) : null
+        dob: dob ? new Date(dob) : null,
+        permissions: permissions // Update permissions if provided
     };
 
     if (password && password !== '*****' && password.length >= 6) {

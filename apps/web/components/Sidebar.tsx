@@ -79,10 +79,26 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole }: SidebarP
         { id: 'data', label: 'Datos', icon: Database },
         { id: 'users', label: 'Gestión Usuarios', icon: Users }
     ].filter(item => {
-        if (item.id === 'calculator' || item.id === 'reports' || item.id === 'data' || item.id === 'users') {
-            return isAdmin; // Only Admins see Financials/Data/Users
+        // 1. Admin / Gerencia always sees everything
+        if (isAdmin) return true;
+
+        // 2. Strict check for Users tab: ONLY Admin
+        if (item.id === 'users') return false;
+
+        // 3. For other roles (worker, vet, etc.), check permissions list
+        // If no permissions defined (legacy), defaulting to allowing basic tabs or blocking? 
+        // Let's default to allowing basic tabs if empty, or strict mode?
+        // User requested "authorize what sections they see". So strict mode is better.
+        // But we need to handle legacy/null permissions.
+        const permissions = currentUser?.permissions || [];
+
+        // If permissions exist, strict check
+        if (permissions.length > 0) {
+            return permissions.includes(item.id) || item.id === 'home'; // Always allow Home
         }
-        return true;
+
+        // Fallback for users without permissions set yet (allow basics)
+        return ['home', 'farms', 'animals', 'events'].includes(item.id);
     });
 
     const displayUser = sessionUser || 'Usuario';

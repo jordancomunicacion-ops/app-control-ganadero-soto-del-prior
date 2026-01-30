@@ -12,7 +12,7 @@ interface FullUser {
     // ...
     approved: boolean;
     // ...
-    role: 'admin' | 'vet' | 'worker';
+    role: 'admin' | 'vet' | 'worker' | 'USER'; // Added USER
     joined: string;
     firstName?: string;
     lastName?: string;
@@ -21,6 +21,7 @@ interface FullUser {
     dob?: string;
     jobTitle?: string;
     pass?: string; // Optional for list
+    permissions?: string[];
 }
 
 export function UsersManager({ userId }: { userId?: string }) {
@@ -50,7 +51,8 @@ export function UsersManager({ userId }: { userId?: string }) {
     // Form State
     const [formData, setFormData] = useState<Partial<FullUser>>({
         role: 'worker',
-        jobTitle: 'Peón Ganadero'
+        jobTitle: 'Peón Ganadero',
+        permissions: ['farms', 'animals', 'events'] // Default permissions
     });
 
     const handleSave = async () => {
@@ -67,7 +69,7 @@ export function UsersManager({ userId }: { userId?: string }) {
             }
             setEditingUser(null);
             setIsCreating(false);
-            setFormData({ role: 'worker', jobTitle: 'Peón Ganadero' });
+            setFormData({ role: 'worker', jobTitle: 'Peón Ganadero', permissions: ['farms', 'animals', 'events'] });
         } catch (e: any) {
             alert("Error: " + e.message);
         }
@@ -81,13 +83,13 @@ export function UsersManager({ userId }: { userId?: string }) {
     const startEdit = (user: FullUser) => {
         setEditingUser(user);
         setIsCreating(false);
-        setFormData({ ...user });
+        setFormData({ ...user, permissions: user.permissions || [] }); // Load permissions
     };
 
     const startCreate = () => {
         setEditingUser(null);
         setIsCreating(true);
-        setFormData({ role: 'worker', jobTitle: 'Peón Ganadero', pass: '123456' });
+        setFormData({ role: 'worker', jobTitle: 'Peón Ganadero', pass: '123456', permissions: ['farms', 'animals', 'events'] });
     };
 
     const handleDelete = async (user: FullUser) => {
@@ -102,11 +104,23 @@ export function UsersManager({ userId }: { userId?: string }) {
         }
     };
 
-    const filteredUsers = users.filter(u =>
+    const [activeTab, setActiveTab] = useState<'team' | 'requests'>('team');
+
+    // Filter Logic
+    const requestUsers = users.filter(u => u.role === 'USER' || !u.approved);
+
+    // Team: Users with role 'admin', 'vet', 'worker' AND approved
+    const teamUsers = users.filter(u => ['admin', 'vet', 'worker'].includes(u.role) && u.approved && u.role !== 'USER');
+
+    const displayedUsers = activeTab === 'team' ? teamUsers : requestUsers;
+
+    const filteredUsers = displayedUsers.filter(u =>
         u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         u.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         u.lastName?.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    const pendingCount = requestUsers.filter(u => !u.approved).length;
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -114,17 +128,46 @@ export function UsersManager({ userId }: { userId?: string }) {
                 <div>
                     <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                         <Shield className="w-8 h-8 text-green-600" />
-                        Gestión de Equipo
+                        Gestión de Usuarios
                     </h2>
-                    <p className="text-gray-500">Administra los perfiles y permisos del personal</p>
+                    <p className="text-gray-500">Administra el acceso y los permisos de la plataforma</p>
                 </div>
-                <button
-                    onClick={startCreate}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow-md"
-                >
-                    <Plus className="w-4 h-4" />
-                    Nuevo Empleado
-                </button>
+                <div className="flex items-center gap-3">
+                    <div className="bg-gray-100 p-1 rounded-lg flex text-sm font-medium">
+                        <button
+                            onClick={() => setActiveTab('team')}
+                            className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'team'
+                                ? 'bg-white text-gray-900 shadow-sm'
+                                : 'text-gray-500 hover:text-gray-900'
+                                }`}
+                        >
+                            Equipo ({teamUsers.length})
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('requests')}
+                            className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${activeTab === 'requests'
+                                ? 'bg-white text-gray-900 shadow-sm'
+                                : 'text-gray-500 hover:text-gray-900'
+                                }`}
+                        >
+                            Solicitudes / Clientes
+                            {pendingCount > 0 && (
+                                <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
+                                    {pendingCount}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+                    {activeTab === 'team' && (
+                        <button
+                            onClick={startCreate}
+                            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow-md"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Nuevo Empleado
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Search Bar */}
@@ -132,7 +175,7 @@ export function UsersManager({ userId }: { userId?: string }) {
                 <Search className="w-5 h-5 text-gray-400" />
                 <input
                     type="text"
-                    placeholder="Buscar por nombre, usuario o DNI..."
+                    placeholder={activeTab === 'team' ? "Buscar empleado..." : "Buscar solicitud..."}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="flex-1 outline-none text-gray-700 placeholder-gray-400"
@@ -261,6 +304,42 @@ export function UsersManager({ userId }: { userId?: string }) {
                                 />
                             </div>
                         </div>
+
+                        {/* Permissions Info */}
+                        <div className="space-y-4">
+                            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1">Permisos de Acceso</h4>
+                            <div className="space-y-2">
+                                <p className="text-xs text-gray-500 mb-2">Marcar las secciones que este usuario puede ver.</p>
+                                {[
+                                    { id: 'farms', label: 'Fincas' },
+                                    { id: 'animals', label: 'Animales' },
+                                    { id: 'events', label: 'Eventos' },
+                                    { id: 'calculator', label: 'Rendimiento' },
+                                    { id: 'reports', label: 'Reportes' },
+                                    { id: 'data', label: 'Datos Básicos' }
+                                ].map(section => (
+                                    <label key={section.id} className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.permissions?.includes(section.id) || false}
+                                            disabled={formData.role === 'admin'} // Admins have strict access to everything usually, or at least Users
+                                            onChange={(e) => {
+                                                const current = formData.permissions || [];
+                                                if (e.target.checked) {
+                                                    setFormData({ ...formData, permissions: [...current, section.id] });
+                                                } else {
+                                                    setFormData({ ...formData, permissions: current.filter(p => p !== section.id) });
+                                                }
+                                            }}
+                                            className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                                        />
+                                        <span className={`text-sm ${formData.role === 'admin' ? 'text-gray-400' : 'text-gray-700'}`}>
+                                            {section.label} {formData.role === 'admin' && '(Admin ve todo)'}
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
                     </div>
 
                     <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100">
@@ -289,7 +368,7 @@ export function UsersManager({ userId }: { userId?: string }) {
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex items-center gap-3">
                                     <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-sm
-                                        ${user.role === 'admin' ? 'bg-purple-600' : (user.role === 'vet' ? 'bg-blue-500' : 'bg-green-600')}
+                                        ${user.role === 'admin' ? 'bg-purple-600' : (user.role === 'vet' ? 'bg-blue-500' : (user.role === 'worker' ? 'bg-green-600' : 'bg-orange-500'))}
                                     `}>
                                         {user.firstName ? user.firstName.charAt(0) : user.name.charAt(0)}
                                     </div>
@@ -300,9 +379,10 @@ export function UsersManager({ userId }: { userId?: string }) {
                                 </div>
                                 <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border
                                     ${user.role === 'admin' ? 'bg-purple-50 text-purple-700 border-purple-100' :
-                                        (user.role === 'vet' ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-gray-50 text-gray-600 border-gray-200')}
+                                        (user.role === 'vet' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                                            (user.role === 'worker' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'))}
                                 `}>
-                                    {user.role === 'admin' ? 'ADMIN' : (user.role === 'vet' ? 'VETERINARIO' : 'TRABAJADOR')}
+                                    {user.role === 'admin' ? 'ADMIN' : (user.role === 'vet' ? 'VETERINARIO' : (user.role === 'worker' ? 'TRABAJADOR' : 'CLIENTE'))}
                                 </span>
                             </div>
 
@@ -367,6 +447,11 @@ export function UsersManager({ userId }: { userId?: string }) {
                         </div>
                     </div>
                 ))}
+                {filteredUsers.length === 0 && (
+                    <div className="col-span-full py-12 text-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                        <p>No se encontraron usuarios en esta sección.</p>
+                    </div>
+                )}
             </div>
         </div>
     );
