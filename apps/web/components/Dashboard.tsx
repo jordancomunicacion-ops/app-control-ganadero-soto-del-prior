@@ -4,8 +4,9 @@ import React, { useEffect, useState } from 'react';
 import { useStorage } from '@/context/StorageContext';
 import { WeatherService } from '@/services/weatherService';
 import { EventManager } from '@/services/eventManager';
+import { getFarms } from '@/app/lib/farm-actions';
 
-export function Dashboard({ onNavigate }: { onNavigate?: (tab: string) => void }) {
+export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) => void, userId?: string }) {
 
 
     const { read } = useStorage();
@@ -16,60 +17,73 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: string) => void }
     const [selectedTabIndex, setSelectedTabIndex] = useState(0);
     const [farmsList, setFarmsList] = useState<any[]>([]);
 
+    const loadWeatherForFarm = (currentFarm: any) => {
+        if (!currentFarm) return;
+
+        // Default coordinates (Madrid - Center of Spain) if farm has no coords
+        let lat = 40.4168;
+        let lon = -3.7038;
+        let farmName = currentFarm.name || 'General';
+
+        // Retrieve coordinates from the selected farm
+        if (currentFarm.coords && currentFarm.coords.lat && (currentFarm.coords.lng || currentFarm.coords.lon)) {
+            lat = currentFarm.coords.lat;
+            lon = currentFarm.coords.lng || currentFarm.coords.lon;
+        }
+
+        WeatherService.getCurrentWeather(lat, lon).then(async data => {
+            // Fetch Forecast
+            const forecast = await WeatherService.getForecast(lat, lon);
+
+            const windyUrl = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&width=650&height=450&zoom=8&level=surface&overlay=wind&product=ecmwf&menu=&message=&marker=true&pressure=&type=map&location=coordinates&detail=&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1`;
+
+            if (data) {
+                setWeather({
+                    temp: data.temperature,
+                    condition: data.weather_desc,
+                    location: farmName,
+                    mapUrl: windyUrl,
+                    icon: WeatherService.getWeatherIcon ? WeatherService.getWeatherIcon(data.weather_code) : '⛅',
+                    humidity: data.humidity,
+                    wind: data.wind_speed,
+                    forecast: forecast
+                });
+            } else {
+                setWeather(null);
+            }
+            setLoadingWeather(false);
+        }).catch(err => {
+            console.error("Weather load error:", err);
+            setWeather(null);
+            setLoadingWeather(false);
+        });
+    };
+
     useEffect(() => {
         try {
-            // 1. Load Weather
             // 1. Load Weather for SELECTED FARM
             const sessionUser = read('appSession', '');
 
-            // Ensure we read as 'fincas_' + sessionUser
-            const farms = read<any[]>(`fincas_${sessionUser}`, []);
-            setFarmsList(farms);
-
-            if (!farms || farms.length === 0) {
-                setLoadingWeather(false);
-                setWeather(null);
-            } else {
-                // Determine which farm to show based on selected tab
-                const currentFarm = farms[selectedTabIndex] || farms[0];
-
-                // Default coordinates (Madrid - Center of Spain) if farm has no coords
-                let lat = 40.4168;
-                let lon = -3.7038;
-                let farmName = currentFarm.name || 'General';
-
-                // Retrieve coordinates from the selected farm
-                if (currentFarm.coords && currentFarm.coords.lat && currentFarm.coords.lng) {
-                    lat = currentFarm.coords.lat;
-                    lon = currentFarm.coords.lng;
-                }
-
-                WeatherService.getCurrentWeather(lat, lon).then(async data => {
-                    // Fetch Forecast
-                    const forecast = await WeatherService.getForecast(lat, lon);
-
-                    const windyUrl = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&width=650&height=450&zoom=8&level=surface&overlay=wind&product=ecmwf&menu=&message=&marker=true&pressure=&type=map&location=coordinates&detail=&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1`;
-
-                    if (data) {
-                        setWeather({
-                            temp: data.temperature,
-                            condition: data.weather_desc,
-                            location: farmName,
-                            mapUrl: windyUrl,
-                            icon: WeatherService.getWeatherIcon ? WeatherService.getWeatherIcon(data.weather_code) : '⛅',
-                            humidity: data.humidity,
-                            wind: data.wind_speed,
-                            forecast: forecast
-                        });
-                    } else {
+            if (userId) {
+                getFarms(userId).then(farms => {
+                    const farmArray = farms as any[];
+                    setFarmsList(farmArray);
+                    if (!farmArray || farmArray.length === 0) {
+                        setLoadingWeather(false);
                         setWeather(null);
+                    } else {
+                        loadWeatherForFarm(farmArray[selectedTabIndex] || farmArray[0]);
                     }
-                    setLoadingWeather(false);
-                }).catch(err => {
-                    console.error("Weather load error:", err);
-                    setWeather(null);
-                    setLoadingWeather(false);
                 });
+            } else {
+                const farms = read<any[]>(`fincas_${sessionUser}`, []);
+                setFarmsList(farms);
+                if (!farms || farms.length === 0) {
+                    setLoadingWeather(false);
+                    setWeather(null);
+                } else {
+                    loadWeatherForFarm(farms[selectedTabIndex] || farms[0]);
+                }
             }
 
             // 2. Load Animal Stats
@@ -85,7 +99,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: string) => void }
         } catch (e) {
             // Silent catch for initialization errors
         }
-    }, [read, selectedTabIndex]);
+    }, [read, selectedTabIndex, userId]);
 
     const calculateAnimalStats = (animals: any[]) => {
         const maleCounts: Record<string, number> = {

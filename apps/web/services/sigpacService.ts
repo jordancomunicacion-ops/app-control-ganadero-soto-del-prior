@@ -56,10 +56,17 @@ export interface ParcelInfo {
 
 export const SigpacService = {
     /**
-     * Fetch Parcel Data from ArcGIS/SIGPAC Public Service
-     * Simplified URL for demonstration. In prod, this hits the specific FeatureServer.
+     * Fetch Parcel Data from ArcGIS/SIGPAC Public Service or Regional WFS
      */
     async fetchParcelData(prov: number, muni: number, pol: number, parc: number): Promise<ParcelInfo | null> {
+        // Special case for Navarra (IDENA)
+        if (prov === 31) {
+            console.log("SIGPAC: Using IDENA (Navarra) regional service...");
+            const idenaData = await this.fetchIdenaData(muni, pol, parc);
+            if (idenaData) return idenaData;
+            console.log("SIGPAC: IDENA returned no result, proceeding with standard service (likely to fail).");
+        }
+
         try {
             // Construct Query URL for SPANISH SIGPAC (Example Endpoint)
             // Real endpoint: https://sigpac-hubcloud.mapama.es/server/rest/services/SIGPAC/PARCELAS/MapServer/0/query
@@ -133,8 +140,71 @@ export const SigpacService = {
 
         } catch (error) {
             console.error('SigpacService Error:', error);
-            // Return null to indicate failure instead of misleading mock data
             return null;
         }
+    },
+
+    /**
+     * Specific fetch for Navarra using IDENA WFS
+     */
+    async fetchIdenaData(muni: number, pol: number, parc: number): Promise<ParcelInfo | null> {
+        const baseUrl = "https://idena.navarra.es/ogc/wfs";
+        const layers = [
+            'IDENA:CATAST_Pol_ParcelaRusti',
+            'IDENA:CATAST_Pol_ParcelaMixta',
+            'IDENA:CATAST_Pol_ParcelaUrba'
+        ];
+
+        for (const layer of layers) {
+            const cql = `CMUNICIPIO=${muni} AND POLIGONO=${pol} AND PARCELA=${parc}`;
+            const params = new URLSearchParams({
+                service: 'WFS',
+                version: '2.0.0',
+                request: 'GetFeature',
+                typeName: layer,
+                CQL_FILTER: cql,
+                outputFormat: 'application/json'
+            });
+
+            try {
+                const url = `${baseUrl}?${params.toString()}`;
+                const resp = await fetch(url);
+                if (resp.ok) {
+                    const json = await resp.json();
+                    if (json.features && json.features.length > 0) {
+                        const feature = json.features[0];
+                        const props = feature.properties;
+                        const geom = feature.geometry;
+
+                        let lat = 0, lon = 0;
+                        if (geom.type === 'Polygon' || geom.type === 'MultiPolygon') {
+                            const coords = geom.type === 'Polygon' ? geom.coordinates[0] : geom.coordinates[0][0];
+                            // Centroid estimation: average points
+                            let sumX = 0, sumY = 0;
+                            const points = coords.slice(0, Math.min(coords.length, 50));
+                            points.forEach((p: any) => { sumX += p[0]; sumY += p[1]; });
+                            const utm = utmToLatLon(sumX / points.length, sumY / points.length, 30);
+                            lat = utm.lat;
+                            lon = utm.lon;
+                        }
+
+                        return {
+                            provincia: 31,
+                            municipio: muni,
+                            poligono: pol,
+                            parcela: parc,
+                            area_ha: (props.GEOM_AREA || 0) / 10000,
+                            use: 'PR',
+                            slope_avg: 0,
+                            irrigation_coef: 0,
+                            coordinates: lat !== 0 ? { lat, lon } : undefined
+                        };
+                    }
+                }
+            } catch (e) {
+                console.error(`IDENA Error (${layer}):`, e);
+            }
+        }
+        return null;
     }
 };

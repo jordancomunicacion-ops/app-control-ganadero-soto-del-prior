@@ -16,7 +16,11 @@ export async function getFarms(userId: string) {
             ...f,
             recintos: f.recintos ? JSON.parse(f.recintos) : [],
             coords: f.coords ? JSON.parse(f.coords) : undefined,
-            corralNames: f.corralNames ? f.corralNames.split(',') : []
+            corralNames: f.corralNames ? f.corralNames.split(',') : [],
+            climateStudy: f.climateStudy ? JSON.parse(f.climateStudy) : undefined,
+            cropsRecommendation: f.cropsRecommendation ? JSON.parse(f.cropsRecommendation) : [],
+            breedsRecommendation: f.breedsRecommendation ? JSON.parse(f.breedsRecommendation) : [],
+            f1Recommendation: f.f1Recommendation ? JSON.parse(f.f1Recommendation) : []
         }));
     } catch (error) {
         console.error('Error fetching farms:', error);
@@ -31,7 +35,8 @@ export async function createFarm(userId: string, data: any) {
         const {
             name, municipio, municipioCode, provinciaCode, poligono, parcela,
             superficie, recintos, coords, slope, license, maxHeads, soilId,
-            corrals, corralNames, feedingSystem
+            corrals, corralNames, feedingSystem,
+            climateStudy, cropsRecommendation, breedsRecommendation, f1Recommendation, irrigationCoef
         } = data;
 
         const farm = await prisma.farm.create({
@@ -53,11 +58,27 @@ export async function createFarm(userId: string, data: any) {
                 corrals: parseInt(corrals || 0),
                 corralNames: Array.isArray(corralNames) ? corralNames.join(',') : '',
                 feedingSystem,
-                // defaultManagementSystem: 'extensivo'
+                irrigationCoef: parseFloat(irrigationCoef || 0),
+                climateStudy: JSON.stringify(climateStudy || {}),
+                cropsRecommendation: JSON.stringify(cropsRecommendation || []),
+                breedsRecommendation: JSON.stringify(breedsRecommendation || []),
+                f1Recommendation: JSON.stringify(f1Recommendation || []),
             }
         });
+
         revalidatePath('/dashboard');
-        return farm;
+
+        // Return parsed version so UI doesn't crash on newly added item
+        return {
+            ...farm,
+            recintos: farm.recintos ? JSON.parse(farm.recintos) : [],
+            coords: farm.coords ? JSON.parse(farm.coords) : undefined,
+            corralNames: farm.corralNames ? farm.corralNames.split(',') : [],
+            climateStudy: farm.climateStudy ? JSON.parse(farm.climateStudy) : undefined,
+            cropsRecommendation: farm.cropsRecommendation ? JSON.parse(farm.cropsRecommendation) : [],
+            breedsRecommendation: farm.breedsRecommendation ? JSON.parse(farm.breedsRecommendation) : [],
+            f1Recommendation: farm.f1Recommendation ? JSON.parse(farm.f1Recommendation) : []
+        };
     } catch (error) {
         console.error('Error creating farm:', error);
         throw new Error('Failed to create farm');
@@ -82,7 +103,8 @@ export async function updateFarm(farmId: string, userId: string, data: any) {
         const {
             name, municipio, municipioCode, provinciaCode, poligono, parcela,
             superficie, recintos, coords, slope, license, maxHeads, soilId,
-            corrals, corralNames, feedingSystem
+            corrals, corralNames, feedingSystem,
+            climateStudy, cropsRecommendation, breedsRecommendation, f1Recommendation, irrigationCoef
         } = data;
 
         const farm = await prisma.farm.update({
@@ -103,11 +125,28 @@ export async function updateFarm(farmId: string, userId: string, data: any) {
                 soilId,
                 corrals: parseInt(corrals || 0),
                 corralNames: Array.isArray(corralNames) ? corralNames.join(',') : '',
-                feedingSystem
+                feedingSystem,
+                irrigationCoef: parseFloat(irrigationCoef || 0),
+                climateStudy: JSON.stringify(climateStudy || {}),
+                cropsRecommendation: JSON.stringify(cropsRecommendation || []),
+                breedsRecommendation: JSON.stringify(breedsRecommendation || []),
+                f1Recommendation: JSON.stringify(f1Recommendation || []),
             }
         });
+
         revalidatePath('/dashboard');
-        return farm;
+
+        // Return parsed version
+        return {
+            ...farm,
+            recintos: farm.recintos ? JSON.parse(farm.recintos) : [],
+            coords: farm.coords ? JSON.parse(farm.coords) : undefined,
+            corralNames: farm.corralNames ? farm.corralNames.split(',') : [],
+            climateStudy: farm.climateStudy ? JSON.parse(farm.climateStudy) : undefined,
+            cropsRecommendation: farm.cropsRecommendation ? JSON.parse(farm.cropsRecommendation) : [],
+            breedsRecommendation: farm.breedsRecommendation ? JSON.parse(farm.breedsRecommendation) : [],
+            f1Recommendation: farm.f1Recommendation ? JSON.parse(farm.f1Recommendation) : []
+        };
     } catch (error) {
         console.error('Error updating farm:', error);
         throw new Error('Failed to update farm');

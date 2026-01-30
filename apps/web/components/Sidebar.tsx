@@ -76,8 +76,8 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole }: SidebarP
         { id: 'events', label: 'Eventos', icon: Calendar },
         { id: 'calculator', label: 'Rendimiento', icon: TrendingUp },
         { id: 'reports', label: 'Reportes', icon: BarChart3 },
-        { id: 'users', label: 'Equipo', icon: Users },
-        { id: 'data', label: 'Datos', icon: Database }
+        { id: 'data', label: 'Datos', icon: Database },
+        { id: 'users', label: 'Gestión Usuarios', icon: Users }
     ].filter(item => {
         if (item.id === 'calculator' || item.id === 'reports' || item.id === 'data' || item.id === 'users') {
             return isAdmin; // Only Admins see Financials/Data/Users

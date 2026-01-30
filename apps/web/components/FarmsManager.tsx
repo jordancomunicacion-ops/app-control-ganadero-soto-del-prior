@@ -6,6 +6,7 @@ import { SPANISH_PROVINCES, getCoordinatesForCity } from '@/services/locationSer
 import { SoilEngine } from '@/services/soilEngine';
 import { BreedManager } from '@/services/breedManager';
 import { createFarm, getFarms, updateFarm, deleteFarm } from '@/app/lib/farm-actions';
+import { searchParcel } from '@/app/lib/sigpac-actions';
 
 interface Farm {
     id: string;
@@ -115,7 +116,7 @@ export function FarmsManager({ userId }: { userId?: string }) {
                 console.error("Error restoring draft", e);
             }
         }
-    }, [read]);
+    }, [read, userId]);
 
     // Auto-Save Draft
     useEffect(() => {
@@ -186,14 +187,15 @@ export function FarmsManager({ userId }: { userId?: string }) {
             // We should use `searchResult?.slope_avg` if we are creating, or `farm.slope` if editing.
 
             const currentSlope = searchResult?.slope_avg || (editingId ? farms.find(f => f.id === editingId)?.slope : 0) || 0;
+            const currentSystem = feedingSystem || (editingId ? farms.find(f => f.id === editingId)?.feedingSystem : '') || '';
 
-            const recs = calculateFarmRecommendations(soilId, climateData, currentSlope);
+            const recs = calculateFarmRecommendations(soilId, climateData, currentSlope, currentSystem);
             setRecommendations(recs);
         }
     }, [soilId, climateData]);
 
     // Helper: Centralized Recommendation Logic (Reusable for Saved Farms)
-    const calculateFarmRecommendations = (sId: string, clim: any, slope: number) => {
+    const calculateFarmRecommendations = (sId: string, clim: any, slope: number, system: string) => {
         // 1. Crops
         const cropRecs = SoilEngine.getRecommendedCrops(sId, clim, slope).map(c => ({
             nombre_alimento: c.crop,
@@ -221,11 +223,21 @@ export function FarmsManager({ userId }: { userId?: string }) {
                     .slice(0, 3)
                     .map(b => ({ breed: b.name, reasons: ['Alta tolerancia al calor', 'Adaptación'] }));
             } else {
-                return candidates
-                    .filter(b => b.adg_feedlot > 1.2)
-                    .sort((a, b) => b.adg_feedlot - a.adg_feedlot)
-                    .slice(0, 3)
-                    .map(b => ({ breed: b.name, reasons: ['Alta productividad', 'Eficiencia'] }));
+                // Logic based on Feeding System
+                if (system === 'extensivo' || system === 'ecologico') {
+                    return candidates
+                        .filter(b => b.adg_pasture > 0.8) // Threshold for pasture
+                        .sort((a, b) => b.adg_pasture - a.adg_pasture)
+                        .slice(0, 3)
+                        .map(b => ({ breed: b.name, reasons: ['Alta GMD en Pasto', 'Rusticidad'] }));
+                } else {
+                    // Intensive / Mixed (Feedlot focus)
+                    return candidates
+                        .filter(b => b.adg_feedlot > 1.2)
+                        .sort((a, b) => b.adg_feedlot - a.adg_feedlot)
+                        .slice(0, 3)
+                        .map(b => ({ breed: b.name, reasons: ['Alta productividad (Cebo)', 'Eficiencia'] }));
+                }
             }
         };
 
@@ -252,15 +264,16 @@ export function FarmsManager({ userId }: { userId?: string }) {
         setSearchResult(null); // Fix: Clear previous result to avoid stale data
 
         try {
-            // New Service Call
-            const data = await SigpacService.fetchParcelData(
+            // New Service Call via Server Action to avoid CORS
+            const result = await searchParcel(
                 Number(provincia),
                 Number(municipio),
                 Number(poligono),
                 Number(parcela)
             );
 
-            if (data) {
+            if (result.success && result.data) {
+                const data = result.data;
                 setSearchResult(data);
 
                 // Auto-Fill Logic
@@ -409,8 +422,8 @@ export function FarmsManager({ userId }: { userId?: string }) {
             // Ensure proper sum in m2
             superficie = recintos.reduce((sum: number, r: any) => sum + (r.area || 0), 0);
 
-            if (searchResult.lat && searchResult.lon) {
-                coords = { lat: searchResult.lat, lng: searchResult.lon };
+            if (searchResult.coordinates) {
+                coords = { lat: searchResult.coordinates.lat, lng: searchResult.coordinates.lon };
             }
         }
 
@@ -889,7 +902,7 @@ export function FarmsManager({ userId }: { userId?: string }) {
                                         {(() => {
                                             const f1s = (selectedFarm.f1Recommendation && selectedFarm.f1Recommendation.length > 0)
                                                 ? selectedFarm.f1Recommendation
-                                                : (selectedFarm.climateStudy ? calculateFarmRecommendations(selectedFarm.soilId, selectedFarm.climateStudy, selectedFarm.slope || 0).f1s : []);
+                                                : (selectedFarm.climateStudy ? calculateFarmRecommendations(selectedFarm.soilId, selectedFarm.climateStudy, selectedFarm.slope || 0, selectedFarm.feedingSystem || '').f1s : []);
 
                                             return f1s.length > 0 ? (
                                                 <ul className="text-sm space-y-2">

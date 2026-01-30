@@ -212,7 +212,7 @@ export function AnimalInventory({ userId }: { userId?: string }) {
             setEvents(globalEvents);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [read]);
+    }, [read, userId]);
 
     const closeDetail = () => {
         setSelectedAnimal(null);

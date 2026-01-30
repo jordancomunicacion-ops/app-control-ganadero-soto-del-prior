@@ -24,6 +24,7 @@ async function main() {
             name: 'Gerencia',
             password: passwordHash,
             role: 'ADMIN',
+            approved: true,
         },
     });
 

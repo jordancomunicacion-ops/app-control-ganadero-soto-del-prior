@@ -71,17 +71,34 @@ export const SPANISH_PROVINCES: Province[] = [
 export const getProvinceName = (code: string) => SPANISH_PROVINCES.find(p => p.code === code)?.name || code;
 
 export const getCoordinatesForCity = async (cityName: string): Promise<{ lat: number, lon: number } | null> => {
-    try {
-        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=es&format=json`);
-        const data = await res.json();
-        if (data.results && data.results.length > 0) {
-            return {
-                lat: data.results[0].latitude,
-                lon: data.results[0].longitude
-            };
+    const queries = [cityName];
+
+    // Try splitting by comma to generate simpler fallbacks (e.g. "Fustiñana, Navarra, Spain" -> "Fustiñana")
+    if (cityName.includes(',')) {
+        const parts = cityName.split(',').map(s => s.trim());
+        if (parts.length > 0) {
+            queries.push(parts[0]); // Just the city name
+            // Also try City + Country if available (assuming last part is country if 3 parts)
+            if (parts.length >= 3) {
+                queries.push(`${parts[0]}, ${parts[parts.length - 1]}`);
+            }
         }
-    } catch (e) {
-        console.error("Geocoding error", e);
+    }
+
+    for (const q of queries) {
+        try {
+            console.log(`Geocoding attempt: ${q}`);
+            const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=es&format=json`);
+            const data = await res.json();
+            if (data.results && data.results.length > 0) {
+                return {
+                    lat: data.results[0].latitude,
+                    lon: data.results[0].longitude
+                };
+            }
+        } catch (e) {
+            console.error(`Geocoding error for "${q}"`, e);
+        }
     }
     return null;
 };

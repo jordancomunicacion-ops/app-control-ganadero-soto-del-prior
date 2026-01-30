@@ -107,12 +107,12 @@ export function LivestockApp({ session }: { session: any }) {
     return (
         <AppShell activeTab={activeTab} onTabChange={setActiveTab} onLogout={handleLogout} userRole={serverRole}>
             <DataSeeder />
-            {activeTab === 'home' && <Dashboard onNavigate={setActiveTab} />}
+            {activeTab === 'home' && <Dashboard onNavigate={setActiveTab} userId={session?.user?.id} />}
             {activeTab === 'farms' && <FarmsManager userId={session?.user?.id} />}
             {activeTab === 'animals' && <AnimalInventory userId={session?.user?.id} />}
-            {activeTab === 'events' && <EventsList />}
+            {activeTab === 'events' && <EventsList userId={session?.user?.id} />}
             {activeTab === 'calculator' && <Calculator />}
-            {activeTab === 'reports' && <ReportsManager />}
+            {activeTab === 'reports' && <ReportsManager userId={session?.user?.id} />}
             {activeTab === 'users' && <UsersManager userId={session?.user?.id} />}
             {activeTab === 'profile' && <UserProfile />}
             {activeTab === 'data' && <DataManager />}

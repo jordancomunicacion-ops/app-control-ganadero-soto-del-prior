@@ -58,6 +58,13 @@ model Farm {
   corralNames           String?   // JSON or comma-separated
   feedingSystem         String?
   slope                 Float     @default(0)
+  irrigationCoef        Float     @default(0)
+  
+  // Analysis & Recommendations (Stored as JSON strings or JSON type if DB supports, keeping as String? for compatibility)
+  climateStudy          String?   // JSON
+  cropsRecommendation   String?   // JSON
+  breedsRecommendation  String?   // JSON
+  f1Recommendation      String?   // JSON
 
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt @default(now())

@@ -15,7 +15,7 @@ const EVENT_TYPES = {
     'Movimientos': ['Cambio de Corral', 'Entrada', 'Salida', 'Venta', 'Muerte/Sacrificio']
 };
 
-export function EventsList() {
+export function EventsList({ userId }: { userId?: string }) {
     const { read, write } = useStorage();
     const [events, setEvents] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -76,7 +76,7 @@ export function EventsList() {
                 setAlerts(newAlerts);
             });
         }
-    }, [read]);
+    }, [read, userId]);
 
     const handleCreateEvent = async () => {
         if (!newEvent.notes && !newEvent.type) {

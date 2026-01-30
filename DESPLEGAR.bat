@@ -18,7 +18,7 @@ scp deploy.tar.gz root@164.92.167.42:/root/SOTOdelPRIOR/apps/ganaderia_autonoma/
 echo.
 echo [3/3] Instalando Ganaderia en el servidor...
 echo * Te va a pedir la contrasena otra vez *
-ssh root@164.92.167.42 "cd ~/SOTOdelPRIOR/apps/ganaderia_autonoma && tar -xzvf deploy.tar.gz > /dev/null && sed -i 's/\r$//' setup_remote.sh && bash setup_remote.sh"
+ssh root@164.92.167.42 "cd ~/SOTOdelPRIOR/apps/ganaderia_autonoma && echo '-> Descomprimiendo...' && tar -xzvf deploy.tar.gz && echo '-> Contenido del directorio:' && ls -la && sed -i 's/\r$//' setup_remote.sh && bash setup_remote.sh"
 
 echo.
 echo Limpiando...

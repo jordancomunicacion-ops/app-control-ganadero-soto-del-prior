@@ -23,23 +23,9 @@ services:
     expose:
       - "3000"
     labels:
-      - "traefik.enable=true"
       - "traefik.http.routers.ganaderia-web.rule=Host(`${APP_DOMAIN}`)"
-      - "traefik.http.routers.ganaderia-web.entrypoints=websecure"
-      - "traefik.http.routers.ganaderia-web.tls=true"
-      - "traefik.http.routers.ganaderia-web.tls.certresolver=le"
+      - "traefik.http.routers.ganaderia-web.entrypoints=web"
       - "traefik.http.routers.ganaderia-web.service=ganaderia-web-svc"
-      - "traefik.http.middlewares.ganaderia-forwarded.headers.customrequestheaders.X-Forwarded-Proto=https"
-      - "traefik.http.middlewares.ganaderia-forwarded.headers.customrequestheaders.X-Forwarded-Host=${APP_DOMAIN}"
-      - "traefik.http.routers.ganaderia-web.middlewares=ganaderia-forwarded"
-
-      # Redirect HTTP -> HTTPS
-      - "traefik.http.routers.ganaderia-web-http.rule=Host(`${APP_DOMAIN}`)"
-      - "traefik.http.routers.ganaderia-web-http.entrypoints=web"
-      - "traefik.http.routers.ganaderia-web-http.middlewares=ganaderia-https-redirect"
-      - "traefik.http.middlewares.ganaderia-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.ganaderia-https-redirect.redirectscheme.permanent=true"
-      - "traefik.http.services.ganaderia-web-svc.loadbalancer.server.port=3000"
       - "traefik.http.services.ganaderia-web-svc.loadbalancer.server.port=3000"
 
   db:

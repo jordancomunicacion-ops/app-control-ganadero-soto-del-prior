@@ -5,14 +5,22 @@ import { useStorage } from '@/context/StorageContext';
 import { NutritionEngine } from '@/services/nutritionEngine';
 import { BreedManager } from '@/services/breedManager';
 
-export function ReportsManager() {
+import { getAnimals } from '@/app/lib/animal-actions';
+
+export function ReportsManager({ userId }: { userId?: string }) {
     const { read } = useStorage();
 
     const handleFCRReport = async () => {
         try {
             // No init required for BreedManager
             const user = read<string>('sessionUser', '');
-            const animals = read<any[]>(`animals_${user}`, []);
+            let animals: any[] = [];
+
+            if (userId) {
+                animals = await getAnimals(userId);
+            } else {
+                animals = read<any[]>(`animals_${user}`, []);
+            }
 
             if (!animals || animals.length === 0) {
                 alert('No hay animales registrados para generar el reporte.');
