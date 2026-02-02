@@ -1,4 +1,6 @@
 import NextAuth from 'next-auth';
+
+console.log('[AUTH.TS] File loaded at top level');
 import Credentials from 'next-auth/providers/credentials';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
@@ -35,36 +37,47 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
 
                 if (parsedCredentials.success) {
                     const { email, password } = parsedCredentials.data;
-                    console.log(`[AUTH] Checking user: ${email}`);
+                    console.log(`[AUTH] Checking user email: "${email}"`);
                     const user = await getUser(email);
                     if (!user) {
-                        console.log("[AUTH] User not found in DB.");
+                        console.log(`[AUTH] User NOT found in DB for email: "${email}"`);
                         return null;
                     }
 
+                    console.log(`[AUTH] User found: ID=${user.id}, Email=${user.email}, Approved=${user.approved}, Role=${user.role}`);
+
                     // Strict Approval Check
-                    // Exception: gerencia email serves as master admin, capable of bootstrapping
                     const isMasterAdmin = user.email === 'gerencia@sotodelprior.com';
                     // @ts-ignore
                     if (!user.approved && !isMasterAdmin) {
-                        console.log(`[AUTH] User ${user.email} is NOT approved.`);
-                        // Return null to deny login. 
-                        // ideally we'd return an error, but next-auth creds provider is limited. 
-                        // Users will see "CredentialsSignin" error.
-                        console.log(`[AUTH] User ${user.email} is NOT approved.`);
+                        console.log(`[AUTH] User ${user.email} is NOT approved and NOT master admin.`);
                         throw new Error('AccessDenied');
                     }
 
-                    console.log("[AUTH] User found. Verifying password...");
+                    console.log("[AUTH] Verifying password with bcrypt.compare...");
+                    // Safety check: is user.password present?
+                    if (!user.password) {
+                        console.log("[AUTH] CRITICAL: User has NO password in DB.");
+                        return null;
+                    }
+
                     const passwordsMatch = await bcrypt.compare(password, user.password);
+                    console.log(`[AUTH] Password match result: ${passwordsMatch}`);
+
                     if (passwordsMatch) {
                         console.log("[AUTH] Password match! Login successful.");
-                        return user;
+                        return {
+                            id: user.id,
+                            name: user.name,
+                            email: user.email,
+                            role: (user as any).role,
+                            permissions: (user as any).permissions
+                        };
                     } else {
-                        console.log("[AUTH] Password mismatch.");
+                        console.log("[AUTH] Password mismatch. Debug info: Input length=" + password.length + ", Hash starts with=" + user.password.substring(0, 10));
                     }
                 } else {
-                    console.log("[AUTH] Invalid credentials format.");
+                    console.log("[AUTH] Invalid credentials format:", parsedCredentials.error.flatten().fieldErrors);
                 }
                 return null;
             },
@@ -77,6 +90,8 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
                 token.id = user.id;
                 // @ts-ignore
                 token.role = user.role;
+                // @ts-ignore
+                token.permissions = user.permissions;
             }
             return token;
         },
@@ -85,6 +100,8 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
                 session.user.id = token.id as string;
                 // @ts-ignore
                 session.user.role = token.role as string;
+                // @ts-ignore
+                session.user.permissions = token.permissions as string[];
             }
             return session;
         },

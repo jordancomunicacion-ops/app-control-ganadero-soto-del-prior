@@ -7,7 +7,7 @@ echo.
 cd /d "%~dp0"
 
 echo [1/3] Empaquetando App Ganaderia...
-tar --exclude="node_modules" --exclude=".next" --exclude=".git" --exclude=".idea" --exclude=".vscode" --exclude="dist" --exclude="build" --exclude="db_data" --exclude="pg_data" --exclude="*.log" --exclude="deploy.tar.gz" -czvf deploy.tar.gz .
+tar --exclude="node_modules" --exclude=".next" --exclude=".git" --exclude=".idea" --exclude=".vscode" --exclude="dist" --exclude="build" --exclude="db_data" --exclude="pg_data" --exclude="*.log" --exclude="deploy.tar.gz" --exclude="migrations_sqlite_archived" -czvf deploy.tar.gz .
 
 echo.
 echo [2/3] Subiendo al servidor (~/SOTOdelPRIOR/apps/ganaderia_autonoma)...
@@ -18,7 +18,7 @@ scp deploy.tar.gz root@164.92.167.42:/root/SOTOdelPRIOR/apps/ganaderia_autonoma/
 echo.
 echo [3/3] Instalando Ganaderia en el servidor...
 echo * Te va a pedir la contrasena otra vez *
-ssh root@164.92.167.42 "cd ~/SOTOdelPRIOR/apps/ganaderia_autonoma && echo '-> Descomprimiendo...' && tar -xzvf deploy.tar.gz && echo '-> Contenido del directorio:' && ls -la && sed -i 's/\r$//' setup_remote.sh && bash setup_remote.sh"
+ssh root@164.92.167.42 "cd ~/SOTOdelPRIOR/apps/ganaderia_autonoma && echo '-> Limpiando directorios antiguos...' && rm -rf apps services prisma && echo '-> Descomprimiendo...' && tar -xzvf deploy.tar.gz && echo '-> Contenido del directorio:' && ls -la && sed -i 's/\r$//' setup_remote.sh && bash setup_remote.sh"
 
 echo.
 echo Limpiando...

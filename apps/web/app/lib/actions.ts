@@ -1,5 +1,7 @@
 'use server';
 
+console.log('[ACTIONS.TS] File loaded at top level');
+
 import { signIn, signOut } from '@/auth';
 import { AuthError } from 'next-auth';
 import { CreateUserSchema, UserFormState } from './definitions';
@@ -13,15 +15,17 @@ export async function authenticate(
     prevState: any,
     formData: FormData,
 ) {
+    const email = formData.get('email');
+    const password = formData.get('password');
+    console.log(`[AUTH ACTION] Attempting sign in for: ${email}`);
     try {
-        console.log('[AUTH ACTION] Attempting sign in...');
-
         // Use redirect: false to prevent server-side redirect exceptions
-        await signIn('credentials', {
+        const result = await signIn('credentials', {
             redirect: false,
-            email: formData.get('email'),
-            password: formData.get('password'),
+            email,
+            password,
         });
+        console.log('[AUTH ACTION] Sign in result:', result);
 
         console.log('[AUTH ACTION] Sign in successful (no redirect)');
         return { success: true, message: 'Login exitoso' };
@@ -93,6 +97,7 @@ export async function registerUser(prevState: UserFormState | undefined, formDat
             },
         });
     } catch (error) {
+        console.error('Registration Error:', error);
         // @ts-ignore
         if (error.code === 'P2002') {
             return {
@@ -100,7 +105,8 @@ export async function registerUser(prevState: UserFormState | undefined, formDat
             };
         }
         return {
-            message: 'Error de base de datos.',
+            // @ts-ignore
+            message: 'Error de base de datos: ' + (error.message || JSON.stringify(error)),
         };
     }
 

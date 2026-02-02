@@ -26,42 +26,40 @@ export function LivestockApp({ session }: { session: any }) {
     const sessionUser = session?.user?.name || session?.user?.email || null;
 
     useEffect(() => {
-        if (sessionUser && isLoaded) {
+        if (sessionUser && isLoaded && session?.user) {
             write('appSession', sessionUser);
             write('sessionUser', sessionUser); // Sync for legacy components
 
-            // Sync user role and details to local storage "users" list
-            // This ensures Sidebar/Profile sees the correct role immediately
-            if (session?.user) {
-                // @ts-ignore
-                const serverRole = session.user.role || (session.user.email === 'gerencia@sotodelprior.com' ? 'admin' : 'worker');
-                const userEmail = session.user.email || '';
+            // @ts-ignore
+            const serverRole = (session.user.role || (session.user.email === 'gerencia@sotodelprior.com' ? 'ADMIN' : 'WORKER')).toUpperCase();
+            // @ts-ignore
+            const permissions = session.user.permissions || [];
+            const userEmail = session.user.email || '';
 
-                const currentUsers = JSON.parse(localStorage.getItem('ganaderia_users') || '[]');
+            // Use context-provided read/write for consistency
+            // Note: read<T>(key, fallback) returns T
+            const currentUsers = JSON.parse(localStorage.getItem('users') || '[]');
 
-                // Find and update, or add if missing
-                const existingIndex = currentUsers.findIndex((u: any) => u.email === userEmail || u.name === sessionUser);
+            // Find and update, or add if missing
+            const existingIndex = currentUsers.findIndex((u: any) => u.email === userEmail || u.name === sessionUser);
 
-                const updatedUser = {
-                    // Keep existing props if any
-                    ...(existingIndex >= 0 ? currentUsers[existingIndex] : {}),
-                    // Force update vital props
-                    name: sessionUser,
-                    email: userEmail,
-                    role: serverRole
-                };
+            const updatedUser = {
+                // Keep existing props if any
+                ...(existingIndex >= 0 ? currentUsers[existingIndex] : {}),
+                // Force update vital props
+                name: sessionUser,
+                email: userEmail,
+                role: serverRole,
+                permissions: permissions
+            };
 
-                if (existingIndex >= 0) {
-                    currentUsers[existingIndex] = updatedUser;
-                } else {
-                    currentUsers.push(updatedUser);
-                }
-
-                // We use 'write' which wraps localStorage, but we need to know the key prefix used by StorageContext.
-                // Assuming 'users' key. StorageContext likely prefixes it.
-                // Better to use 'write' directly with the array.
-                // However, 'read' gets the array. Let's use that pattern.
+            if (existingIndex >= 0) {
+                currentUsers[existingIndex] = updatedUser;
+            } else {
+                currentUsers.push(updatedUser);
             }
+
+            write('users', currentUsers);
         }
     }, [sessionUser, isLoaded, write, session]);
 
@@ -69,7 +67,7 @@ export function LivestockApp({ session }: { session: any }) {
     useEffect(() => {
         if (isLoaded && session?.user) {
             // @ts-ignore
-            const serverRole = session.user.role || (session.user.email === 'gerencia@sotodelprior.com' ? 'admin' : 'worker');
+            const serverRole = (session.user.role || (session.user.email === 'gerencia@sotodelprior.com' ? 'ADMIN' : 'WORKER')).toUpperCase();
             const userEmail = session.user.email || '';
 
             // We need to read the current list to update it. 
@@ -102,7 +100,7 @@ export function LivestockApp({ session }: { session: any }) {
     }
 
     // @ts-ignore
-    const serverRole = session?.user?.role || (session?.user?.email === 'gerencia@sotodelprior.com' ? 'admin' : undefined);
+    const serverRole = (session?.user?.role || (session?.user?.email === 'gerencia@sotodelprior.com' ? 'ADMIN' : undefined))?.toUpperCase();
 
     return (
         <AppShell activeTab={activeTab} onTabChange={setActiveTab} onLogout={handleLogout} userRole={serverRole}>

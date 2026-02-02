@@ -47,13 +47,12 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole }: SidebarP
             };
             write('users', [...users, newGerencia]);
             console.log('Auto-created Gerencia account');
-        } else if (gerenciaUser.role !== 'admin') {
+        } else if (gerenciaUser.role?.toUpperCase() !== 'ADMIN') {
             // Promote to admin
-            const updatedUser = { ...gerenciaUser, role: 'admin' };
+            const updatedUser = { ...gerenciaUser, role: 'ADMIN' };
             const otherUsers = users.filter((u: any) => u.name !== gerenciaUser.name);
             write('users', [...otherUsers, updatedUser]);
-            // Force page reload to reflect changes
-            window.location.reload();
+            // REMOVED window.location.reload() to prevent infinite loop
         }
     }, [sessionUser, read, write]);
 
@@ -63,11 +62,11 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole }: SidebarP
     // Better default role logic
     const isGerenciaName = sessionUser?.toLowerCase().includes('gerencia') || sessionUser === 'gerencia@sotodelprior.com';
     // Use prop if available, otherwise fallback to storage/defaults
-    const role = userRole || currentUser?.role || (isGerenciaName ? 'admin' : 'worker');
+    const role = (userRole || currentUser?.role || (isGerenciaName ? 'ADMIN' : 'WORKER'))?.toUpperCase();
 
     // Hard override for Gerencia to ensure access even if DB is out of sync
     const isGerencia = sessionUser?.toLowerCase().includes('gerencia') || sessionUser === 'gerencia@sotodelprior.com';
-    const isAdmin = role === 'admin' || isGerencia;
+    const isAdmin = role === 'ADMIN' || isGerencia;
 
     const navItems = [
         { id: 'home', label: 'Inicio', icon: Home },
@@ -98,7 +97,7 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole }: SidebarP
         }
 
         // Fallback for users without permissions set yet (allow basics)
-        return ['home', 'farms', 'animals', 'events'].includes(item.id);
+        return ['home', 'farms', 'animals', 'events', 'calculator'].includes(item.id);
     });
 
     const displayUser = sessionUser || 'Usuario';

@@ -9,7 +9,7 @@ export async function getUsers(currentUserId: string) {
     // We can check role if we trust the caller ID, OR we check DB role of caller.
     // Ideally verifying session again, but for now strict check:
     const currentUser = await prisma.user.findUnique({ where: { id: currentUserId } });
-    if (!currentUser || currentUser.role !== 'admin') {
+    if (!currentUser || currentUser.role.toUpperCase() !== 'ADMIN') {
         throw new Error('Unauthorized');
     }
 
@@ -37,7 +37,7 @@ export async function updateUserProfile(userId: string, data: any) {
     const { role, firstName, lastName, dni, phone, jobTitle, dob, password, permissions } = data;
 
     const updateData: any = {
-        role, firstName, lastName, dni, phone, jobTitle,
+        role: role?.toUpperCase(), firstName, lastName, dni, phone, jobTitle,
         dob: dob ? new Date(dob) : null,
         permissions: permissions // Update permissions if provided
     };
@@ -67,7 +67,7 @@ export async function createUser(data: any) {
             name,
             email,
             password: hashedPassword,
-            role,
+            role: role?.toUpperCase() || 'WORKER',
             firstName,
             lastName,
             jobTitle,

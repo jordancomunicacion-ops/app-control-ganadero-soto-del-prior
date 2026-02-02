@@ -1,0 +1,16 @@
+[
+  {
+    "id": "cml1cjd130000hqvnaiktk0ba",
+    "email": "gerencia@sotodelprior.com",
+    "approved": true,
+    "role": "ADMIN",
+    "password": "$2b$10$ADI/n1d7/xSHHdeuL2.aLOkxbkRc0qJLOIYx1TQlZRlFuovPcK4Wm"
+  },
+  {
+    "id": "cml53cyro0000uy43st55qotc",
+    "email": "jordan.comunicacion@gmail.com",
+    "approved": true,
+    "role": "WORKER",
+    "password": "$2b$10$UzKgcfF/Zrb5kk8886m9SuAbCeVKldpFxv/jgV4HagLJ.lyiS.fw2"
+  }
+]

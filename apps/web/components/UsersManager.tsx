@@ -12,7 +12,7 @@ interface FullUser {
     // ...
     approved: boolean;
     // ...
-    role: 'admin' | 'vet' | 'worker' | 'USER'; // Added USER
+    role: 'ADMIN' | 'VET' | 'WORKER' | 'USER'; // Standardized to uppercase
     joined: string;
     firstName?: string;
     lastName?: string;
@@ -50,9 +50,9 @@ export function UsersManager({ userId }: { userId?: string }) {
 
     // Form State
     const [formData, setFormData] = useState<Partial<FullUser>>({
-        role: 'worker',
+        role: 'WORKER',
         jobTitle: 'Peón Ganadero',
-        permissions: ['farms', 'animals', 'events'] // Default permissions
+        permissions: ['farms', 'animals', 'events', 'calculator'] // Default permissions
     });
 
     const handleSave = async () => {
@@ -69,15 +69,19 @@ export function UsersManager({ userId }: { userId?: string }) {
             }
             setEditingUser(null);
             setIsCreating(false);
-            setFormData({ role: 'worker', jobTitle: 'Peón Ganadero', permissions: ['farms', 'animals', 'events'] });
+            setFormData({ role: 'WORKER', jobTitle: 'Peón Ganadero', permissions: ['farms', 'animals', 'events', 'calculator'] });
         } catch (e: any) {
             alert("Error: " + e.message);
         }
     };
 
     const handleToggleApproval = async (id: string, currentStatus: boolean) => {
-        await updateUserStatus(id, !currentStatus);
-        setUsers(users.map(u => u.id === id ? { ...u, approved: !currentStatus } : u));
+        try {
+            await updateUserStatus(id, !currentStatus);
+            setUsers(users.map(u => u.id === id ? { ...u, approved: !currentStatus } : u));
+        } catch (e: any) {
+            alert("Error al actualizar estado: " + e.message);
+        }
     };
 
     const startEdit = (user: FullUser) => {
@@ -89,7 +93,7 @@ export function UsersManager({ userId }: { userId?: string }) {
     const startCreate = () => {
         setEditingUser(null);
         setIsCreating(true);
-        setFormData({ role: 'worker', jobTitle: 'Peón Ganadero', pass: '123456', permissions: ['farms', 'animals', 'events'] });
+        setFormData({ role: 'WORKER', jobTitle: 'Peón Ganadero', pass: '123456', permissions: ['farms', 'animals', 'events', 'calculator'] });
     };
 
     const handleDelete = async (user: FullUser) => {
@@ -107,10 +111,11 @@ export function UsersManager({ userId }: { userId?: string }) {
     const [activeTab, setActiveTab] = useState<'team' | 'requests'>('team');
 
     // Filter Logic
-    const requestUsers = users.filter(u => u.role === 'USER' || !u.approved);
+    // Requests: Only those with role 'USER' (clients) OR any user not approved yet who IS NOT an employee type
+    const requestUsers = users.filter(u => u.role === 'USER' || (!u.approved && !['ADMIN', 'VET', 'WORKER'].includes(u.role?.toUpperCase())));
 
-    // Team: Users with role 'admin', 'vet', 'worker' AND approved
-    const teamUsers = users.filter(u => ['admin', 'vet', 'worker'].includes(u.role) && u.approved && u.role !== 'USER');
+    // Team: Users with role 'ADMIN', 'VET', 'WORKER' - they stay here regardless of approval status as per user request
+    const teamUsers = users.filter(u => ['ADMIN', 'VET', 'WORKER'].includes(u.role?.toUpperCase()));
 
     const displayedUsers = activeTab === 'team' ? teamUsers : requestUsers;
 
@@ -230,13 +235,13 @@ export function UsersManager({ userId }: { userId?: string }) {
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Rol de Acceso</label>
                                 <select
-                                    value={formData.role || 'worker'}
+                                    value={formData.role || 'WORKER'}
                                     onChange={e => setFormData({ ...formData, role: e.target.value as any })}
                                     className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none bg-white"
                                 >
-                                    <option value="worker">Trabajador (Básico)</option>
-                                    <option value="vet">Veterinario (Sanitario)</option>
-                                    <option value="admin">Administrador (Total)</option>
+                                    <option value="WORKER">Trabajador (Básico)</option>
+                                    <option value="VET">Veterinario (Sanitario)</option>
+                                    <option value="ADMIN">Administrador (Total)</option>
                                 </select>
                             </div>
                         </div>
@@ -322,7 +327,7 @@ export function UsersManager({ userId }: { userId?: string }) {
                                         <input
                                             type="checkbox"
                                             checked={formData.permissions?.includes(section.id) || false}
-                                            disabled={formData.role === 'admin'} // Admins have strict access to everything usually, or at least Users
+                                            disabled={formData.role?.toUpperCase() === 'ADMIN'} // Admins have strict access to everything usually, or at least Users
                                             onChange={(e) => {
                                                 const current = formData.permissions || [];
                                                 if (e.target.checked) {
@@ -333,8 +338,8 @@ export function UsersManager({ userId }: { userId?: string }) {
                                             }}
                                             className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
                                         />
-                                        <span className={`text-sm ${formData.role === 'admin' ? 'text-gray-400' : 'text-gray-700'}`}>
-                                            {section.label} {formData.role === 'admin' && '(Admin ve todo)'}
+                                        <span className={`text-sm ${formData.role?.toUpperCase() === 'ADMIN' ? 'text-gray-400' : 'text-gray-700'}`}>
+                                            {section.label} {formData.role?.toUpperCase() === 'ADMIN' && '(Admin ve todo)'}
                                         </span>
                                     </label>
                                 ))}
@@ -360,99 +365,110 @@ export function UsersManager({ userId }: { userId?: string }) {
                 </div>
             )}
 
-            {/* Users Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {filteredUsers.map((user, i) => (
-                    <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group">
-                        <div className="p-6">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="flex items-center gap-3">
-                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-sm
-                                        ${user.role === 'admin' ? 'bg-purple-600' : (user.role === 'vet' ? 'bg-blue-500' : (user.role === 'worker' ? 'bg-green-600' : 'bg-orange-500'))}
-                                    `}>
-                                        {user.firstName ? user.firstName.charAt(0) : user.name.charAt(0)}
-                                    </div>
-                                    <div>
-                                        <h3 className="font-bold text-gray-900">{user.firstName} {user.lastName}</h3>
-                                        <p className="text-xs text-gray-500">@{user.name}</p>
-                                    </div>
-                                </div>
-                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border
-                                    ${user.role === 'admin' ? 'bg-purple-50 text-purple-700 border-purple-100' :
-                                        (user.role === 'vet' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                                            (user.role === 'worker' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'))}
-                                `}>
-                                    {user.role === 'admin' ? 'ADMIN' : (user.role === 'vet' ? 'VETERINARIO' : (user.role === 'worker' ? 'TRABAJADOR' : 'CLIENTE'))}
-                                </span>
-                            </div>
+            {/* Users List (Table) */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-gray-50 border-b border-gray-100">
+                                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Empleado</th>
+                                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Rol</th>
+                                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Estado</th>
+                                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Puesto</th>
+                                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                            {filteredUsers.map((user, i) => (
+                                <tr key={user.id || i} className="hover:bg-gray-50/50 transition-colors group">
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm shrink-0
+                                                ${user.role?.toUpperCase() === 'ADMIN' ? 'bg-purple-600' : (user.role?.toUpperCase() === 'VET' ? 'bg-blue-500' : (user.role?.toUpperCase() === 'WORKER' ? 'bg-green-600' : 'bg-orange-500'))}
+                                            `}>
+                                                {user.firstName ? user.firstName.charAt(0) : user.name.charAt(0)}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h3 className="font-bold text-gray-900 truncate">{user.firstName} {user.lastName}</h3>
+                                                <p className="text-xs text-gray-500 truncate">@{user.name}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border
+                                            ${user.role?.toUpperCase() === 'ADMIN' ? 'bg-purple-50 text-purple-700 border-purple-100' :
+                                                (user.role?.toUpperCase() === 'VET' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                                                    (user.role?.toUpperCase() === 'WORKER' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'))}
+                                        `}>
+                                            {user.role?.toUpperCase() === 'ADMIN' ? 'ADMIN' : (user.role?.toUpperCase() === 'VET' ? 'VETERINARIO' : (user.role?.toUpperCase() === 'WORKER' ? 'TRABAJADOR' : 'CLIENTE'))}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        {user.approved ? (
+                                            <span className="inline-flex items-center gap-1 text-green-700 font-semibold text-xs bg-green-50 px-2 py-1 rounded-md border border-green-100">
+                                                ✅ Autorizado
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 text-orange-600 font-semibold text-xs bg-orange-50 px-2 py-1 rounded-md border border-orange-100">
+                                                🚫 Bloqueado
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                                            <Briefcase className="w-4 h-4 text-gray-400" />
+                                            <span>{user.jobTitle || 'Sin puesto'}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                                        <div className="flex justify-end items-center gap-2 transition-opacity">
+                                            <button
+                                                onClick={() => startEdit(user)}
+                                                className="flex items-center gap-2 px-3 py-1.5 text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg transition-all text-xs font-bold"
+                                                title="Editar perfil"
+                                            >
+                                                <Edit2 className="w-3.5 h-3.5" />
+                                                <span>Editar</span>
+                                            </button>
 
-                            <div className="mt-2 text-xs">
-                                {user.approved ? (
-                                    <span className="flex items-center gap-1 text-green-700 font-bold">
-                                        ✅ Autorizado
-                                    </span>
-                                ) : (
-                                    <span className="flex items-center gap-1 text-orange-600 font-bold animate-pulse">
-                                        ⏳ Pendiente de Autorización
-                                    </span>
-                                )}
-                            </div>
+                                            {user.name !== sessionUser && (
+                                                <button
+                                                    onClick={() => handleToggleApproval(user.id, user.approved)}
+                                                    className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg transition-all text-xs font-bold ${user.approved
+                                                            ? 'text-orange-700 bg-orange-50 hover:bg-orange-100 border-orange-200'
+                                                            : 'text-green-700 bg-green-50 hover:bg-green-100 border-green-200'
+                                                        }`}
+                                                    title={user.approved ? 'Bloquear acceso' : 'Autorizar acceso'}
+                                                >
+                                                    <Shield className="w-3.5 h-3.5" />
+                                                    <span>{user.approved ? 'Bloquear' : 'Autorizar'}</span>
+                                                </button>
+                                            )}
 
-                            <div className="space-y-2 text-sm text-gray-600 mt-4">
-                                <div className="flex items-center gap-2">
-                                    <Briefcase className="w-4 h-4 text-gray-400" />
-                                    <span>{user.jobTitle || 'Sin puesto definido'}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <CreditCard className="w-4 h-4 text-gray-400" />
-                                    <span>{user.dni || 'Sin DNI'}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Phone className="w-4 h-4 text-gray-400" />
-                                    <span>{user.phone || 'Sin Teléfono'}</span>
-                                </div>
-                                {user.dob && (
-                                    <div className="flex items-center gap-2">
-                                        <Calendar className="w-4 h-4 text-gray-400" />
-                                        <span>{new Date(user.dob).toLocaleDateString()} ({new Date().getFullYear() - new Date(user.dob).getFullYear()} años)</span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                                onClick={() => startEdit(user)}
-                                className="text-green-600 font-medium text-xs hover:underline flex items-center gap-1"
-                            >
-                                <Edit2 className="w-3 h-3" /> Editar Ficha
-                            </button>
-                            {user.name !== sessionUser && (
-                                <button
-                                    onClick={() => handleDelete(user)}
-                                    className="text-red-600 font-medium text-xs hover:underline flex items-center gap-1"
-                                >
-                                    <Trash2 className="w-3 h-3" /> Eliminar
-                                </button>
-                            )}
-
-                            {user.name !== sessionUser && (
-                                <button
-                                    onClick={() => handleToggleApproval(user.id, user.approved)}
-                                    className={`font-medium text-xs hover:underline flex items-center gap-1 ${user.approved ? 'text-orange-600' : 'text-green-600'}`}
-                                >
-                                    {user.approved ? 'Bloquear' : 'Autorizar Acceso'}
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                ))}
+                                            {user.name !== sessionUser && (
+                                                <button
+                                                    onClick={() => handleDelete(user)}
+                                                    className="flex items-center gap-2 px-3 py-1.5 text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-all text-xs font-bold"
+                                                    title="Eliminar usuario"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                    <span>Eliminar</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
                 {filteredUsers.length === 0 && (
-                    <div className="col-span-full py-12 text-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                    <div className="py-12 text-center text-gray-400 bg-gray-50">
                         <p>No se encontraron usuarios en esta sección.</p>
                     </div>
                 )}
             </div>
+
         </div>
     );
 }
