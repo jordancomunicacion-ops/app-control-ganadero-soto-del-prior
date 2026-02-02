@@ -109,9 +109,9 @@ export function LivestockApp({ session }: { session: any }) {
             {activeTab === 'farms' && <FarmsManager userId={session?.user?.id} />}
             {activeTab === 'animals' && <AnimalInventory userId={session?.user?.id} />}
             {activeTab === 'events' && <EventsList userId={session?.user?.id} />}
-            {activeTab === 'calculator' && <Calculator />}
-            {activeTab === 'reports' && <ReportsManager userId={session?.user?.id} />}
             {activeTab === 'users' && <UsersManager userId={session?.user?.id} />}
+            {activeTab === 'calculator' && <Calculator userId={session?.user?.id} />}
+            {activeTab === 'reports' && <ReportsManager userId={session?.user?.id} />}
             {activeTab === 'profile' && <UserProfile />}
             {activeTab === 'data' && <DataManager />}
         </AppShell>

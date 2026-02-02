@@ -11,11 +11,15 @@ import { BreedManager, Breed } from '../services/breedManager';
 import { PriceEngine } from '../services/priceEngine';
 
 
-export function Calculator() {
+import { getAnimals } from '@/app/lib/animal-actions';
+import { getEvents } from '@/app/lib/event-actions';
+
+export function Calculator({ userId }: { userId?: string }) {
     const { read } = useStorage();
     const { calculate, results, loading, error } = useAnimalCalculator();
 
     const [animals, setAnimals] = useState<any[]>([]);
+    const [dataLoading, setDataLoading] = useState(false);
     const [selectedAnimalId, setSelectedAnimalId] = useState('');
     const [selectedAnimal, setSelectedAnimal] = useState<any>(null);
     const [objective, setObjective] = useState('Mantenimiento');
@@ -49,12 +53,26 @@ export function Calculator() {
     const [availableFeeds] = useState(FEED_DATABASE);
 
     useEffect(() => {
-        const user = read<string>('sessionUser', '');
-        if (user) {
-            setAnimals(read<any[]>(`animals_${user}`, []));
+        const sessionUser = read<string>('sessionUser', '');
+
+        if (userId) {
+            setDataLoading(true);
+            Promise.all([
+                getAnimals(userId),
+                getEvents(userId)
+            ]).then(([animalsData, eventsData]) => {
+                setAnimals(animalsData as any[]);
+                setEvents(eventsData as any[]);
+                setDataLoading(false);
+            }).catch(err => {
+                console.error("Error loading calculator data:", err);
+                setDataLoading(false);
+            });
+        } else if (sessionUser) {
+            setAnimals(read<any[]>(`animals_${sessionUser}`, []));
             setEvents(read<any[]>('events', []));
         }
-    }, [read]);
+    }, [read, userId]);
 
     // Diet Handlers
     const addToDiet = (feedId: string) => {

@@ -31,6 +31,11 @@ model User {
   resetTokenExpiry DateTime?
 
   farms            Farm[]
+
+  // Management Relation
+  managedById      String?
+  managedBy        User?     @relation("Management", fields: [managedById], references: [id])
+  managedUsers     User[]    @relation("Management")
 }
 
 // 1. Entidades Principales (Referenciales y Estructurales)

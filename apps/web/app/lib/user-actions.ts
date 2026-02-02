@@ -59,7 +59,7 @@ export async function deleteUser(userId: string) {
 }
 
 export async function createUser(data: any) {
-    const { name, email, password, role, firstName, lastName, jobTitle } = data;
+    const { name, email, password, role, firstName, lastName, jobTitle, managedById } = data;
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
@@ -71,6 +71,7 @@ export async function createUser(data: any) {
             firstName,
             lastName,
             jobTitle,
+            managedById, // Link to manager
             approved: true // Created by admin = auto approved
         } as any
     });

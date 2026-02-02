@@ -6,8 +6,17 @@ import { revalidatePath } from 'next/cache';
 export async function getFarms(userId: string) {
     if (!userId) return [];
     try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            // @ts-ignore
+            select: { role: true, managedById: true }
+        });
+
+        // @ts-ignore
+        const effectiveUserId = (user?.role?.toUpperCase() === 'WORKER' && user.managedById) ? user.managedById : userId;
+
         const farms = await prisma.farm.findMany({
-            where: { userId },
+            where: { userId: effectiveUserId },
             orderBy: { createdAt: 'desc' },
         });
 
@@ -32,6 +41,15 @@ export async function createFarm(userId: string, data: any) {
     try {
         if (!userId) throw new Error('User ID required');
 
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            // @ts-ignore
+            select: { role: true, managedById: true }
+        });
+
+        // @ts-ignore
+        const effectiveUserId = (user?.role?.toUpperCase() === 'WORKER' && user.managedById) ? user.managedById : userId;
+
         const {
             name, municipio, municipioCode, provinciaCode, poligono, parcela,
             superficie, recintos, coords, slope, license, maxHeads, soilId,
@@ -41,7 +59,7 @@ export async function createFarm(userId: string, data: any) {
 
         const farm = await prisma.farm.create({
             data: {
-                userId,
+                userId: effectiveUserId,
                 name,
                 municipio,
                 municipioCode,
@@ -87,8 +105,17 @@ export async function createFarm(userId: string, data: any) {
 
 export async function deleteFarm(farmId: string, userId: string) {
     try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            // @ts-ignore
+            select: { role: true, managedById: true }
+        });
+
+        // @ts-ignore
+        const effectiveUserId = (user?.role?.toUpperCase() === 'WORKER' && user.managedById) ? user.managedById : userId;
+
         await prisma.farm.delete({
-            where: { id: farmId, userId } // Ensure ownership
+            where: { id: farmId, userId: effectiveUserId } // Ensure ownership
         });
         revalidatePath('/dashboard');
         return { success: true };
@@ -100,6 +127,15 @@ export async function deleteFarm(farmId: string, userId: string) {
 
 export async function updateFarm(farmId: string, userId: string, data: any) {
     try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            // @ts-ignore
+            select: { role: true, managedById: true }
+        });
+
+        // @ts-ignore
+        const effectiveUserId = (user?.role?.toUpperCase() === 'WORKER' && user.managedById) ? user.managedById : userId;
+
         const {
             name, municipio, municipioCode, provinciaCode, poligono, parcela,
             superficie, recintos, coords, slope, license, maxHeads, soilId,
@@ -108,7 +144,7 @@ export async function updateFarm(farmId: string, userId: string, data: any) {
         } = data;
 
         const farm = await prisma.farm.update({
-            where: { id: farmId, userId },
+            where: { id: farmId, userId: effectiveUserId },
             data: {
                 name,
                 municipio,

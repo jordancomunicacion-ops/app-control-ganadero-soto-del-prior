@@ -5,6 +5,7 @@ import { useStorage } from '@/context/StorageContext';
 import { WeatherService } from '@/services/weatherService';
 import { EventManager } from '@/services/eventManager';
 import { getFarms } from '@/app/lib/farm-actions';
+import { getAnimals } from '@/app/lib/animal-actions';
 
 export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) => void, userId?: string }) {
 
@@ -87,9 +88,16 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
             }
 
             // 2. Load Animal Stats
-            const animals = read(`animals_${sessionUser}`, []);
-            const stats = calculateAnimalStats(animals);
-            setAnimalStats(stats);
+            if (userId) {
+                getAnimals(userId).then(animalsData => {
+                    const stats = calculateAnimalStats(animalsData);
+                    setAnimalStats(stats);
+                });
+            } else {
+                const animals = read(`animals_${sessionUser}`, []);
+                const stats = calculateAnimalStats(animals);
+                setAnimalStats(stats);
+            }
 
             // 3. Load Events
             const events = read('events', []);

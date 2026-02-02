@@ -31,7 +31,7 @@ export function UserProfile() {
 
     // God Mode Logic for Gerencia
     const isGerencia = sessionUser?.toLowerCase().includes('gerencia') || sessionUser === 'gerencia@sotodelprior.com';
-    const isAdmin = currentUser?.role === 'admin' || isGerencia;
+    const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN' || isGerencia;
     const isGerenciaName = currentUser?.name?.toLowerCase().includes('gerencia') || currentUser?.email === 'gerencia@sotodelprior.com';
     const displayRole = isAdmin ? 'admin' : (currentUser?.role || (isGerenciaName ? 'admin' : 'worker'));
 

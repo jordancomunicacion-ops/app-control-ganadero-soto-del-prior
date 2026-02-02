@@ -1,0 +1,20 @@
+{
+  "node": {
+    "60b5083b986ac2e61130e981163a871aeb41121731": {
+      "workers": {
+        "app/login/page": {
+          "moduleId": 70712,
+          "async": false,
+          "exportedName": "authenticate",
+          "filename": "apps/web/app/lib/actions.ts"
+        }
+      },
+      "layer": {
+        "app/login/page": "action-browser"
+      },
+      "exportedName": "authenticate",
+      "filename": "apps/web/app/lib/actions.ts"
+    }
+  },
+  "edge": {}
+}

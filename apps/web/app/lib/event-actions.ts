@@ -6,27 +6,19 @@ import { revalidatePath } from 'next/cache';
 export async function getEvents(userId: string) {
     if (!userId) return [];
     try {
-        // Fetch ALL events for farms owned by user
-        // OR fetch events for animals owned by user
-        // Simplest: Fetch events where Farm.userId = userId OR Animal.Farm.userId = userId
-        // But Event has direct relation to Farm and Animal.
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            // @ts-ignore
+            select: { role: true, managedById: true }
+        });
 
-        // Let's fetch events linked to Farms owned by User
-        // AND events linked to Animals in Farms owned by User
-
-        // Actually, schema has: 
-        // farmId -> Farm
-        // animalId -> Animal
-
-        // We can just query events where farm.userId == userId
-        // Note: For animal events, they should still have farmId set? 
-        // Schema says: farmId is required in ManagementEvent? 
-        // Let's check schema. Yes: farmId String
+        // @ts-ignore
+        const effectiveUserId = (user?.role?.toUpperCase() === 'WORKER' && user.managedById) ? user.managedById : userId;
 
         const events = await prisma.managementEvent.findMany({
             where: {
                 farm: {
-                    userId: userId
+                    userId: effectiveUserId
                 }
             },
             orderBy: { date: 'desc' },

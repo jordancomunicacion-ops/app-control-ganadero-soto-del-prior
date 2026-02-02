@@ -4,15 +4,21 @@ import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 
 export async function getAnimals(userId: string) {
-    // For now, fetch ALL animals for a user (across all farms).
-    // Or we can filter by farm if needed.
-    // The current UI shows all animals in one list often, or filters locally.
-    // Let's fetch all animals where farm belongs to user.
+    if (!userId) return [];
     try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            // @ts-ignore
+            select: { role: true, managedById: true }
+        });
+
+        // @ts-ignore
+        const effectiveUserId = (user?.role?.toUpperCase() === 'WORKER' && user.managedById) ? user.managedById : userId;
+
         const animals = await prisma.animal.findMany({
             where: {
                 farm: {
-                    userId: userId
+                    userId: effectiveUserId
                 }
             },
             orderBy: { createdAt: 'desc' },
