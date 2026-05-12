@@ -25,7 +25,7 @@ interface FullUser {
     managedById?: string;
 }
 
-export function UsersManager({ userId }: { userId?: string }) {
+export function UsersManager({ userId, currentUserRole }: { userId?: string, currentUserRole?: string }) {
     const { read } = useStorage();
     const [users, setUsers] = useState<FullUser[]>([]);
     const [loading, setLoading] = useState(true);
@@ -246,7 +246,7 @@ export function UsersManager({ userId }: { userId?: string }) {
                                 >
                                     <option value="WORKER">Trabajador (Básico)</option>
                                     <option value="VET">Veterinario (Sanitario)</option>
-                                    <option value="ADMIN">Administrador (Total)</option>
+                                    {currentUserRole === 'ADMIN' && <option value="ADMIN">Administrador (Total)</option>}
                                 </select>
                             </div>
                         </div>

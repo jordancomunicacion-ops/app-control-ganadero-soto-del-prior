@@ -40,7 +40,7 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
                     console.log(`[AUTH] Checking user email: "${email}"`);
                     const user = await getUser(email);
                     if (!user) {
-                        console.log(`[AUTH] User NOT found in DB for email: "${email}"`);
+                        console.log(`[AUTH] ERROR: User NOT found in DB for email: "${email}" (checked in lowercase/trimmed)`);
                         return null;
                     }
 
@@ -62,10 +62,10 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
                     }
 
                     const passwordsMatch = await bcrypt.compare(password, user.password);
-                    console.log(`[AUTH] Password match result: ${passwordsMatch}`);
+                    console.log(`[AUTH] Password comparison result: ${passwordsMatch}`);
 
                     if (passwordsMatch) {
-                        console.log("[AUTH] Password match! Login successful.");
+                        console.log(`[AUTH] SUCCESS: Login granted for user: ${user.email}`);
                         return {
                             id: user.id,
                             name: user.name,
@@ -74,7 +74,9 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
                             permissions: (user as any).permissions
                         };
                     } else {
-                        console.log("[AUTH] Password mismatch. Debug info: Input length=" + password.length + ", Hash starts with=" + user.password.substring(0, 10));
+                        console.log(`[AUTH] ERROR: Password MISMATCH for user: ${user.email}`);
+                        console.log(`[AUTH DEBUG] Provided password length: ${password.length}`);
+                        console.log(`[AUTH DEBUG] Stored hash prefix: ${user.password.substring(0, 10)}...`);
                     }
                 } else {
                     console.log("[AUTH] Invalid credentials format:", parsedCredentials.error.flatten().fieldErrors);

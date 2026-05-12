@@ -81,8 +81,8 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole }: SidebarP
         // 1. Admin / Gerencia always sees everything
         if (isAdmin) return true;
 
-        // 2. Strict check for Users tab: ONLY Admin
-        if (item.id === 'users') return false;
+        // 2. Strict check for Users tab: Admin or Manager (USER)
+        if (item.id === 'users' && role !== 'ADMIN' && role !== 'USER') return false;
 
         // 3. For other roles (worker, vet, etc.), check permissions list
         // If no permissions defined (legacy), defaulting to allowing basic tabs or blocking? 

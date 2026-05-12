@@ -11,6 +11,7 @@ export default auth((req) => {
         nextUrl.pathname === '/register' ||
         nextUrl.pathname.startsWith('/_next') ||
         nextUrl.pathname.startsWith('/api') ||
+        nextUrl.pathname.startsWith('/.well-known/') ||
         nextUrl.pathname.includes('favicon.ico');
 
     // Logs for the server terminal

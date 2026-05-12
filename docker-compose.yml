@@ -1,39 +1,15 @@
-version: '3.8'
+name: "sotoganaderia"
 
 networks:
-  proxy-net:
+  proxy:
     external: true
+  ganaderia-internal-net:
+    driver: bridge
 
 services:
-  web:
-    build: ./apps/web
-    container_name: ganaderia-web
-    restart: unless-stopped
-    environment:
-      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres}@db:5432/ganaderia?schema=public
-      - NODE_TLS_REJECT_UNAUTHORIZED=0
-      - AUTH_SECRET=${AUTH_SECRET}
-      - NEXTAUTH_URL=${NEXTAUTH_URL}
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-    env_file: .env
-    networks:
-      - proxy-net
-    ports:
-      - "3005:3000"
-    expose:
-      - "3000"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.ganaderia-web.rule=Host(`${APP_DOMAIN}`)"
-      - "traefik.http.routers.ganaderia-web.entrypoints=websecure"
-      - "traefik.http.routers.ganaderia-web.tls=true"
-      - "traefik.http.routers.ganaderia-web.tls.certresolver=le"
-      - "traefik.http.routers.ganaderia-web.service=ganaderia-web-svc"
-      - "traefik.http.services.ganaderia-web-svc.loadbalancer.server.port=3000"
-
-  db:
+  sotoganaderia-db:
     image: postgres:15-alpine
-    container_name: ganaderia-db
+    container_name: sotoganaderia-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -41,10 +17,48 @@ services:
       POSTGRES_DB: ganaderia
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
     networks:
-      - proxy-net
+      - ganaderia-internal-net
+    ports:
+      - "5441:5432"
+
+  sotoganaderia-web:
+    build: ./apps/web
+    container_name: sotoganaderia-web
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres}@sotoganaderia-db:5432/ganaderia?schema=public
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+      - AUTH_SECRET=${AUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-https://ganaderia.sotodelprior.com}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_TRUST_HOST=true
+      - NEXTAUTH_URL_INTERNAL=http://localhost:3000
+      - NEXTAUTH_SKIP_ENV_VALIDATION=true
+      - NODE_ENV=production
+    env_file: .env
+    networks:
+      - proxy
+      - ganaderia-internal-net
+    depends_on:
+      - sotoganaderia-db
+    expose:
+      - "3000"
+    labels:
+      - "traefik.enable=true"
+      # Router HTTP
+      - "traefik.http.routers.sotoganaderia-web-http.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.sotoganaderia-web-http.entrypoints=web"
+      - "traefik.http.routers.sotoganaderia-web-http.middlewares=redirect-to-https"
+      # Router HTTPS
+      - "traefik.http.routers.sotoganaderia-web.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.sotoganaderia-web.entrypoints=websecure"
+      - "traefik.http.routers.sotoganaderia-web.tls=true"
+      - "traefik.http.routers.sotoganaderia-web.tls.certresolver=le"
+      # Servicio
+      - "traefik.http.services.sotoganaderia-web.loadbalancer.server.port=3000"
+      # Middleware
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
 
 volumes:
   postgres_data:

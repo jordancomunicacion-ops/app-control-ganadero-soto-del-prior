@@ -84,7 +84,8 @@ export async function registerUser(prevState: UserFormState | undefined, formDat
         };
     }
 
-    const { name, email, password, role } = validatedFields.data;
+    const { name, email: rawEmail, password, role } = validatedFields.data;
+    const email = rawEmail.toLowerCase().trim();
     const hashedPassword = await bcrypt.hash(password, 10);
 
     try {

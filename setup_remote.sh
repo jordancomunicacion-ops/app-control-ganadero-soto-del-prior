@@ -10,6 +10,8 @@ if [ ! -f .env ]; then
 fi
 
 echo "-> Deteniendo Ganaderia..."
+docker stop sotoganaderia-web sotoganaderia-db || true
+docker rm sotoganaderia-web sotoganaderia-db || true
 docker compose down --remove-orphans || true
 
 echo "-> Limpiando recuros no utilizados..."
@@ -28,7 +30,10 @@ echo "-> Esperando a que inicie la base de datos (10s)..."
 sleep 10
 
 echo "-> Aplicando migraciones de base de datos..."
-docker compose exec -T web npx prisma migrate deploy || echo "ADVERTENCIA: Fallaron las migraciones, verifica los logs."
+docker compose exec -T sotoganaderia-web npx prisma migrate deploy || echo "ADVERTENCIA: Fallaron las migraciones, verifica los logs."
+
+echo "-> Inicializando/Actualizando datos (Seed)..."
+docker compose exec -T sotoganaderia-web npx prisma db seed || echo "ADVERTENCIA: Falló el seed de la base de datos."
 
 echo "=== Despliegue completado ==="
 echo "La app debería estar disponible en:"
