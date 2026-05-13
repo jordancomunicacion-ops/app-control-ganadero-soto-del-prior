@@ -1,79 +1,75 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
+import { getEffectiveUserId, safeJsonParse } from '@/lib/server-utils';
 import { revalidatePath } from 'next/cache';
+import { EventSchema } from './schemas';
 
-export async function getEvents(userId: string) {
-    if (!userId) return [];
+export async function getEvents(userId: string, options?: { page?: number; pageSize?: number }) {
+    if (!userId) return { data: [], total: 0, page: 1, pageSize: 100 };
+    const page = Math.max(1, options?.page ?? 1);
+    const pageSize = Math.min(200, options?.pageSize ?? 100);
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            // @ts-ignore
-            select: { role: true, managedById: true }
-        });
+        const effectiveUserId = await getEffectiveUserId(userId);
+        const where = { farm: { userId: effectiveUserId } };
+        const [events, total] = await prisma.$transaction([
+            prisma.managementEvent.findMany({
+                where,
+                orderBy: { date: 'desc' },
+                skip: (page - 1) * pageSize,
+                take: pageSize,
+                include: { animal: { select: { id: true } } },
+            }),
+            prisma.managementEvent.count({ where }),
+        ]);
 
-        // @ts-ignore
-        const effectiveUserId = (user?.role?.toUpperCase() === 'WORKER' && user.managedById) ? user.managedById : userId;
-
-        const events = await prisma.managementEvent.findMany({
-            where: {
-                farm: {
-                    userId: effectiveUserId
-                }
-            },
-            orderBy: { date: 'desc' },
-            include: {
-                animal: { select: { id: true } }
-                // Wait, Animal ID is Crotal in schema.
-            }
-        });
-
-        return events.map((e: any) => ({
-            ...e,
-            date: e.date.toISOString().split('T')[0],
-            desc: e.details || e.notes, // Map backend 'details' to frontend 'desc'
-            typeData: e.eventData ? JSON.parse(e.eventData) : {},
-            animalCrotal: e.animalId // If ID is crotal
-        }));
-
+        return {
+            data: events.map((e) => ({
+                ...e,
+                date: e.date.toISOString().split('T')[0],
+                desc: e.details || e.notes,
+                typeData: safeJsonParse(e.eventData, {}),
+                animalCrotal: e.animalId,
+            })),
+            total,
+            page,
+            pageSize,
+        };
     } catch (error) {
         console.error('Error fetching events:', error);
-        return [];
+        return { data: [], total: 0, page, pageSize };
     }
 }
 
-export async function createEvent(data: any) {
+export async function createEvent(data: unknown) {
+    const parsed = EventSchema.safeParse(data);
+    if (!parsed.success) {
+        const messages = parsed.error.issues.map((e) => e.message).join(', ');
+        throw new Error(`Datos inválidos: ${messages}`);
+    }
+
     try {
         const {
-            id, // UUID from frontend
             type, date, desc, cost, status,
-            animalId, farmId, // Relations
-            typeData, // JSON
-            // legacy fields mapping
+            animalId, farmId,
+            typeData,
             notes
-        } = data;
+        } = parsed.data;
 
-        // If animalId is "FARM_EVENT" or "GENERAL", handle it.
-        // Frontend sends "FARM_EVENT" sometimes.
-        let valAnimalId = animalId;
-        if (animalId === 'FARM_EVENT' || animalId === 'GENERAL') {
+        let valAnimalId: string | null = animalId ?? null;
+        if (valAnimalId === 'FARM_EVENT' || valAnimalId === 'GENERAL') {
             valAnimalId = null;
         }
 
         const event = await prisma.managementEvent.create({
             data: {
-                // If ID provided, use it? Prisma defaults to CUID. 
-                // Frontend generates UUIDs. We can try to use them if valid CUIDs or just let DB generate.
-                // Let's let DB generate to be safe, unless we really need that ID. 
-                // Frontend uses ID for keys.
-                // We'll ignore frontend ID for creation to avoid format issues.
                 type,
                 date: new Date(date),
                 details: desc || notes,
-                cost: parseFloat(cost || 0),
+                cost: cost ?? 0,
                 status: status || 'completed',
                 eventData: JSON.stringify(typeData || {}),
-                farm: { connect: { id: farmId } }, // Required
+                farm: { connect: { id: farmId } },
                 ...(valAnimalId ? { animal: { connect: { id: valAnimalId } } } : {})
             } as any
         });
@@ -85,11 +81,19 @@ export async function createEvent(data: any) {
     }
 }
 
-export async function deleteEvent(eventId: string) {
+export async function deleteEvent(eventId: string, userId: string) {
     try {
-        await prisma.managementEvent.delete({
-            where: { id: eventId }
+        const effectiveUserId = await getEffectiveUserId(userId);
+
+        // Verify ownership before deleting
+        const event = await prisma.managementEvent.findFirst({
+            where: { id: eventId, farm: { userId: effectiveUserId } },
+            select: { id: true }
         });
+
+        if (!event) throw new Error('Event not found or access denied');
+
+        await prisma.managementEvent.delete({ where: { id: eventId } });
         revalidatePath('/dashboard');
         return { success: true };
     } catch (error) {

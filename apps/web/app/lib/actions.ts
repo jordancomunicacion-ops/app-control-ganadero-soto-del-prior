@@ -1,15 +1,11 @@
 'use server';
 
-console.log('[ACTIONS.TS] File loaded at top level');
-
 import { signIn, signOut } from '@/auth';
 import { AuthError } from 'next-auth';
 import { CreateUserSchema, UserFormState } from './definitions';
 import bcrypt from 'bcryptjs';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { redirect } from 'next/navigation';
-
-const prisma = new PrismaClient();
 
 export async function authenticate(
     prevState: any,
@@ -99,15 +95,13 @@ export async function registerUser(prevState: UserFormState | undefined, formDat
         });
     } catch (error) {
         console.error('Registration Error:', error);
-        // @ts-ignore
-        if (error.code === 'P2002') {
+        if ((error as any).code === 'P2002') {
             return {
                 message: 'El email ya está en uso.',
             };
         }
         return {
-            // @ts-ignore
-            message: 'Error de base de datos: ' + (error.message || JSON.stringify(error)),
+            message: 'Error de base de datos: ' + ((error as Error).message || JSON.stringify(error)),
         };
     }
 

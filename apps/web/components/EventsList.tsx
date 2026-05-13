@@ -19,6 +19,9 @@ export function EventsList({ userId }: { userId?: string }) {
     const { read, write } = useStorage();
     const [events, setEvents] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(1);
+    const [totalEvents, setTotalEvents] = useState(0);
+    const PAGE_SIZE = 100;
 
     const [showModal, setShowModal] = useState(false);
     const [newEvent, setNewEvent] = useState({
@@ -52,14 +55,15 @@ export function EventsList({ userId }: { userId?: string }) {
         setSessionUser(user);
         if (user) {
             // 1. Load Events from DB (Hybrid: ignoring local storage for events now)
-            getEvents(user).then(dbEvents => {
+            getEvents(user, { page, pageSize: PAGE_SIZE }).then(({ data: dbEvents, total }) => {
                 setEvents(dbEvents as any[]);
+                setTotalEvents(total);
                 setLoading(false);
             });
 
             // 2. Load Farms & Animals from DB for selectors
-            getFarms(user).then(dbFarms => setFarms(dbFarms as any[]));
-            getAnimals(user).then(dbAnimals => {
+            getFarms(user).then(({ data: dbFarms }) => setFarms(dbFarms as any[]));
+            getAnimals(user).then(({ data: dbAnimals }) => {
                 setAnimals(dbAnimals as any[]);
 
                 // Generate Lifecycle Alerts (Client-side logic preserved)
@@ -76,7 +80,7 @@ export function EventsList({ userId }: { userId?: string }) {
                 setAlerts(newAlerts);
             });
         }
-    }, [read, userId]);
+    }, [read, userId, page]);
 
     const handleCreateEvent = async () => {
         if (!newEvent.notes && !newEvent.type) {
@@ -457,6 +461,34 @@ export function EventsList({ userId }: { userId?: string }) {
                     </tbody>
                 </table>
             </div>
+
+            {/* Pagination */}
+            {totalEvents > PAGE_SIZE && (
+                <div className="flex items-center justify-between px-2">
+                    <p className="text-sm text-gray-500">
+                        {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalEvents)} de {totalEvents} eventos
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={page === 1}
+                            className="px-3 py-1.5 text-sm font-medium border rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                        >
+                            ← Anterior
+                        </button>
+                        <span className="text-sm text-gray-600 font-medium">
+                            Pág. {page} / {Math.ceil(totalEvents / PAGE_SIZE)}
+                        </span>
+                        <button
+                            onClick={() => setPage(p => p + 1)}
+                            disabled={page * PAGE_SIZE >= totalEvents}
+                            className="px-3 py-1.5 text-sm font-medium border rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                        >
+                            Siguiente →
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
