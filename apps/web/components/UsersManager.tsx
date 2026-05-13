@@ -81,8 +81,9 @@ export function UsersManager({ userId, currentUserRole }: { userId?: string, cur
     };
 
     const handleToggleApproval = async (id: string, currentStatus: boolean) => {
+        if (!userId) return;
         try {
-            await updateUserStatus(id, !currentStatus);
+            await updateUserStatus(userId, id, !currentStatus);
             setUsers(users.map(u => u.id === id ? { ...u, approved: !currentStatus } : u));
         } catch (e: any) {
             alert("Error al actualizar estado: " + e.message);
@@ -102,10 +103,11 @@ export function UsersManager({ userId, currentUserRole }: { userId?: string, cur
     };
 
     const handleDelete = async (user: FullUser) => {
+        if (!userId) return;
         if (user.name === sessionUser) return alert("No puedes eliminar tu propio usuario");
         if (confirm(`¿Eliminar usuario ${user.name}?`)) {
             try {
-                await deleteUser(user.id);
+                await deleteUser(userId, user.id);
                 setUsers(users.filter(u => u.id !== user.id));
             } catch (e: any) {
                 alert("Error eliminando: " + e.message);

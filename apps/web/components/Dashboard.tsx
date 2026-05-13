@@ -66,7 +66,7 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
             const sessionUser = read('appSession', '');
 
             if (userId) {
-                getFarms(userId).then(farms => {
+                getFarms(userId).then(({ data: farms }) => {
                     const farmArray = farms as any[];
                     setFarmsList(farmArray);
                     if (!farmArray || farmArray.length === 0) {
@@ -89,7 +89,7 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
 
             // 2. Load Animal Stats
             if (userId) {
-                getAnimals(userId).then(animalsData => {
+                getAnimals(userId).then(({ data: animalsData }) => {
                     const stats = calculateAnimalStats(animalsData);
                     setAnimalStats(stats);
                 });

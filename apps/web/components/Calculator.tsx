@@ -60,7 +60,7 @@ export function Calculator({ userId }: { userId?: string }) {
             Promise.all([
                 getAnimals(userId),
                 getEvents(userId)
-            ]).then(([animalsData, eventsData]) => {
+            ]).then(([{ data: animalsData }, { data: eventsData }]) => {
                 setAnimals(animalsData as any[]);
                 setEvents(eventsData as any[]);
                 setDataLoading(false);

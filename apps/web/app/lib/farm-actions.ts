@@ -1,61 +1,73 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
+import { getEffectiveUserId, safeJsonParse } from '@/lib/server-utils';
 import { revalidatePath } from 'next/cache';
+import { FarmSchema } from './schemas';
 
-export async function getFarms(userId: string) {
-    if (!userId) return [];
+function parseFarm(f: {
+    recintos: string | null;
+    coords: string | null;
+    corralNames: string | null;
+    climateStudy: string | null;
+    cropsRecommendation: string | null;
+    breedsRecommendation: string | null;
+    f1Recommendation: string | null;
+    [key: string]: unknown;
+}) {
+    return {
+        ...f,
+        recintos: safeJsonParse(f.recintos, []),
+        coords: safeJsonParse(f.coords, undefined),
+        corralNames: f.corralNames ? f.corralNames.split(',') : [],
+        climateStudy: safeJsonParse(f.climateStudy, undefined),
+        cropsRecommendation: safeJsonParse(f.cropsRecommendation, []),
+        breedsRecommendation: safeJsonParse(f.breedsRecommendation, []),
+        f1Recommendation: safeJsonParse(f.f1Recommendation, []),
+    };
+}
+
+export async function getFarms(userId: string, options?: { page?: number; pageSize?: number }) {
+    if (!userId) return { data: [], total: 0, page: 1, pageSize: 50 };
+    const page = Math.max(1, options?.page ?? 1);
+    const pageSize = Math.min(200, options?.pageSize ?? 50);
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            // @ts-ignore
-            select: { role: true, managedById: true }
-        });
-
-        // @ts-ignore
-        const effectiveUserId = (user?.role?.toUpperCase() === 'WORKER' && user.managedById) ? user.managedById : userId;
-
-        const farms = await prisma.farm.findMany({
-            where: { userId: effectiveUserId },
-            orderBy: { createdAt: 'desc' },
-        });
-
-        // Parse JSON fields
-        return farms.map(f => ({
-            ...f,
-            recintos: f.recintos ? JSON.parse(f.recintos) : [],
-            coords: f.coords ? JSON.parse(f.coords) : undefined,
-            corralNames: f.corralNames ? f.corralNames.split(',') : [],
-            climateStudy: f.climateStudy ? JSON.parse(f.climateStudy) : undefined,
-            cropsRecommendation: f.cropsRecommendation ? JSON.parse(f.cropsRecommendation) : [],
-            breedsRecommendation: f.breedsRecommendation ? JSON.parse(f.breedsRecommendation) : [],
-            f1Recommendation: f.f1Recommendation ? JSON.parse(f.f1Recommendation) : []
-        }));
+        const effectiveUserId = await getEffectiveUserId(userId);
+        const where = { userId: effectiveUserId };
+        const [farms, total] = await prisma.$transaction([
+            prisma.farm.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip: (page - 1) * pageSize,
+                take: pageSize,
+            }),
+            prisma.farm.count({ where }),
+        ]);
+        return { data: farms.map(parseFarm), total, page, pageSize };
     } catch (error) {
         console.error('Error fetching farms:', error);
-        return [];
+        return { data: [], total: 0, page, pageSize };
     }
 }
 
-export async function createFarm(userId: string, data: any) {
+export async function createFarm(userId: string, data: unknown) {
+    const parsed = FarmSchema.safeParse(data);
+    if (!parsed.success) {
+        const messages = parsed.error.issues.map((e) => e.message).join(', ');
+        throw new Error(`Datos inválidos: ${messages}`);
+    }
+
     try {
         if (!userId) throw new Error('User ID required');
 
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            // @ts-ignore
-            select: { role: true, managedById: true }
-        });
-
-        // @ts-ignore
-        const effectiveUserId = (user?.role?.toUpperCase() === 'WORKER' && user.managedById) ? user.managedById : userId;
+        const effectiveUserId = await getEffectiveUserId(userId);
 
         const {
             name, municipio, municipioCode, provinciaCode, poligono, parcela,
             superficie, recintos, coords, slope, license, maxHeads, soilId,
             corrals, corralNames, feedingSystem,
             climateStudy, cropsRecommendation, breedsRecommendation, f1Recommendation, irrigationCoef
-        } = data;
+        } = parsed.data;
 
         const farm = await prisma.farm.create({
             data: {
@@ -66,37 +78,26 @@ export async function createFarm(userId: string, data: any) {
                 provinciaCode,
                 poligono,
                 parcela,
-                superficie: parseFloat(superficie || 0),
-                recintos: JSON.stringify(recintos || []),
-                coords: JSON.stringify(coords || {}),
-                slope: parseFloat(slope || 0),
+                superficie: superficie ?? 0,
+                recintos: JSON.stringify(recintos ?? []),
+                coords: JSON.stringify(coords ?? {}),
+                slope: slope ?? 0,
                 license,
-                maxHeads: parseInt(maxHeads || 0),
+                maxHeads: maxHeads ?? 0,
                 soilId,
-                corrals: parseInt(corrals || 0),
+                corrals: corrals ?? 0,
                 corralNames: Array.isArray(corralNames) ? corralNames.join(',') : '',
                 feedingSystem,
-                irrigationCoef: parseFloat(irrigationCoef || 0),
-                climateStudy: JSON.stringify(climateStudy || {}),
-                cropsRecommendation: JSON.stringify(cropsRecommendation || []),
-                breedsRecommendation: JSON.stringify(breedsRecommendation || []),
-                f1Recommendation: JSON.stringify(f1Recommendation || []),
+                irrigationCoef: irrigationCoef ?? 0,
+                climateStudy: JSON.stringify(climateStudy ?? {}),
+                cropsRecommendation: JSON.stringify(cropsRecommendation ?? []),
+                breedsRecommendation: JSON.stringify(breedsRecommendation ?? []),
+                f1Recommendation: JSON.stringify(f1Recommendation ?? []),
             }
         });
 
         revalidatePath('/dashboard');
-
-        // Return parsed version so UI doesn't crash on newly added item
-        return {
-            ...farm,
-            recintos: farm.recintos ? JSON.parse(farm.recintos) : [],
-            coords: farm.coords ? JSON.parse(farm.coords) : undefined,
-            corralNames: farm.corralNames ? farm.corralNames.split(',') : [],
-            climateStudy: farm.climateStudy ? JSON.parse(farm.climateStudy) : undefined,
-            cropsRecommendation: farm.cropsRecommendation ? JSON.parse(farm.cropsRecommendation) : [],
-            breedsRecommendation: farm.breedsRecommendation ? JSON.parse(farm.breedsRecommendation) : [],
-            f1Recommendation: farm.f1Recommendation ? JSON.parse(farm.f1Recommendation) : []
-        };
+        return parseFarm(farm);
     } catch (error) {
         console.error('Error creating farm:', error);
         throw new Error('Failed to create farm');
@@ -105,17 +106,9 @@ export async function createFarm(userId: string, data: any) {
 
 export async function deleteFarm(farmId: string, userId: string) {
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            // @ts-ignore
-            select: { role: true, managedById: true }
-        });
-
-        // @ts-ignore
-        const effectiveUserId = (user?.role?.toUpperCase() === 'WORKER' && user.managedById) ? user.managedById : userId;
-
+        const effectiveUserId = await getEffectiveUserId(userId);
         await prisma.farm.delete({
-            where: { id: farmId, userId: effectiveUserId } // Ensure ownership
+            where: { id: farmId, userId: effectiveUserId },
         });
         revalidatePath('/dashboard');
         return { success: true };
@@ -125,23 +118,22 @@ export async function deleteFarm(farmId: string, userId: string) {
     }
 }
 
-export async function updateFarm(farmId: string, userId: string, data: any) {
-    try {
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            // @ts-ignore
-            select: { role: true, managedById: true }
-        });
+export async function updateFarm(farmId: string, userId: string, data: unknown) {
+    const parsed = FarmSchema.safeParse(data);
+    if (!parsed.success) {
+        const messages = parsed.error.issues.map((e) => e.message).join(', ');
+        throw new Error(`Datos inválidos: ${messages}`);
+    }
 
-        // @ts-ignore
-        const effectiveUserId = (user?.role?.toUpperCase() === 'WORKER' && user.managedById) ? user.managedById : userId;
+    try {
+        const effectiveUserId = await getEffectiveUserId(userId);
 
         const {
             name, municipio, municipioCode, provinciaCode, poligono, parcela,
             superficie, recintos, coords, slope, license, maxHeads, soilId,
             corrals, corralNames, feedingSystem,
             climateStudy, cropsRecommendation, breedsRecommendation, f1Recommendation, irrigationCoef
-        } = data;
+        } = parsed.data;
 
         const farm = await prisma.farm.update({
             where: { id: farmId, userId: effectiveUserId },
@@ -152,37 +144,26 @@ export async function updateFarm(farmId: string, userId: string, data: any) {
                 provinciaCode,
                 poligono,
                 parcela,
-                superficie: parseFloat(superficie || 0),
-                recintos: JSON.stringify(recintos || []),
-                coords: JSON.stringify(coords || {}),
-                slope: parseFloat(slope || 0),
+                superficie: superficie ?? 0,
+                recintos: JSON.stringify(recintos ?? []),
+                coords: JSON.stringify(coords ?? {}),
+                slope: slope ?? 0,
                 license,
-                maxHeads: parseInt(maxHeads || 0),
+                maxHeads: maxHeads ?? 0,
                 soilId,
-                corrals: parseInt(corrals || 0),
+                corrals: corrals ?? 0,
                 corralNames: Array.isArray(corralNames) ? corralNames.join(',') : '',
                 feedingSystem,
-                irrigationCoef: parseFloat(irrigationCoef || 0),
-                climateStudy: JSON.stringify(climateStudy || {}),
-                cropsRecommendation: JSON.stringify(cropsRecommendation || []),
-                breedsRecommendation: JSON.stringify(breedsRecommendation || []),
-                f1Recommendation: JSON.stringify(f1Recommendation || []),
+                irrigationCoef: irrigationCoef ?? 0,
+                climateStudy: JSON.stringify(climateStudy ?? {}),
+                cropsRecommendation: JSON.stringify(cropsRecommendation ?? []),
+                breedsRecommendation: JSON.stringify(breedsRecommendation ?? []),
+                f1Recommendation: JSON.stringify(f1Recommendation ?? []),
             }
         });
 
         revalidatePath('/dashboard');
-
-        // Return parsed version
-        return {
-            ...farm,
-            recintos: farm.recintos ? JSON.parse(farm.recintos) : [],
-            coords: farm.coords ? JSON.parse(farm.coords) : undefined,
-            corralNames: farm.corralNames ? farm.corralNames.split(',') : [],
-            climateStudy: farm.climateStudy ? JSON.parse(farm.climateStudy) : undefined,
-            cropsRecommendation: farm.cropsRecommendation ? JSON.parse(farm.cropsRecommendation) : [],
-            breedsRecommendation: farm.breedsRecommendation ? JSON.parse(farm.breedsRecommendation) : [],
-            f1Recommendation: farm.f1Recommendation ? JSON.parse(farm.f1Recommendation) : []
-        };
+        return parseFarm(farm);
     } catch (error) {
         console.error('Error updating farm:', error);
         throw new Error('Failed to update farm');

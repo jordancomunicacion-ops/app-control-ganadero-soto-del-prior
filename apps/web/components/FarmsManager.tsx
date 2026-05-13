@@ -86,7 +86,7 @@ export function FarmsManager({ userId }: { userId?: string }) {
 
         // Load farms from DB
         if (userId) {
-            getFarms(userId).then((data) => {
+            getFarms(userId).then(({ data }) => {
                 setFarms(data as any[]);
             });
         }

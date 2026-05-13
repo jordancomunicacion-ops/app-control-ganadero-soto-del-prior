@@ -72,11 +72,16 @@ export function AnimalInventory({ userId }: { userId?: string }) {
 
 
     const [animals, setAnimals] = useState<any[]>([]);
-    const [events, setEvents] = useState<any[]>([]); // Added Events State
+    const [events, setEvents] = useState<any[]>([]);
     const [farms, setFarms] = useState<any[]>([]);
     const [sessionUser, setSessionUser] = useState('');
     const [showForm, setShowForm] = useState(false);
-    const [showDiet, setShowDiet] = useState(false); // Diet Composer State
+    const [showDiet, setShowDiet] = useState(false);
+
+    // Pagination
+    const [page, setPage] = useState(1);
+    const [totalAnimals, setTotalAnimals] = useState(0);
+    const PAGE_SIZE = 100;
 
     // New Animal Form State
     const [newAnimal, setNewAnimal] = useState({
@@ -145,12 +150,13 @@ export function AnimalInventory({ userId }: { userId?: string }) {
             // Load data from DB
             if (userId) {
                 // Load Animals
-                getAnimals(userId).then(serverAnimals => {
+                getAnimals(userId, { page, pageSize: PAGE_SIZE }).then(({ data: serverAnimals, total }) => {
                     setAnimals(serverAnimals as any[]);
+                    setTotalAnimals(total);
                 });
 
                 // Load Farms (for dropdown)
-                getFarms(userId).then(serverFarms => {
+                getFarms(userId).then(({ data: serverFarms }) => {
                     setFarms(serverFarms as any[]);
                 });
             }
@@ -212,7 +218,7 @@ export function AnimalInventory({ userId }: { userId?: string }) {
             setEvents(globalEvents);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [read, userId]);
+    }, [read, userId, page]);
 
     const closeDetail = () => {
         setSelectedAnimal(null);
@@ -590,6 +596,35 @@ export function AnimalInventory({ userId }: { userId?: string }) {
                     </tbody>
                 </table>
             </div>
+
+            {/* Pagination */}
+            {totalAnimals > PAGE_SIZE && (
+                <div className="flex items-center justify-between px-2">
+                    <p className="text-sm text-gray-500">
+                        {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalAnimals)} de {totalAnimals} animales
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={page === 1}
+                            className="px-3 py-1.5 text-sm font-medium border rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                        >
+                            ← Anterior
+                        </button>
+                        <span className="text-sm text-gray-600 font-medium">
+                            Pág. {page} / {Math.ceil(totalAnimals / PAGE_SIZE)}
+                        </span>
+                        <button
+                            onClick={() => setPage(p => p + 1)}
+                            disabled={page * PAGE_SIZE >= totalAnimals}
+                            className="px-3 py-1.5 text-sm font-medium border rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                        >
+                            Siguiente →
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Detail Modal */}
             {selectedAnimal && (
                 <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4 backdrop-blur-sm">

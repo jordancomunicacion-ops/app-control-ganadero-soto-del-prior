@@ -17,7 +17,7 @@ export function ReportsManager({ userId }: { userId?: string }) {
             let animals: any[] = [];
 
             if (userId) {
-                animals = await getAnimals(userId);
+                animals = (await getAnimals(userId)).data;
             } else {
                 animals = read<any[]>(`animals_${user}`, []);
             }

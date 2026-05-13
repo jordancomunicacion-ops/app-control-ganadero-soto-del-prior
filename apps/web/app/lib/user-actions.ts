@@ -39,12 +39,27 @@ export async function getUsers(currentUserId: string) {
     }
 }
 
-export async function updateUserStatus(userId: string, approved: boolean) {
-    // TODO: Verify if the caller manages this user? 
-    // For now assuming UI protects this, but ideally we check ownership.
+export async function updateUserStatus(currentUserId: string, userId: string, approved: boolean) {
+    const caller = await prisma.user.findUnique({ where: { id: currentUserId }, select: { role: true } });
+    if (!caller) throw new Error('Unauthorized');
+
+    const role = caller.role.toUpperCase();
+    if (role === 'ADMIN') {
+        // Admin can approve/disable anyone
+    } else if (role === 'USER') {
+        // Manager can only manage their own workers
+        const target = await prisma.user.findFirst({
+            where: { id: userId, managedById: currentUserId },
+            select: { id: true }
+        });
+        if (!target) throw new Error('Unauthorized: user not under your management');
+    } else {
+        throw new Error('Unauthorized');
+    }
+
     await prisma.user.update({
         where: { id: userId },
-        data: { approved } as any
+        data: { approved }
     });
     revalidatePath('/dashboard');
 }
@@ -69,7 +84,25 @@ export async function updateUserProfile(userId: string, data: any) {
     revalidatePath('/dashboard');
 }
 
-export async function deleteUser(userId: string) {
+export async function deleteUser(currentUserId: string, userId: string) {
+    if (currentUserId === userId) throw new Error('Cannot delete your own account');
+
+    const caller = await prisma.user.findUnique({ where: { id: currentUserId }, select: { role: true } });
+    if (!caller) throw new Error('Unauthorized');
+
+    const role = caller.role.toUpperCase();
+    if (role === 'ADMIN') {
+        // Admin can delete anyone (except self, checked above)
+    } else if (role === 'USER') {
+        const target = await prisma.user.findFirst({
+            where: { id: userId, managedById: currentUserId },
+            select: { id: true }
+        });
+        if (!target) throw new Error('Unauthorized: user not under your management');
+    } else {
+        throw new Error('Unauthorized');
+    }
+
     await prisma.user.delete({ where: { id: userId } });
     revalidatePath('/dashboard');
 }
