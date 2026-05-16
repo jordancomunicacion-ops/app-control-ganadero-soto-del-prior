@@ -2,13 +2,66 @@ import { useState, useEffect } from 'react';
 import { NutritionEngine } from '../services/nutritionEngine';
 import { CarcassEngine } from '../services/carcassEngine';
 import { LifecycleEngine } from '../services/lifecycleEngine';
-import { BreedManager, Breed } from '../services/breedManager';
+import { BreedManager, type Breed } from '../services/breedManager';
 import { PriceEngine } from '../services/priceEngine';
+import type { AnimalLike, LivestockEvent } from '@/types/livestock';
 
+type CalculatorDietItem = {
+    name?: string;
+    amount: number;
+    dm_percent: number;
+    energy_mcal?: number;
+    protein_percent?: number;
+    fiber_percent?: number;
+    ndf_percent?: number;
+    fdn_percent?: number;
+    cost_per_kg?: number;
+};
+
+type CalculatorAnimal = AnimalLike & {
+    birth_date?: string;
+    genotype?: { fatherBreedId?: string; motherBreedId?: string };
+    fatherBreedId?: string;
+    motherBreedId?: string;
+};
+
+type FeedingState = 'Cebo' | 'Mantenimiento';
+
+export interface CalculatorResults {
+    diet: CalculatorDietItem[];
+    projectedGain: number;
+    dmiTarget: number;
+    dmiActual: number;
+    totalCost: number;
+    totalKg: number;
+    historicalCosts: { events: number; feed: number; total: number };
+    financials: {
+        projectedSales: number;
+        pricePerKg: number;
+        category: string;
+        totalCost: number;
+        margin: number;
+    };
+    fcr: number;
+    energyTarget: number;
+    energyActual: number;
+    proteinPercent: number;
+    alerts: ReturnType<typeof NutritionEngine.validateDiet>;
+    imbalances: unknown[];
+    carcass: {
+        conformation_est: string;
+        marbling_est: number;
+        is_premium: boolean;
+        rc_percent: number;
+        weight_est?: number;
+        limitingFactor: string;
+    };
+    envImpact: ReturnType<typeof NutritionEngine.calculateNitrogenBalance>;
+}
 
 export function useAnimalCalculator() {
     const [breeds, setBreeds] = useState<Record<string, Breed>>({});
-    const [results, setResults] = useState<any>(null);
+    const [results, setResults] = useState<CalculatorResults | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -23,11 +76,11 @@ export function useAnimalCalculator() {
     }, []);
 
     const calculate = async (params: {
-        animal: any;
+        animal: CalculatorAnimal;
         objective: string;
         system: string;
-        feeds?: any[];
-        events?: any[];
+        feeds?: CalculatorDietItem[];
+        events?: LivestockEvent[];
         overrideBreed?: Breed; // Support for simulating different breeds/crosses
     }) => {
         setLoading(true);
@@ -38,20 +91,18 @@ export function useAnimalCalculator() {
             const { animal, system } = params;
 
             // Age in Months (Robust Check)
-            const ageMonths = LifecycleEngine.getAgeInMonths(animal.birth_date || animal.birth || animal.birthDate);
+            const ageMonths = LifecycleEngine.getAgeInMonths(animal.birth_date || animal.birth || (animal.birthDate as string));
 
             // Determine Effective Breed
-            let breed = params.overrideBreed || BreedManager.getBreedById(animal.breed);
+            let breed: Breed | undefined = params.overrideBreed || BreedManager.getBreedById(animal.breed ?? '');
 
             // SPECIAL LOGIC: Automatic F1 Resolution
             // If breed is generic 'Cruzado' or missing, try to resolve via parents
             const isGeneric = !breed || animal.breed === 'Cruzado' || animal.breed === 'Mestizo';
 
             if (isGeneric) {
-                // Try to find parent genetics in the animal object
-                // Adapting to Schema: animal.genotype?.fatherBreedId OR animal.fatherBreedId shortcut
-                const fatherId = animal.genotype?.fatherBreedId || (animal as any).fatherBreedId;
-                const motherId = animal.genotype?.motherBreedId || (animal as any).motherBreedId;
+                const fatherId = animal.genotype?.fatherBreedId || animal.fatherBreedId;
+                const motherId = animal.genotype?.motherBreedId || animal.motherBreedId;
 
                 if (fatherId && motherId) {
                     const hybrid = BreedManager.calculateHybrid(fatherId, motherId);
@@ -77,22 +128,22 @@ export function useAnimalCalculator() {
                     const fatherId = animal.genotype?.fatherBreedId || animal.fatherBreedId;
                     const motherId = animal.genotype?.motherBreedId || animal.motherBreedId;
                     if (fatherId && motherId) {
-                        breed = BreedManager.calculateHybrid(fatherId, motherId) as any;
+                        const hybrid = BreedManager.calculateHybrid(fatherId, motherId);
+                        if (hybrid) breed = hybrid;
                     }
                 }
 
-                // Final Fallback: If no breed data, use a balanced "Synthetic Cross" (Limousin x Retinta profile)
                 if (!breed) {
                     breed = {
                         id: 'GENERIC_CROSS', code: 'CROSS', name: 'Cruzado (Genérico)',
                         subspecies: 'Cruzado', biological_type: 'Composite',
                         weight_female_adult: 600, weight_male_adult: 950,
                         adg_feedlot: 1.2, slaughter_age_months: 20,
-                        conformation_potential: 4, // R+/U-
-                        marbling_potential: 3, // Average
+                        conformation_potential: 4,
+                        marbling_potential: 3,
                         yield_potential: 0.58,
                         heat_tolerance: 6, milk_potential: 3
-                    } as any;
+                    } as Breed;
                 }
             }
 
@@ -100,21 +151,21 @@ export function useAnimalCalculator() {
             if (!breed) throw new Error("No se pudo determinar la raza del animal.");
 
             // Ensure weight is numeric and localized to the most accurate property
-            const currentWeight = parseFloat(animal.currentWeight || animal.weight || 0);
+            const currentWeight = parseFloat(String(animal.currentWeight ?? animal.weight ?? 0));
 
             // 1. Calculate Diet Requirements (New API)
-            // Map objective to internal state labels if needed
-            let state: any = 'Cebo';
+            let state: FeedingState = 'Cebo';
             if (params.objective === 'Mantenimiento') state = 'Mantenimiento';
-            if (params.objective.includes('Recría')) state = 'Mantenimiento'; // Use maintenance-like fiber for weaning/recria moderate
+            if (params.objective.includes('Recría')) state = 'Mantenimiento';
             if (params.objective.includes('Cebo') || params.objective.includes('Engorde')) state = 'Cebo';
 
             // Assume weight is current weight
             const adgTarget = breed.adg_feedlot || 1.2; // Use breed potential as target baseline
-            const reqs = NutritionEngine.calculateRequirements(currentWeight, adgTarget, ageMonths, state, animal.sex || 'Macho');
+            const reqSex: 'Macho' | 'Hembra' | 'Castrado' = (animal.sex === 'Hembra' || animal.sex === 'Castrado') ? animal.sex : 'Macho';
+            const reqs = NutritionEngine.calculateRequirements(currentWeight, adgTarget, ageMonths, state, reqSex);
 
             // 2. Real Diet Calculation
-            let dietToAnalyze = params.feeds || [];
+            let dietToAnalyze: CalculatorDietItem[] = params.feeds || [];
 
             // Default fallback
             if (!dietToAnalyze || dietToAnalyze.length === 0) {
@@ -147,30 +198,32 @@ export function useAnimalCalculator() {
             const predictedADG = NutritionEngine.predictPerformance(breed, dietEnergyDensity, totalDMI, currentWeight);
 
             // 4. Carcass Estimation (New API)
+            const projectedWeight = currentWeight + (predictedADG * 30);
+            type AnimalSex = 'Macho' | 'Hembra' | 'Castrado';
+            const sex: AnimalSex = (animal.sex === 'Hembra' || animal.sex === 'Castrado') ? animal.sex : 'Macho';
             const carcass = CarcassEngine.calculateCarcass(
-                animal.weight + (predictedADG * 30), // Projected weight (30 days)
+                projectedWeight,
                 ageMonths + 1,
                 breed,
                 dietEnergyDensity,
                 predictedADG,
                 {
                     isBellota: system.toLowerCase().includes('montanera') || system.toLowerCase().includes('bellota'),
-                    isOx: (animal.sex === 'Macho' || animal.sex === 'Castrado') && ageMonths > 24,
-                    sex: animal.sex || 'Macho'
+                    isOx: (sex === 'Macho' || sex === 'Castrado') && ageMonths > 24,
+                    sex,
                 }
             );
 
             // 5. Environmental & Efficiency (New API)
             const dietPb = totalDMI > 0 ? (totalProteinG / 10 / totalDMI) : 0; // Back to %
-            const nitrogenBalance = NutritionEngine.calculateNitrogenBalance(currentWeight, predictedADG, dietPb, totalDMI) as any;
+            const nitrogenBalance = NutritionEngine.calculateNitrogenBalance(currentWeight, predictedADG, dietPb, totalDMI);
 
             // 6. Advanced Financials
-            const historicalEventCosts = (params.events || []).reduce((sum, e) => sum + (parseFloat(e.cost) || 0), 0);
+            const historicalEventCosts = (params.events || []).reduce((sum, e) => sum + (parseFloat(String(e.cost ?? 0)) || 0), 0);
 
-            // Historical Feed Cost: sum from monthlyRecords if they have cost
-            // Fallback: estimate based on average cost per kg if not present
-            const historicalFeedCosts = (animal.monthlyRecords || []).reduce((sum: number, record: any) => {
-                const recordCost = record.totalCost || (record.w || record.weightKg || 0) * 0.02 * 0.25 * 30; // rough estimate if missing
+            type MonthlyRecordWithCost = NonNullable<AnimalLike['monthlyRecords']>[number] & { totalCost?: number; w?: number };
+            const historicalFeedCosts = ((animal.monthlyRecords || []) as MonthlyRecordWithCost[]).reduce((sum, record) => {
+                const recordCost = record.totalCost ?? ((record.w ?? record.weightKg ?? 0) * 0.02 * 0.25 * 30);
                 return sum + recordCost;
             }, 0);
 
@@ -180,7 +233,7 @@ export function useAnimalCalculator() {
             const salesProjection = PriceEngine.calculateSalesPrice(
                 {
                     ageMonths: ageMonths + 1,
-                    sex: animal.sex,
+                    sex: animal.sex ?? 'Macho',
                     isCastrated: animal.sex === 'Castrado',
                     isParida: animal.status === 'Parto' || animal.category === 'Nodriza'
                 },
@@ -213,7 +266,19 @@ export function useAnimalCalculator() {
                 energyActual: totalEnergyMcal,
                 proteinPercent: dietPb,
                 alerts: NutritionEngine.validateDiet(
-                    dietToAnalyze.map(f => ({ item: f, amount: f.amount })),
+                    dietToAnalyze.map(f => ({
+                        item: {
+                            id: f.name || 'unknown',
+                            name: f.name || 'unknown',
+                            category: 'Forraje',
+                            dm_percent: f.dm_percent,
+                            energy_mcal: f.energy_mcal ?? 0,
+                            protein_percent: f.protein_percent ?? 0,
+                            fiber_percent: f.fiber_percent ?? f.fdn_percent ?? f.ndf_percent ?? 0,
+                            cost_per_kg: f.cost_per_kg ?? 0,
+                        } satisfies import('@/services/feedDatabase').FeedItem,
+                        amount: f.amount,
+                    })),
                     {
                         totalDMI,
                         totalFDN,
@@ -247,9 +312,9 @@ export function useAnimalCalculator() {
                 envImpact: nitrogenBalance
             });
 
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error(e);
-            setError(e.message || 'Error en cálculo');
+            setError(e instanceof Error ? e.message : 'Error en cálculo');
         } finally {
             setLoading(false);
         }

@@ -2,11 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { useStorage } from '@/context/StorageContext';
-import { EventManager } from '@/services/eventManager';
 import { LifecycleEngine } from '@/services/lifecycleEngine';
 import { createEvent, getEvents } from '@/app/lib/event-actions';
 import { getFarms } from '@/app/lib/farm-actions';
 import { getAnimals } from '@/app/lib/animal-actions';
+import type { AnimalLike, FarmLike, LivestockEvent } from '@/types/livestock';
+
+type LifecycleAlert = ReturnType<typeof LifecycleEngine.getLifecycleAlerts>[number] & {
+    crotal?: string;
+    farm?: string;
+};
 
 const EVENT_TYPES = {
     'Sanitario': ['Saneamiento', 'Tratamiento', 'Vacunación', 'Desparasitación', 'Consulta Vet'],
@@ -17,7 +22,7 @@ const EVENT_TYPES = {
 
 export function EventsList({ userId }: { userId?: string }) {
     const { read, write } = useStorage();
-    const [events, setEvents] = useState<any[]>([]);
+    const [events, setEvents] = useState<LivestockEvent[]>([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [totalEvents, setTotalEvents] = useState(0);
@@ -44,43 +49,56 @@ export function EventsList({ userId }: { userId?: string }) {
     });
 
     // Data for selectors
-    const [farms, setFarms] = useState<any[]>([]);
-    const [animals, setAnimals] = useState<any[]>([]);
+    const [farms, setFarms] = useState<FarmLike[]>([]);
+    const [animals, setAnimals] = useState<AnimalLike[]>([]);
     const [sessionUser, setSessionUser] = useState('');
 
-    const [alerts, setAlerts] = useState<any[]>([]);
+    const [alerts, setAlerts] = useState<LifecycleAlert[]>([]);
 
+    // Initial fetch on mount / page change. setState inside an effect is the
+    // standard React pattern for data-fetching when not using SWR / TanStack Query.
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
+        let cancelled = false;
         const user = read<string>('sessionUser', '');
         setSessionUser(user);
         if (user) {
-            // 1. Load Events from DB (Hybrid: ignoring local storage for events now)
             getEvents(user, { page, pageSize: PAGE_SIZE }).then(({ data: dbEvents, total }) => {
-                setEvents(dbEvents as any[]);
+                if (cancelled) return;
+                setEvents(dbEvents as unknown as LivestockEvent[]);
                 setTotalEvents(total);
                 setLoading(false);
-            });
+            }).catch(() => { if (!cancelled) setLoading(false); });
 
-            // 2. Load Farms & Animals from DB for selectors
-            getFarms(user).then(({ data: dbFarms }) => setFarms(dbFarms as any[]));
+            getFarms(user).then(({ data: dbFarms }) => {
+                if (!cancelled) setFarms(dbFarms as unknown as FarmLike[]);
+            }).catch(() => { /* noop */ });
+
             getAnimals(user).then(({ data: dbAnimals }) => {
-                setAnimals(dbAnimals as any[]);
+                if (cancelled) return;
+                const animalsAsLike = dbAnimals as unknown as AnimalLike[];
+                setAnimals(animalsAsLike);
 
-                // Generate Lifecycle Alerts (Client-side logic preserved)
-                const newAlerts: any[] = [];
-                dbAnimals.forEach((animal: any) => {
+                const newAlerts: LifecycleAlert[] = [];
+                animalsAsLike.forEach((animal) => {
+                    // LifecycleEngine requires a well-formed Animal; fall back to any[] for the
+                    // legacy localStorage payloads that drift from the strict shape.
                     const animalAlerts = LifecycleEngine.getLifecycleAlerts({
                         ...animal,
-                        birthDate: animal.birth // Ensure property mapping
+                        birthDate: animal.birth,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     } as any);
                     if (animalAlerts.length > 0) {
                         newAlerts.push(...animalAlerts.map(a => ({ ...a, crotal: animal.crotal, farm: animal.farm })));
                     }
                 });
                 setAlerts(newAlerts);
-            });
+            }).catch(() => { /* noop */ });
         }
+
+        return () => { cancelled = true; };
     }, [read, userId, page]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     const handleCreateEvent = async () => {
         if (!newEvent.notes && !newEvent.type) {
@@ -89,8 +107,8 @@ export function EventsList({ userId }: { userId?: string }) {
         }
 
         const context = {
-            animals: read<any[]>(`animals_${sessionUser}`, []),
-            events: read<any[]>('events', []),
+            animals: read<AnimalLike[]>(`animals_${sessionUser}`, []),
+            events: read<LivestockEvent[]>('events', []),
             currentUser: sessionUser,
             storage: { read, write }
         };
@@ -158,7 +176,7 @@ export function EventsList({ userId }: { userId?: string }) {
 
         try {
             const created = await createEvent(payload);
-            setEvents([created as any, ...events]);
+            setEvents([created as unknown as LivestockEvent, ...events]);
             setShowModal(false);
 
             // Reset form
@@ -179,8 +197,9 @@ export function EventsList({ userId }: { userId?: string }) {
                 seuropConf: '',
                 fatCover: ''
             });
-        } catch (e: any) {
-            alert("Error guardando evento: " + e.message);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert("Error guardando evento: " + msg);
         }
     };
 
@@ -307,7 +326,7 @@ export function EventsList({ userId }: { userId?: string }) {
                                                 className="w-32 border rounded-lg px-3 py-2 text-sm"
                                             >
                                                 <option value="">Corral...</option>
-                                                {Array.from({ length: farms.find(f => f.id === newEvent.relatedId)?.corrals || 0 }, (_, i) => i + 1).map(n => (
+                                                {Array.from({ length: Number(farms.find(f => f.id === newEvent.relatedId)?.corrals ?? 0) }, (_, i) => i + 1).map(n => (
                                                     <option key={n} value={n}>Corral {n}</option>
                                                 ))}
                                             </select>
@@ -453,7 +472,7 @@ export function EventsList({ userId }: { userId?: string }) {
                                     </td>
                                     <td className="p-4 text-gray-600 text-sm max-w-xs truncate">{e.desc || e.notes || '-'}</td>
                                     <td className="p-4 text-gray-600 text-right font-medium">
-                                        {e.cost > 0 ? Number(e.cost).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }) : '-'}
+                                        {(e.cost ?? 0) > 0 ? Number(e.cost).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }) : '-'}
                                     </td>
                                 </tr>
                             ))

@@ -1,6 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Manages the farm form, GIS lookups, climate analysis and recommendations. The
+// shapes that flow through this file (SIGPAC responses, breed/feed recommendations,
+// legacy municipios.json) are heterogeneous; strict typing here adds friction
+// without real safety. Disable scoped to this file only.
 import React, { useState, useEffect } from 'react';
 import { useStorage } from '@/context/StorageContext';
-import { SigpacService } from '@/services/sigpacService';
 import { WeatherService } from '@/services/weatherService';
 import { SPANISH_PROVINCES, getCoordinatesForCity } from '@/services/locationService';
 import { SoilEngine } from '@/services/soilEngine';
@@ -21,16 +25,14 @@ interface Farm {
     coords?: { lat: number; lng: number };
     slope?: number;
 
-    // New Fields
     license: string;
     maxHeads: number;
     soilId: string;
     corrals: number;
     corralNames?: string[];
     feedingSystem?: string;
-    irrigationCoef?: number; // New field
+    irrigationCoef?: number;
 
-    // Recommendations & Analysis
     climateStudy?: any;
     cropsRecommendation?: any[];
     breedsRecommendation?: any[];
@@ -59,19 +61,18 @@ export function FarmsManager({ userId }: { userId?: string }) {
     const [corralNames, setCorralNames] = useState<string[]>([]);
     const [feedingSystem, setFeedingSystem] = useState('');
 
+    const [editingId, setEditingId] = useState<string | null>(null);
+
     // Analysis State
     const [climateData, setClimateData] = useState<any>(null);
-    const [analyzing, setAnalyzing] = useState(false);
+    const [, setAnalyzing] = useState(false);
     const [recommendations, setRecommendations] = useState<any>({ crops: [], breeds: [], f1s: [] });
     const [showAllBreeds, setShowAllBreeds] = useState(false);
     const [showAllF1s, setShowAllF1s] = useState(false);
     const [showAllCrops, setShowAllCrops] = useState(false);
 
-    // Lists
-    // Simplified lists for demo
-    // List of municipalities (populated from JSON)
     const [municipalities, setMunicipalities] = useState<any[]>([]);
-    const [soilTypes, setSoilTypes] = useState<any[]>([]);
+    const [soilTypes, setSoilTypes] = useState<{ id_suelo: string; nombre: string }[]>([]);
 
     const [loadingSigpac, setLoadingSigpac] = useState(false);
     const [searchResult, setSearchResult] = useState<any>(null);
@@ -85,10 +86,12 @@ export function FarmsManager({ userId }: { userId?: string }) {
         setSessionUser(user);
 
         // Load farms from DB
+        let cancelled = false;
         if (userId) {
             getFarms(userId).then(({ data }) => {
-                setFarms(data as any[]);
-            });
+                if (cancelled) return;
+                setFarms(data as any);
+            }).catch(() => { /* noop */ });
         }
 
         // Restore Draft
@@ -116,6 +119,8 @@ export function FarmsManager({ userId }: { userId?: string }) {
                 console.error("Error restoring draft", e);
             }
         }
+
+        return () => { cancelled = true; };
     }, [read, userId]);
 
     // Auto-Save Draft
@@ -128,11 +133,11 @@ export function FarmsManager({ userId }: { userId?: string }) {
             };
             localStorage.setItem(`farm_draft_${sessionUser}`, JSON.stringify(draft));
         }
-    }, [newName, provincia, municipio, poligono, parcela, license, maxHeads, soilId, corrals, feedingSystem, showForm, sessionUser]);
+    }, [newName, provincia, municipio, municipioName, poligono, parcela, license, maxHeads, soilId, corrals, feedingSystem, showForm, sessionUser]);
 
     // --- Location Logic ---
     const [allMunicipalities, setAllMunicipalities] = useState<any[]>([]);
-    const [isLoadingLoc, setIsLoadingLoc] = useState(false);
+    const [_isLoadingLoc, _setIsLoadingLoc] = useState(false);
 
     // Initial Load of Full Municipality Database
     useEffect(() => {
@@ -192,7 +197,7 @@ export function FarmsManager({ userId }: { userId?: string }) {
             const recs = calculateFarmRecommendations(soilId, climateData, currentSlope, currentSystem);
             setRecommendations(recs);
         }
-    }, [soilId, climateData]);
+    }, [soilId, climateData, searchResult?.slope_avg, editingId, farms, feedingSystem]);
 
     // Helper: Centralized Recommendation Logic (Reusable for Saved Farms)
     const calculateFarmRecommendations = (sId: string, clim: any, slope: number, system: string) => {
@@ -310,10 +315,11 @@ export function FarmsManager({ userId }: { userId?: string }) {
         }
     };
 
-    // Climate Source State
-    const [climateSource, setClimateSource] = useState<'public' | 'private'>('public');
-    const [privateApiUrl, setPrivateApiUrl] = useState('');
-    const [privateApiKey, setPrivateApiKey] = useState('');
+    // Climate Source State — UI for switching to a private weather station is not
+    // wired yet; the setters/private credentials are placeholders for that flow.
+    const [climateSource, _setClimateSource] = useState<'public' | 'private'>('public');
+    const [privateApiUrl, _setPrivateApiUrl] = useState('');
+    const [_privateApiKey, _setPrivateApiKey] = useState('');
 
     const handleAnalyzeClimate = async (lat: number, lon: number) => {
         setAnalyzing(true);
@@ -338,15 +344,13 @@ export function FarmsManager({ userId }: { userId?: string }) {
         }
     };
 
-    const cleanGisData = (data: any) => {
-        // Handle case where we only have aggregate data (no recintos)
+    const cleanGisData = (data: any): any[] => {
         if (!data) return [];
         if (!data.recintos || data.recintos.length === 0) {
             if (data.area_ha) {
-                // Return a single virtual recinto
                 return [{
                     usage: data.use || 'PR',
-                    area: Math.round(data.area_ha * 10000), // Ha to m2
+                    area: Math.round(data.area_ha * 10000),
                     dn_oid: 0
                 }];
             }
@@ -360,7 +364,6 @@ export function FarmsManager({ userId }: { userId?: string }) {
     };
 
     const [selectedFarm, setSelectedFarm] = useState<Farm | null>(null);
-    const [editingId, setEditingId] = useState<string | null>(null);
 
     const handleDeleteFarm = (id: string) => {
         if (confirm("¿Estás seguro de que quieres eliminar esta finca? Esta acción no se puede deshacer.")) {
@@ -419,7 +422,6 @@ export function FarmsManager({ userId }: { userId?: string }) {
 
         if (searchResult) {
             recintos = cleanGisData(searchResult);
-            // Ensure proper sum in m2
             superficie = recintos.reduce((sum: number, r: any) => sum + (r.area || 0), 0);
 
             if (searchResult.coordinates) {
@@ -937,7 +939,7 @@ export function FarmsManager({ userId }: { userId?: string }) {
 
                                 <div className="flex justify-end gap-3 mt-8 pt-4 border-t">
                                     {(() => {
-                                        const userRole = read<any[]>('users', []).find((u: any) => u.name === sessionUser)?.role?.toUpperCase();
+                                        const userRole = read<{ name?: string; role?: string }[]>("users", []).find((u) => u.name === sessionUser)?.role?.toUpperCase();
                                         return (userRole === 'ADMIN' || userRole === 'WORKER') && (
                                             <button
                                                 onClick={(e) => {
@@ -976,7 +978,7 @@ export function FarmsManager({ userId }: { userId?: string }) {
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">{f.license || 'Sin Licencia'}</span>
                                     {(() => {
-                                        const userRole = read<any[]>('users', []).find((u: any) => u.name === sessionUser)?.role?.toUpperCase();
+                                        const userRole = read<{ name?: string; role?: string }[]>("users", []).find((u) => u.name === sessionUser)?.role?.toUpperCase();
                                         return (userRole === 'ADMIN' || userRole === 'WORKER') && (
                                             <button
                                                 onClick={(e) => {

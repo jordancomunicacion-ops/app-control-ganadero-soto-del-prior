@@ -1,17 +1,23 @@
 import type { NextAuthConfig } from 'next-auth';
 
+const authSecret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+if (!authSecret) {
+    throw new Error('AUTH_SECRET (or NEXTAUTH_SECRET) is not configured. Refusing to start with an insecure default.');
+}
+
+const isProduction = process.env.NODE_ENV === 'production';
+
 export const authConfig = {
-    // Explicitly fallback for runtime robustness if env fails
-    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'fallback_secret_key_fixed',
+    secret: authSecret,
     trustHost: true,
     cookies: {
         sessionToken: {
-            name: `ganaderia_token`,
+            name: isProduction ? '__Secure-ganaderia_token' : 'ganaderia_token',
             options: {
                 httpOnly: true,
                 sameSite: 'lax',
                 path: '/',
-                secure: false,
+                secure: isProduction,
             },
         },
     },
@@ -22,12 +28,11 @@ export const authConfig = {
         authorized({ auth, request: { nextUrl } }) {
             const isLoggedIn = !!auth?.user;
 
-            // Exclude public paths
             const isPublic =
                 nextUrl.pathname === '/login' ||
                 nextUrl.pathname === '/register' ||
                 nextUrl.pathname.startsWith('/_next') ||
-                nextUrl.pathname.startsWith('/api') ||
+                nextUrl.pathname.startsWith('/api/auth') ||
                 nextUrl.pathname.includes('favicon.ico');
 
             if (isPublic) {
@@ -38,11 +43,11 @@ export const authConfig = {
             }
 
             if (!isLoggedIn) {
-                return false; // Redirect to login
+                return false;
             }
 
             return true;
         },
     },
-    providers: [], // Add providers in auth.ts to avoid Edge Runtime issues with Prisma/Bcrypt
+    providers: [],
 } satisfies NextAuthConfig;

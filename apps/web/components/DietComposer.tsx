@@ -5,14 +5,22 @@ import { NutritionEngine, DietAlert, SynergyResult } from '@/services/nutritionE
 import { CarcassEngine } from '@/services/carcassEngine';
 import { FEED_DATABASE, FeedItem } from '@/services/feedDatabase';
 import { BreedManager } from '@/services/breedManager';
+import type { AnimalLike } from '@/types/livestock';
 
 import { Breed } from '@/services/breedManager';
 
 interface DietComposerProps {
-    animal: any; // Using any for flexibility with the AnimalInventory types
+    animal: AnimalLike;
     onClose: () => void;
     fatherBreed?: Breed;
     motherBreed?: Breed;
+}
+
+interface IngredientForEngine {
+    feed_name: string;
+    type: string;
+    percent_dm: number;
+    dm_kg: number;
 }
 
 // ... imports ...
@@ -26,39 +34,47 @@ interface RationItem {
 export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: DietComposerProps) {
     // --- State ---
     const [ration, setRation] = useState<RationItem[]>([]);
-    const [availableFeeds, setAvailableFeeds] = useState<FeedItem[]>(FEED_DATABASE);
+    const [availableFeeds, _setAvailableFeeds] = useState<FeedItem[]>(FEED_DATABASE);
     const [selectedFeedId, setSelectedFeedId] = useState('');
 
     // NEW: Bellota Type State
     const [bellotaType, setBellotaType] = useState<string>('ENCINA'); // ENCINA | ROBLE
 
+    type DietStats = {
+        dmi: number;
+        mcal: number;
+        cp: number;
+        fdn: number;
+        cost: number;
+        env: ReturnType<typeof NutritionEngine.calculateNitrogenBalance>;
+        hasBellota: boolean;
+    };
+
     // Results State
-    const [stats, setStats] = useState<any>(null);
+    const [stats, setStats] = useState<DietStats | null>(null);
     const [alerts, setAlerts] = useState<DietAlert[]>([]);
     const [synergies, setSynergies] = useState<SynergyResult[]>([]);
-    const [carcass, setCarcass] = useState<any>(null);
+    const [carcass, setCarcass] = useState<ReturnType<typeof CarcassEngine.calculateCarcass> | null>(null);
     const [adg, setAdg] = useState(0);
 
     // --- Format Helpers ---
-    const formatNum = (n: number, d = 2) => n ? n.toFixed(d) : '0';
+    const formatNum = (n: number | undefined, d = 2) => n ? n.toFixed(d) : '0';
 
-    // --- Calculations ---
-    useEffect(() => {
-        calculateDiet();
-    }, [ration, animal, bellotaType]); // Added bellotaType dep
+    const calculateAgeMonths = (birthStr: string) => {
+        if (!birthStr) return 12;
+        const b = new Date(birthStr);
+        const n = new Date();
+        return (n.getTime() - b.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+    };
 
     const calculateDiet = () => {
         // 1. Aggregates
-        let totalKg = 0;
         let totalDM = 0;
         let totalMcal = 0;
         let totalProteinG = 0;
         let totalFDN_kg = 0;
-        let bellotaKg = 0;
 
-
-
-        const ingredientsForEngine: any[] = [];
+        const ingredientsForEngine: IngredientForEngine[] = [];
         let hasBellota = false;
 
         ration.forEach(item => {
@@ -66,14 +82,12 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
             const dm = item.feed.dm_percent / 100;
             const kgDM = kg * dm;
 
-            totalKg += kg;
             totalDM += kgDM;
             totalMcal += (item.feed.energy_mcal * kgDM);
             totalProteinG += (item.feed.protein_percent / 100 * kgDM * 1000);
             totalFDN_kg += (item.feed.fiber_percent / 100 * kgDM);
 
             if (item.feed.name.toLowerCase().includes('bellota')) {
-                bellotaKg += kgDM;
                 hasBellota = true;
             }
 
@@ -97,16 +111,18 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
         // const bellotaPct = totalDM > 0 ? (bellotaKg / totalDM) * 100 : 0; // Calculated but unused directly in new signature
 
         // --- NEW: Calculate Requirements for Validation ---
-        const age = calculateAgeMonths(animal.birth || animal.birthDate);
-        const breed = BreedManager.getBreedByName(animal.breed) || BreedManager.getAllBreeds()[0];
+        const age = calculateAgeMonths((animal.birth ?? (typeof animal.birthDate === 'string' ? animal.birthDate : animal.birthDate?.toISOString())) ?? '');
+        const breed = BreedManager.getBreedByName(animal.breed ?? '') || BreedManager.getAllBreeds()[0];
         const adgTarget = breed.adg_feedlot || 1.2;
 
+        const weight = Number(animal.weight ?? animal.currentWeight ?? 400);
+        const sex: 'Macho' | 'Hembra' | 'Castrado' = (animal.sex === 'Hembra' || animal.sex === 'Castrado') ? animal.sex : 'Macho';
         const reqs = NutritionEngine.calculateRequirements(
-            animal.weight || animal.currentWeight || 400,
+            weight,
             adgTarget,
             age,
-            'Cebo', // Defaulting to Cebo/Growth for composer
-            animal.sex || 'Macho'
+            'Cebo',
+            sex,
         );
 
         // Validation
@@ -131,17 +147,10 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
         // Synergies
         const currentMonth = new Date().getMonth(); // 0-11
 
-        // Tolerance context for synergies
-        const context = {
-            currentMonth,
-            breedTolerance: breed.heat_tolerance,
-            breedCode: breed.code
-        };
-
         const activeSynergies = NutritionEngine.calculateSynergies(
             ingredientsForEngine,
-            { sex: animal.sex, ageMonths: age },
-            { bellotaType } // NEW
+            { sex, ageMonths: age },
+            { bellotaType }
         );
         setSynergies(activeSynergies);
 
@@ -156,7 +165,7 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
             breed,
             dietMcal,
             totalDM,
-            animal.weight || animal.currentWeight || 400,
+            weight,
             { currentMonth, activeSynergies: activeCodes }
         );
         setAdg(predictedADG);
@@ -171,13 +180,13 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
         });
 
         const carcassPred = CarcassEngine.calculateCarcass(
-            animal.weight || animal.currentWeight || 400,
+            weight,
             age,
             breed,
             dietMcal,
             predictedADG,
             {
-                sex: animal.sex,
+                sex,
                 synergyBonuses: synergyBonusObj,
                 currentMonth,
                 fatherBreed: fatherBreed || (animal.father ? BreedManager.getBreedByName(animal.father) : undefined),
@@ -188,7 +197,7 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
 
         // Env Impact
         const env = NutritionEngine.calculateNitrogenBalance(
-            animal.weight || 400,
+            weight,
             predictedADG,
             dietCP,
             totalDM
@@ -205,12 +214,10 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
         });
     };
 
-    const calculateAgeMonths = (birthStr: string) => {
-        if (!birthStr) return 12;
-        const b = new Date(birthStr);
-        const n = new Date();
-        return (n.getTime() - b.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
-    };
+    useEffect(() => {
+        calculateDiet();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ration, animal, bellotaType]);
 
     const addFeed = () => {
         if (!selectedFeedId) return;
@@ -434,7 +441,7 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
 
                             <div className="flex justify-between pt-2">
                                 <span className="text-gray-600">Fibra (FDN)</span>
-                                <span className={`font-mono font-bold ${stats?.fdn < 28 ? 'text-red-500' : 'text-gray-900'}`}>{formatNum(stats?.fdn)} %</span>
+                                <span className={`font-mono font-bold ${(stats?.fdn ?? 0) < 28 ? 'text-red-500' : 'text-gray-900'}`}>{formatNum(stats?.fdn)} %</span>
                             </div>
                         </div>
                     </div>

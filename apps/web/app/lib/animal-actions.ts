@@ -54,12 +54,12 @@ export async function createAnimal(data: unknown) {
     try {
         const {
             id,
-            farmId, breed, sex, birth, weight, notes, father, mother, corral
+            farmId, breed, sex, birth, weight, notes, corral
         } = parsed.data;
 
         const knownBreed = BreedManager.getBreedByName(breed || '') || BreedManager.getBreedById(breed || '');
 
-        let functionalType = 'rustica_adaptada';
+        let functionalType: string = 'rustica_adaptada';
         let type = 'pure';
         let confidence = 0.8;
 
@@ -73,7 +73,7 @@ export async function createAnimal(data: unknown) {
                 conformationPotential: knownBreed.conformation_potential
             };
 
-            functionalType = GeneticsEngine.determineFunctionalType(breedForEngine) as any;
+            functionalType = GeneticsEngine.determineFunctionalType(breedForEngine);
             confidence = 1.0;
         } else {
             if ((breed || '').toUpperCase().includes('F1') || (breed || '').toUpperCase().includes('CRUCE')) {

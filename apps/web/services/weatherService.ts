@@ -8,6 +8,15 @@ export interface WeatherData {
     weather_desc: string;
 }
 
+export interface DailyForecast {
+    date: string;
+    icon: string;
+    max: number;
+    min: number;
+    precip: number;
+    code: number;
+}
+
 export const WeatherService = {
     getWeatherDescription(code: number): string {
         switch (code) {
@@ -59,12 +68,12 @@ export const WeatherService = {
                 return data.daily.precipitation_sum.reduce((a: number, b: number) => a + b, 0);
             }
             return 0;
-        } catch (e) {
+        } catch {
             return 0;
         }
     },
 
-    async getForecast(lat: number, lon: number): Promise<any[]> {
+    async getForecast(lat: number, lon: number): Promise<DailyForecast[]> {
         try {
             const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto&forecast_days=4`;
             const res = await fetch(url);
@@ -73,7 +82,7 @@ export const WeatherService = {
             if (!data.daily) return [];
 
             const daily = data.daily;
-            const forecast = [];
+            const forecast: DailyForecast[] = [];
 
             // Skip today (index 0) usually, start from tomorrow? Or show next 3 days including today? 
             // User asked for "pronóstico de los 3 siguientes días". Let's show indices 0, 1, 2 (Today, +1, +2) or 1, 2, 3.

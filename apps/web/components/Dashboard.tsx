@@ -2,34 +2,102 @@
 
 import React, { useEffect, useState } from 'react';
 import { useStorage } from '@/context/StorageContext';
-import { WeatherService } from '@/services/weatherService';
+import { WeatherService, type DailyForecast } from '@/services/weatherService';
 import { EventManager } from '@/services/eventManager';
 import { getFarms } from '@/app/lib/farm-actions';
 import { getAnimals } from '@/app/lib/animal-actions';
+import type { AnimalLike, FarmLike, LivestockEvent } from '@/types/livestock';
+
+interface WeatherWidget {
+    temp: number;
+    condition: string;
+    location: string;
+    mapUrl: string;
+    icon: string;
+    humidity: number;
+    wind: number;
+    forecast: DailyForecast[];
+}
+
+interface AnimalStats {
+    males: Record<string, number>;
+    females: Record<string, number>;
+}
+
+function calculateAnimalStats(animals: AnimalLike[]): AnimalStats {
+    const maleCounts: Record<string, number> = {
+        'Bueyes': 0, 'Toros': 0, 'Utreros': 0, 'Novillos': 0, 'Añojos': 0, 'Terneros': 0, 'Becerros': 0
+    };
+    const femaleCounts: Record<string, number> = {
+        'Nodrizas': 0, 'Vacas': 0, 'Novillas': 0, 'Añojas': 0, 'Terneras': 0, 'Becerras': 0
+    };
+
+    animals.forEach((a) => {
+        const excludedStatuses = ['Sacrificado', 'Muerto', 'Vendido', 'Baja', 'Inactivo', 'Retirado'];
+        if (a.status && excludedStatuses.includes(a.status)) return;
+        if (a.status && a.status !== 'Activo') return;
+
+        let cat = a.category;
+
+        if (!cat || cat === 'Sin Clasificar') {
+            const birth = new Date((a.birth ?? a.birthDate) as string | Date | number);
+            const now = new Date();
+            const ageMonths = (now.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+
+            if (a.sex === 'Macho') {
+                if (ageMonths < 6) cat = 'Becerros';
+                else if (ageMonths < 12) cat = 'Terneros';
+                else if (ageMonths < 24) cat = 'Añojos';
+                else if (ageMonths < 36) cat = 'Novillos';
+                else if (ageMonths < 48) cat = 'Utreros';
+                else cat = 'Toros';
+            } else {
+                if (ageMonths < 6) cat = 'Becerras';
+                else if (ageMonths < 12) cat = 'Terneras';
+                else if (ageMonths < 24) cat = 'Añojas';
+                else if (ageMonths < 36) cat = 'Novillas';
+                else cat = 'Vacas';
+            }
+        }
+
+        // Display castrated males as oxen.
+        if (a.sex === 'Castrado') cat = 'Buey';
+
+        if (a.sex === 'Macho' || a.sex === 'Castrado') {
+            if (maleCounts[cat] !== undefined) maleCounts[cat]++;
+            else if (cat === 'Buey') maleCounts['Bueyes']++;
+            else if (maleCounts[cat + 's'] !== undefined) maleCounts[cat + 's']++;
+        } else {
+            if (femaleCounts[cat] !== undefined) femaleCounts[cat]++;
+            else if (femaleCounts[cat + 's'] !== undefined) femaleCounts[cat + 's']++;
+        }
+    });
+    return { males: maleCounts, females: femaleCounts };
+}
 
 export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) => void, userId?: string }) {
 
 
     const { read } = useStorage();
-    const [weather, setWeather] = useState<any>(null);
+    const [weather, setWeather] = useState<WeatherWidget | null>(null);
     const [loadingWeather, setLoadingWeather] = useState(true);
-    const [animalStats, setAnimalStats] = useState<any>({ males: {}, females: {} });
-    const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+    const [animalStats, setAnimalStats] = useState<AnimalStats>({ males: {}, females: {} });
+    const [upcomingEvents, setUpcomingEvents] = useState<LivestockEvent[]>([]);
     const [selectedTabIndex, setSelectedTabIndex] = useState(0);
-    const [farmsList, setFarmsList] = useState<any[]>([]);
+    const [farmsList, setFarmsList] = useState<FarmLike[]>([]);
 
-    const loadWeatherForFarm = (currentFarm: any) => {
+    const loadWeatherForFarm = (currentFarm: FarmLike | undefined) => {
         if (!currentFarm) return;
 
         // Default coordinates (Madrid - Center of Spain) if farm has no coords
         let lat = 40.4168;
         let lon = -3.7038;
-        let farmName = currentFarm.name || 'General';
+        const farmName = currentFarm.name || 'General';
 
         // Retrieve coordinates from the selected farm
         if (currentFarm.coords && currentFarm.coords.lat && (currentFarm.coords.lng || currentFarm.coords.lon)) {
             lat = currentFarm.coords.lat;
-            lon = currentFarm.coords.lng || currentFarm.coords.lon;
+            lon = (currentFarm.coords.lng ?? currentFarm.coords.lon ?? lon);
         }
 
         WeatherService.getCurrentWeather(lat, lon).then(async data => {
@@ -60,118 +128,55 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
         });
     };
 
+    // Initial dashboard fetch on mount / userId change. setState inside an effect
+    // is the standard React pattern for data-fetching when not using a
+    // framework-specific hook like SWR or TanStack Query.
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
-        try {
-            // 1. Load Weather for SELECTED FARM
-            const sessionUser = read('appSession', '');
+        let cancelled = false;
+        const sessionUser = read('appSession', '');
 
-            if (userId) {
-                getFarms(userId).then(({ data: farms }) => {
-                    const farmArray = farms as any[];
-                    setFarmsList(farmArray);
-                    if (!farmArray || farmArray.length === 0) {
-                        setLoadingWeather(false);
-                        setWeather(null);
-                    } else {
-                        loadWeatherForFarm(farmArray[selectedTabIndex] || farmArray[0]);
-                    }
-                });
-            } else {
-                const farms = read<any[]>(`fincas_${sessionUser}`, []);
-                setFarmsList(farms);
-                if (!farms || farms.length === 0) {
+        if (userId) {
+            getFarms(userId).then(({ data: farms }) => {
+                if (cancelled) return;
+                const farmArray = farms as FarmLike[];
+                setFarmsList(farmArray);
+                if (!farmArray || farmArray.length === 0) {
                     setLoadingWeather(false);
                     setWeather(null);
                 } else {
-                    loadWeatherForFarm(farms[selectedTabIndex] || farms[0]);
+                    loadWeatherForFarm(farmArray[selectedTabIndex] || farmArray[0]);
                 }
-            }
-
-            // 2. Load Animal Stats
-            if (userId) {
-                getAnimals(userId).then(({ data: animalsData }) => {
-                    const stats = calculateAnimalStats(animalsData);
-                    setAnimalStats(stats);
-                });
+            }).catch(() => {
+                if (!cancelled) setLoadingWeather(false);
+            });
+        } else {
+            const farms = read<FarmLike[]>(`fincas_${sessionUser}`, []);
+            setFarmsList(farms);
+            if (!farms || farms.length === 0) {
+                setLoadingWeather(false);
+                setWeather(null);
             } else {
-                const animals = read(`animals_${sessionUser}`, []);
-                const stats = calculateAnimalStats(animals);
-                setAnimalStats(stats);
+                loadWeatherForFarm(farms[selectedTabIndex] || farms[0]);
             }
-
-            // 3. Load Events
-            const events = read('events', []);
-            const upcoming = EventManager.getUpcomingEvents(events, 30);
-            setUpcomingEvents(upcoming);
-
-        } catch (e) {
-            // Silent catch for initialization errors
         }
+
+        if (userId) {
+            getAnimals(userId).then(({ data: animalsData }) => {
+                if (cancelled) return;
+                setAnimalStats(calculateAnimalStats(animalsData as unknown as AnimalLike[]));
+            }).catch(() => { /* noop */ });
+        } else {
+            const animals = read<AnimalLike[]>(`animals_${sessionUser}`, []);
+            setAnimalStats(calculateAnimalStats(animals));
+        }
+
+        const events = read<LivestockEvent[]>('events', []);
+        setUpcomingEvents(EventManager.getUpcomingEvents(events, 30));
+
+        return () => { cancelled = true; };
     }, [read, selectedTabIndex, userId]);
-
-    const calculateAnimalStats = (animals: any[]) => {
-        const maleCounts: Record<string, number> = {
-            'Bueyes': 0, 'Toros': 0, 'Utreros': 0, 'Novillos': 0, 'Añojos': 0, 'Terneros': 0, 'Becerros': 0
-        };
-        const femaleCounts: Record<string, number> = {
-            'Nodrizas': 0, 'Vacas': 0, 'Novillas': 0, 'Añojas': 0, 'Terneras': 0, 'Becerras': 0
-        };
-
-        animals.forEach((a: any) => {
-            // Filter out non-active animals from stats
-            // Explicitly list all statuses that should be excluded from active stats
-            const excludedStatuses = ['Sacrificado', 'Muerto', 'Vendido', 'Baja', 'Inactivo', 'Retirado'];
-            if (a.status && excludedStatuses.includes(a.status)) return;
-            // Also ensure that if a status is present, it must be 'Activo' to be included
-            if (a.status && a.status !== 'Activo') return;
-
-            // If category is missing, calculate it based on Age
-            let cat = a.category;
-
-            if (!cat || cat === 'Sin Clasificar') {
-                const birth = new Date(a.birth || a.birthDate);
-                const now = new Date();
-                const ageMonths = (now.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
-
-                if (a.sex === 'Macho') {
-                    if (ageMonths < 6) cat = 'Becerros';
-                    else if (ageMonths < 12) cat = 'Terneros';
-                    else if (ageMonths < 24) cat = 'Añojos'; // Often 12-24
-                    else if (ageMonths < 36) cat = 'Novillos';
-                    else if (ageMonths < 48) cat = 'Utreros'; // 3-4 years
-                    else cat = 'Toros';
-                } else {
-                    if (ageMonths < 6) cat = 'Becerras';
-                    else if (ageMonths < 12) cat = 'Terneras';
-                    else if (ageMonths < 24) cat = 'Añojas';
-                    else if (ageMonths < 36) cat = 'Novillas';
-                    else cat = 'Vacas'; // Default adult
-                }
-            }
-
-            // Stats Correction: Force 'Castrado' to display as 'Buey' for now.
-            // In a full implementation, we would check the exact castration date vs birth date here.
-            // But to ensure the 3 Bueyes appear correctly for the user despite stale data:
-            if (a.sex === 'Castrado') {
-                cat = 'Buey';
-            }
-
-            if (a.sex === 'Macho' || a.sex === 'Castrado') {
-                if (maleCounts[cat] !== undefined) maleCounts[cat]++;
-                else if (cat === 'Buey') maleCounts['Bueyes']++; // Special case for Buey -> Bueyes
-                else {
-                    // Fallback for "Toro" vs "Toros"
-                    if (maleCounts[cat + 's'] !== undefined) maleCounts[cat + 's']++;
-                }
-            } else {
-                if (femaleCounts[cat] !== undefined) femaleCounts[cat]++;
-                else {
-                    if (femaleCounts[cat + 's'] !== undefined) femaleCounts[cat + 's']++;
-                }
-            }
-        });
-        return { males: maleCounts, females: femaleCounts };
-    };
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     return (
         <div className="space-y-6">
@@ -257,7 +262,7 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
                                     <div className="flex flex-col justify-between h-48">
                                         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Pronóstico 3 Días</p>
                                         <div className="flex-1 flex flex-col gap-2">
-                                            {weather.forecast.map((d: any, i: number) => (
+                                            {weather.forecast.map((d, i: number) => (
                                                 <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-100 hover:border-gray-300 transition-colors flex-1">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-xl">{d.icon}</span>

@@ -23,6 +23,8 @@ export interface SynergyResult {
     description: string;
 }
 
+import type { FeedItem } from './feedDatabase';
+
 export interface KPITargets {
     adg: number;     // Target Average Daily Gain
     fcr: number;     // Target Feed Conversion Ratio
@@ -56,7 +58,7 @@ export const NutritionEngine = {
         system: string
     ): KPITargets {
         // Defaults (Maintenance / Rustica Base)
-        let targets: KPITargets = {
+        const targets: KPITargets = {
             adg: 0.1, fcr: 0, energyDensity: 2.0, proteinDensity: 10, fiberMin: 35, maxConcentrate: 30
         };
 
@@ -195,7 +197,7 @@ export const NutritionEngine = {
         targets: KPITargets,
         animal: { weight: number },
         system: string,
-        ingredientsDB: any[] // Provide list of available feeds
+        _ingredientsDB: FeedItem[] // reserved for future per-farm catalog
     ): { feed_id: string, feed_name: string, dm_kg: number }[] {
         const diet: { feed_id: string, feed_name: string, dm_kg: number }[] = [];
 
@@ -288,7 +290,7 @@ export const NutritionEngine = {
         // 3. CORRECTOR: PROTEIN
         remainingDmi = dmiLimit - currentDmi;
         if (remainingDmi > 0) {
-            let proteinId = 'P01'; // Soja
+            const proteinId = 'P01'; // Soja
             let proteinName = 'Soja (Harina 44%)';
 
             if (system.includes('Ecológico')) {
@@ -355,7 +357,7 @@ export const NutritionEngine = {
     },
 
     validateDiet(
-        activeFeeds: { item: any, amount: number }[], // Item + Fresh Amount
+        activeFeeds: { item: FeedItem; amount: number }[], // Item + Fresh Amount
         metrics: { totalDMI: number, totalFDN: number, totalProteinVal: number, totalEnergy: number, reqs: DietRequirement },
         system: string
     ): DietAlert[] {
@@ -391,7 +393,7 @@ export const NutritionEngine = {
 
         // 2. METEORISMO (Bloat)
         // Heuristic: If Legumes > 50% OR FDN < 20% (Double Trigger)
-        const legumeKg = activeFeeds.filter(f => f.item.category === 'Leguminosa' || f.item.name.includes('Alfalfa') || f.item.name.includes('Trébol')).reduce((s, f) => s + (f.amount * (f.item.dm_percent / 100)), 0);
+        const legumeKg = activeFeeds.filter(f => (f.item.category as string) === 'Leguminosa' || f.item.name.includes('Alfalfa') || f.item.name.includes('Trébol')).reduce((s, f) => s + (f.amount * (f.item.dm_percent / 100)), 0);
         const legumePct = legumeKg / metrics.totalDMI;
 
         if (legumePct > 0.5 || (legumePct > 0.3 && fdnPct < 0.22)) {

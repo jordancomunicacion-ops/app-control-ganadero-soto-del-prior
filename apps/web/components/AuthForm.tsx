@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useStorage } from '@/context/StorageContext';
 
 interface AuthFormProps {
@@ -22,28 +23,42 @@ export function AuthForm({ onLogin }: AuthFormProps) {
     const [regEmail, setRegEmail] = useState('');
     const [regPass, setRegPass] = useState('');
 
+    // We intentionally hydrate the "remember me" credentials from localStorage in
+    // an effect to avoid SSR hydration mismatches — the server cannot read
+    // localStorage so it must render empty fields, and only the client fills them
+    // in after mount.
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
-        // Check remembered creds
-        const remembered = read<any>('rememberedCreds', null);
+        type RememberedCreds = { user: string; pass: string };
+        const remembered = read<RememberedCreds | null>('rememberedCreds', null);
         if (remembered) {
             setLoginUser(remembered.user);
             setLoginPass(remembered.pass);
             setRemember(true);
         }
     }, [read]);
+    /* eslint-enable react-hooks/set-state-in-effect */
+
+    type LocalUser = {
+        name: string;
+        email?: string;
+        pass: string;
+        role?: string;
+        joined?: string;
+    };
 
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
 
-        const users = read<any[]>('users', []);
-        const user = users.find((u: any) => u.name === loginUser && u.pass === loginPass);
+        const users = read<LocalUser[]>('users', []);
+        const user = users.find((u) => u.name === loginUser && u.pass === loginPass);
 
         if (user) {
             // Hotfix: Ensure 'gerencia' is always admin
             if ((user.email === 'gerencia@sotodelprior.com' || user.name === 'gerencia@sotodelprior.com') && user.role !== 'admin') {
                 user.role = 'admin';
-                const otherUsers = users.filter((u: any) => u.name !== user.name);
+                const otherUsers = users.filter((u) => u.name !== user.name);
                 write('users', [...otherUsers, user]);
             }
 
@@ -68,8 +83,8 @@ export function AuthForm({ onLogin }: AuthFormProps) {
             return;
         }
 
-        const users = read<any[]>('users', []);
-        if (users.find((u: any) => u.name === regUser)) {
+        const users = read<LocalUser[]>('users', []);
+        if (users.find((u) => u.name === regUser)) {
             setError('El usuario ya existe.');
             return;
         }
@@ -94,7 +109,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
         <section className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
                 <div className="flex flex-col items-center mb-6">
-                    <img src="/logo-full.png" alt="SOTO DEL PRIOR" className="h-28 mb-4" />
+                    <Image src="/logo-full.png" alt="SOTO DEL PRIOR" width={224} height={112} priority className="h-28 w-auto mb-4" />
                 </div>
 
                 <div className="flex border-b border-gray-200 mb-6">

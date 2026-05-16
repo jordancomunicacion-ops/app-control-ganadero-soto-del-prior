@@ -2,17 +2,17 @@
 
 import React, { useState } from 'react';
 import { useStorage } from '@/context/StorageContext';
-import { User, Shield, Briefcase, Phone, CreditCard, Calendar, Trash2, Edit2, Search, Plus, Save, X } from 'lucide-react';
+import { User, Shield, Briefcase, Phone, Calendar, Trash2, Edit2, Search, Plus, Save, X } from 'lucide-react';
 import { getUsers, createUser, updateUserStatus, updateUserProfile, deleteUser } from '@/app/lib/user-actions';
 
+type UserRole = 'ADMIN' | 'VET' | 'WORKER' | 'USER';
+
 interface FullUser {
-    id: string; // Real ID
+    id: string;
     name: string;
     email: string;
-    // ...
     approved: boolean;
-    // ...
-    role: 'ADMIN' | 'VET' | 'WORKER' | 'USER'; // Standardized to uppercase
+    role: UserRole;
     joined: string;
     firstName?: string;
     lastName?: string;
@@ -20,27 +20,74 @@ interface FullUser {
     phone?: string;
     dob?: string;
     jobTitle?: string;
-    pass?: string; // Optional for list
+    pass?: string;
     permissions?: string[];
     managedById?: string;
+}
+
+type RawDbUser = {
+    id: string;
+    name: string;
+    email: string;
+    approved: boolean;
+    role: string;
+    joined?: string;
+    createdAt?: Date | string;
+    firstName?: string | null;
+    lastName?: string | null;
+    dni?: string | null;
+    phone?: string | null;
+    dob?: Date | string | null;
+    jobTitle?: string | null;
+    permissions?: string[] | null;
+    managedById?: string | null;
+};
+
+function toFullUser(u: RawDbUser): FullUser {
+    const role = (u.role?.toUpperCase() as UserRole) ?? 'WORKER';
+    const joined = u.joined
+        ?? (u.createdAt instanceof Date ? u.createdAt.toISOString() : (u.createdAt ?? ''));
+    return {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        approved: u.approved,
+        role,
+        joined,
+        firstName: u.firstName ?? undefined,
+        lastName: u.lastName ?? undefined,
+        dni: u.dni ?? undefined,
+        phone: u.phone ?? undefined,
+        dob: typeof u.dob === 'string' ? u.dob : u.dob?.toISOString().slice(0, 10),
+        jobTitle: u.jobTitle ?? undefined,
+        permissions: u.permissions ?? [],
+        managedById: u.managedById ?? undefined,
+    };
+}
+
+function getErrorMessage(e: unknown): string {
+    return e instanceof Error ? e.message : String(e);
 }
 
 export function UsersManager({ userId, currentUserRole }: { userId?: string, currentUserRole?: string }) {
     const { read } = useStorage();
     const [users, setUsers] = useState<FullUser[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [, setLoading] = useState(true);
 
     // Load from DB
     React.useEffect(() => {
-        if (userId) {
-            getUsers(userId).then(dbUsers => {
-                setUsers(dbUsers as any[]);
-                setLoading(false);
-            }).catch(err => {
-                console.error(err);
-                setLoading(false);
-            });
-        }
+        if (!userId) return;
+        let cancelled = false;
+        getUsers().then(dbUsers => {
+            if (cancelled) return;
+            setUsers((dbUsers as RawDbUser[]).map(toFullUser));
+            setLoading(false);
+        }).catch(err => {
+            if (cancelled) return;
+            console.error(err);
+            setLoading(false);
+        });
+        return () => { cancelled = true; };
     }, [userId]);
 
     const sessionUser = read('sessionUser', '');
@@ -62,31 +109,46 @@ export function UsersManager({ userId, currentUserRole }: { userId?: string, cur
         try {
             if (isCreating) {
                 const created = await createUser({
-                    ...formData,
+                    name: formData.name,
+                    email: formData.email,
                     password: formData.pass || '123456',
-                    managedById: userId // Associate with current admin
+                    role: formData.role,
+                    firstName: formData.firstName,
+                    lastName: formData.lastName,
+                    jobTitle: formData.jobTitle,
+                    permissions: formData.permissions,
                 });
-                setUsers([created as any, ...users]);
+                setUsers([toFullUser(created as RawDbUser), ...users]);
             } else if (editingUser) {
-                await updateUserProfile(editingUser.id, formData);
+                await updateUserProfile(editingUser.id, {
+                    role: formData.role,
+                    firstName: formData.firstName,
+                    lastName: formData.lastName,
+                    dni: formData.dni,
+                    phone: formData.phone,
+                    jobTitle: formData.jobTitle,
+                    dob: formData.dob,
+                    password: formData.pass,
+                    permissions: formData.permissions,
+                });
                 // Update local state optimistic
                 setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...formData } as FullUser : u));
             }
             setEditingUser(null);
             setIsCreating(false);
             setFormData({ role: 'WORKER', jobTitle: 'Peón Ganadero', permissions: ['farms', 'animals', 'events', 'calculator'] });
-        } catch (e: any) {
-            alert("Error: " + e.message);
+        } catch (e: unknown) {
+            alert("Error: " + getErrorMessage(e));
         }
     };
 
     const handleToggleApproval = async (id: string, currentStatus: boolean) => {
         if (!userId) return;
         try {
-            await updateUserStatus(userId, id, !currentStatus);
+            await updateUserStatus(id, !currentStatus);
             setUsers(users.map(u => u.id === id ? { ...u, approved: !currentStatus } : u));
-        } catch (e: any) {
-            alert("Error al actualizar estado: " + e.message);
+        } catch (e: unknown) {
+            alert("Error al actualizar estado: " + getErrorMessage(e));
         }
     };
 
@@ -107,10 +169,10 @@ export function UsersManager({ userId, currentUserRole }: { userId?: string, cur
         if (user.name === sessionUser) return alert("No puedes eliminar tu propio usuario");
         if (confirm(`¿Eliminar usuario ${user.name}?`)) {
             try {
-                await deleteUser(userId, user.id);
+                await deleteUser(user.id);
                 setUsers(users.filter(u => u.id !== user.id));
-            } catch (e: any) {
-                alert("Error eliminando: " + e.message);
+            } catch (e: unknown) {
+                alert("Error eliminando: " + getErrorMessage(e));
             }
         }
     };
@@ -243,7 +305,7 @@ export function UsersManager({ userId, currentUserRole }: { userId?: string, cur
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Rol de Acceso</label>
                                 <select
                                     value={formData.role || 'WORKER'}
-                                    onChange={e => setFormData({ ...formData, role: e.target.value as any })}
+                                    onChange={e => setFormData({ ...formData, role: e.target.value as UserRole })}
                                     className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none bg-white"
                                 >
                                     <option value="WORKER">Trabajador (Básico)</option>

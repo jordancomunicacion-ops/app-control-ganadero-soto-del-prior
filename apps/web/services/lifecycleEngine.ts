@@ -3,9 +3,9 @@ export interface Animal {
     id: string;
     crotal: string;
     sex: string;
-    birthDate?: string; // or birth
+    birthDate?: string;
     birth?: string;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export type ReproductiveState = 'Vacía' | 'Cubierta' | 'Gestante' | 'Postparto' | 'Inmadura';
@@ -35,7 +35,7 @@ export const LifecycleEngine = {
      * Determine Reproductive Status based on Event History
      * State Machine: Inseminación -> Cubierta -> Diagnóstico(+) -> Gestante -> Parto -> Postparto -> Vacía
      */
-    getReproductiveStatus(animal: Animal, events: any[]): { status: ReproductiveState, daysInState: number } {
+    getReproductiveStatus(animal: Animal, events: Array<{ animalId?: string; animalCrotal?: string; type?: string; date: string; desc?: string; result?: string }>): { status: ReproductiveState, daysInState: number } {
         if (animal.sex !== 'Hembra') return { status: 'Inmadura', daysInState: 0 };
 
         // Sort events descending
@@ -45,7 +45,7 @@ export const LifecycleEngine = {
 
         const lastParto = sortedEvents.find(e => e.type === 'Parto');
         const lastInsem = sortedEvents.find(e => e.type === 'Inseminación' || e.type === 'Monta');
-        const lastDiag = sortedEvents.find(e => e.type === 'Diagnóstico' || (e.type === 'Revisión' && e.desc.includes('Diagnóstico')));
+        const lastDiag = sortedEvents.find(e => e.type === 'Diagnóstico' || (e.type === 'Revisión' && (e.desc ?? '').includes('Diagnóstico')));
 
         const today = new Date();
 
@@ -76,7 +76,8 @@ export const LifecycleEngine = {
                 const daysInsem = Math.floor((today.getTime() - new Date(newInsem.date).getTime()) / (1000 * 60 * 60 * 24));
 
                 if (newDiag) {
-                    const isPos = newDiag.result === 'Positivo' || newDiag.desc.includes('Gesta') || newDiag.desc.includes('Preña');
+                    const desc = newDiag.desc ?? '';
+                    const isPos = newDiag.result === 'Positivo' || desc.includes('Gesta') || desc.includes('Preña');
                     if (isPos) return { status: 'Gestante', daysInState: daysInsem }; // Days since Insem = Gestation Days
                     else return { status: 'Vacía', daysInState: 0 }; // Failed
                 }
@@ -89,7 +90,7 @@ export const LifecycleEngine = {
         if (lastInsem) {
             const daysInsem = Math.floor((today.getTime() - new Date(lastInsem.date).getTime()) / (1000 * 60 * 60 * 24));
             if (lastDiag) {
-                const isPos = lastDiag.result === 'Positivo' || lastDiag.desc.includes('Gesta');
+                const isPos = lastDiag.result === 'Positivo' || (lastDiag.desc ?? '').includes('Gesta');
                 if (isPos) return { status: 'Gestante', daysInState: daysInsem };
                 return { status: 'Vacía', daysInState: 0 };
             }

@@ -144,8 +144,9 @@ export const FeedManager = {
         return result;
     },
 
-    parseNumber(value: any) {
-        if (!value || value === '') return null;
+    parseNumber(rawValue: unknown) {
+        if (!rawValue || rawValue === '') return null;
+        let value: string | number = rawValue as string | number;
         if (typeof value === 'string') {
             value = value.replace(',', '.');
             if (value.includes('-')) {
@@ -155,7 +156,7 @@ export const FeedManager = {
                 if (!isNaN(v1) && !isNaN(v2)) return (v1 + v2) / 2;
             }
         }
-        const num = parseFloat(value);
+        const num = parseFloat(String(value));
         return isNaN(num) ? null : num;
     }
 };

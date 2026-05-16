@@ -6,27 +6,62 @@ import { useAnimalCalculator } from '@/hooks/useAnimalCalculator';
 
 import { FEED_DATABASE, FeedItem } from '../services/feedDatabase';
 import { NutritionEngine } from '../services/nutritionEngine';
-import { LifecycleEngine, ReproductiveState } from '../services/lifecycleEngine';
 import { BreedManager, Breed } from '../services/breedManager';
-import { PriceEngine } from '../services/priceEngine';
+import type { AnimalLike, LivestockEvent } from '@/types/livestock';
 
 
 import { getAnimals } from '@/app/lib/animal-actions';
 import { getEvents } from '@/app/lib/event-actions';
 
+type AnimalWithGenotype = AnimalLike & {
+    genotype?: { fatherBreedId?: string; motherBreedId?: string };
+    fatherBreedId?: string;
+    motherBreedId?: string;
+};
+
+/**
+ * Robust breed detection: direct lookup → parent-pair hybrid → fuzzy name search.
+ * Defined at module scope so its identity is stable across renders and `useEffect`
+ * dependencies don't churn on every component re-render.
+ */
+function getEffectiveBreed(animal: AnimalWithGenotype | null): Breed | undefined {
+    if (!animal) return undefined;
+
+    let breed: Breed | undefined = BreedManager.getBreedById(animal.breed ?? '');
+
+    if (!breed) {
+        const fatherId = animal.genotype?.fatherBreedId || animal.fatherBreedId;
+        const motherId = animal.genotype?.motherBreedId || animal.motherBreedId;
+        if (fatherId && motherId) {
+            breed = BreedManager.calculateHybrid(fatherId, motherId) || undefined;
+        }
+    }
+
+    if (!breed) {
+        const rawBreed = animal.breed || '';
+        const normalizedBreed = rawBreed.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+        const all = BreedManager.getAllBreeds();
+        breed = all.find(b =>
+            normalizedBreed.includes(b.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")) ||
+            normalizedBreed.includes(b.code.toLowerCase())
+        );
+    }
+
+    return breed || undefined;
+}
+
 export function Calculator({ userId }: { userId?: string }) {
     const { read } = useStorage();
-    const { calculate, results, loading, error } = useAnimalCalculator();
+    const { calculate, results } = useAnimalCalculator();
 
-    const [animals, setAnimals] = useState<any[]>([]);
-    const [dataLoading, setDataLoading] = useState(false);
-    const [selectedAnimalId, setSelectedAnimalId] = useState('');
-    const [selectedAnimal, setSelectedAnimal] = useState<any>(null);
+    const [animals, setAnimals] = useState<AnimalLike[]>([]);
+    const [, setDataLoading] = useState(false);
+    const [selectedAnimal, setSelectedAnimal] = useState<AnimalLike | null>(null);
     const [objective, setObjective] = useState('Mantenimiento');
     const [baseSystem, setBaseSystem] = useState('Extensivo (Pastoreo)');
     const [isMontanera, setIsMontanera] = useState(false);
     const [isEco, setIsEco] = useState(false);
-    const [events, setEvents] = useState<any[]>([]);
+    const [events, setEvents] = useState<LivestockEvent[]>([]);
 
     // Derived System String for Engine Compatibility
     const effectiveSystem = `${baseSystem}${isMontanera ? ' + Montanera' : ''}${isEco ? ' + Ecológico' : ''}`;
@@ -52,7 +87,12 @@ export function Calculator({ userId }: { userId?: string }) {
     const [diet, setDiet] = useState<{ item: FeedItem; amount: number }[]>([]);
     const [availableFeeds] = useState(FEED_DATABASE);
 
+    // Initial data fetch on mount / userId change. setState inside an effect is
+    // the standard React pattern for data-fetching when not using a
+    // framework-specific hook like SWR or TanStack Query.
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
+        let cancelled = false;
         const sessionUser = read<string>('sessionUser', '');
 
         if (userId) {
@@ -61,18 +101,23 @@ export function Calculator({ userId }: { userId?: string }) {
                 getAnimals(userId),
                 getEvents(userId)
             ]).then(([{ data: animalsData }, { data: eventsData }]) => {
-                setAnimals(animalsData as any[]);
-                setEvents(eventsData as any[]);
+                if (cancelled) return;
+                setAnimals(animalsData as unknown as AnimalLike[]);
+                setEvents(eventsData as unknown as LivestockEvent[]);
                 setDataLoading(false);
             }).catch(err => {
+                if (cancelled) return;
                 console.error("Error loading calculator data:", err);
                 setDataLoading(false);
             });
         } else if (sessionUser) {
-            setAnimals(read<any[]>(`animals_${sessionUser}`, []));
-            setEvents(read<any[]>('events', []));
+            setAnimals(read<AnimalLike[]>(`animals_${sessionUser}`, []));
+            setEvents(read<LivestockEvent[]>('events', []));
         }
+
+        return () => { cancelled = true; };
     }, [read, userId]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     // Diet Handlers
     const addToDiet = (feedId: string) => {
@@ -92,7 +137,7 @@ export function Calculator({ userId }: { userId?: string }) {
 
     const handleSmartDiet = () => {
         if (!selectedAnimal || !targets) return;
-        const weight = parseFloat(selectedAnimal.weight) || 400;
+        const weight = parseFloat(String(selectedAnimal.weight ?? '')) || 400;
 
         // Call Engine
         const generated = NutritionEngine.generateSmartDiet(
@@ -116,11 +161,15 @@ export function Calculator({ userId }: { userId?: string }) {
 
     const [hasCalculated, setHasCalculated] = useState(false);
 
-    // Sync state reset on animal change
-    useEffect(() => {
+    // Reset hasCalculated/diet when selectedAnimal changes — the canonical React 19
+    // pattern of comparing against a previous value during render, avoiding the
+    // "setState in effect" anti-pattern.
+    const [prevSelectedAnimal, setPrevSelectedAnimal] = useState(selectedAnimal);
+    if (prevSelectedAnimal !== selectedAnimal) {
+        setPrevSelectedAnimal(selectedAnimal);
         setHasCalculated(false);
-        setDiet([]); // Optional: Reset diet on new animal?
-    }, [selectedAnimal]);
+        setDiet([]);
+    }
 
     // Manual Calculation Handler
     const handleSimulate = () => {
@@ -147,57 +196,26 @@ export function Calculator({ userId }: { userId?: string }) {
         return (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
     };
 
-    // Helper: Robust Breed Detection (Duplicated from Hook for UI Sync)
-    const getEffectiveBreed = (animal: any) => {
-        if (!animal) return null;
-
-        // 1. Try direct ID/Code lookup
-        let breed = BreedManager.getBreedById(animal.breed);
-
-        // 2. Try parent lookup for F1
-        if (!breed) {
-            const fatherId = animal.genotype?.fatherBreedId || animal.fatherBreedId;
-            const motherId = animal.genotype?.motherBreedId || animal.motherBreedId;
-            if (fatherId && motherId) {
-                breed = BreedManager.calculateHybrid(fatherId, motherId) || undefined;
-            }
-        }
-
-        // 3. Robust Name Search
-        if (!breed) {
-            const rawBreed = animal.breed || '';
-            const normalizedBreed = rawBreed.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            const all = BreedManager.getAllBreeds();
-            breed = all.find(b =>
-                normalizedBreed.includes(b.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")) ||
-                normalizedBreed.includes(b.code.toLowerCase())
-            );
-        }
-
-        return breed || undefined;
-    };
-
-    const [targets, setTargets] = useState<any>(null);
-
-    // Update Targets when parameters change
-    useEffect(() => {
-        if (selectedAnimal) {
-            const effectiveBreed = getEffectiveBreed(selectedAnimal);
-
-            const t = NutritionEngine.calculateKPITargets(
-                {
-                    breed: selectedAnimal.breed || 'Unknown',
-                    sex: selectedAnimal.sex || 'Macho',
-                    weight: parseFloat(selectedAnimal.currentWeight || selectedAnimal.weight || 400),
-                    ageMonths: calculateAgeInMonths(selectedAnimal.birth || selectedAnimal.birthDate),
-                    biological_type: effectiveBreed?.biological_type // Pass Bio Type!
-                },
-                objective,
-                effectiveSystem
-            );
-            setTargets(t);
-        }
-    }, [selectedAnimal, objective, effectiveSystem]);
+    // Derived from props/state — no side effects, no useEffect/useState. The React
+    // Compiler handles memoization automatically.
+    const targets = (() => {
+        if (!selectedAnimal) return null;
+        const effectiveBreed = getEffectiveBreed(selectedAnimal);
+        const birthStr = typeof selectedAnimal.birthDate === 'string'
+            ? selectedAnimal.birthDate
+            : selectedAnimal.birthDate?.toISOString();
+        return NutritionEngine.calculateKPITargets(
+            {
+                breed: selectedAnimal.breed || 'Unknown',
+                sex: selectedAnimal.sex || 'Macho',
+                weight: parseFloat(String(selectedAnimal.currentWeight ?? selectedAnimal.weight ?? 400)),
+                ageMonths: calculateAgeInMonths(selectedAnimal.birth ?? birthStr ?? ''),
+                biological_type: effectiveBreed?.biological_type
+            },
+            objective,
+            effectiveSystem
+        );
+    })();
 
     // Dynamic Conformation Helper
     const getDynamicConformation = () => {
@@ -221,7 +239,7 @@ export function Calculator({ userId }: { userId?: string }) {
             return (a.crotal || '').toLowerCase().includes(search) ||
                 (a.id || '').toLowerCase().includes(search);
         })
-        .sort((a: any, b: any) => (a.crotal || a.id || '').localeCompare(b.crotal || b.id || ''));
+        .sort((a, b) => (a.crotal || a.id || '').localeCompare(b.crotal || b.id || ''));
 
     return (
         <div className="h-full bg-gray-50 p-6 overflow-y-auto">
@@ -261,16 +279,14 @@ export function Calculator({ userId }: { userId?: string }) {
                                                 key={a.id}
                                                 className="px-4 py-3 hover:bg-green-50 cursor-pointer border-b last:border-0 flex justify-between items-center"
                                                 onMouseDown={() => {
-                                                    // Weight Sync on Selection
-                                                    let syncWeight = parseFloat(a.currentWeight || a.weight || 0);
+                                                    let syncWeight = parseFloat(String(a.currentWeight ?? a.weight ?? 0));
 
-                                                    // Trace 'Pesaje' events for this specific animal if needed
                                                     const animalEvents = events.filter(e =>
                                                         (e.animalId === a.id || e.animalCrotal === a.crotal) && e.type === 'Pesaje'
                                                     ).sort((e1, e2) => new Date(e2.date).getTime() - new Date(e1.date).getTime());
 
                                                     if (animalEvents.length > 0) {
-                                                        const latestEventWeight = parseFloat(animalEvents[0].weight);
+                                                        const latestEventWeight = Number(animalEvents[0].weight ?? 0);
                                                         if (latestEventWeight > 0) {
                                                             syncWeight = latestEventWeight;
                                                         }
@@ -278,7 +294,7 @@ export function Calculator({ userId }: { userId?: string }) {
 
                                                     const syncedAnimal = { ...a, currentWeight: syncWeight, weight: syncWeight };
                                                     setSelectedAnimal(syncedAnimal);
-                                                    setSearchTerm(a.crotal || a.id);
+                                                    setSearchTerm(a.crotal ?? a.id ?? '');
                                                     setIsDropdownOpen(false);
                                                 }}
                                             >
@@ -536,7 +552,7 @@ export function Calculator({ userId }: { userId?: string }) {
                                         {/* Risk Alerts */}
                                         {results.alerts && results.alerts.length > 0 && (
                                             <div className="space-y-2 mt-4">
-                                                {results.alerts.map((alert: any, idx: number) => {
+                                                {results.alerts.map((alert, idx: number) => {
                                                     const translations: Record<string, string> = {
                                                         'ACIDOSIS': 'RIESGO ACIDOSIS',
                                                         'LOW_FIBER': 'FIBRA BAJA',
@@ -586,7 +602,7 @@ export function Calculator({ userId }: { userId?: string }) {
                                                         <div className="flex items-baseline justify-center gap-0.5">
                                                             <span className="text-3xl font-black text-gray-900 leading-none tracking-tighter">
                                                                 {results.carcass?.weight_est?.toFixed(0) || results.carcass?.rc_percent
-                                                                    ? ((parseFloat(selectedAnimal.currentWeight || selectedAnimal.weight) + results.projectedGain * 30) * (results.carcass.rc_percent / 100)).toFixed(0)
+                                                                    ? ((parseFloat(String(selectedAnimal?.currentWeight ?? selectedAnimal?.weight ?? 0)) + results.projectedGain * 30) * (results.carcass.rc_percent / 100)).toFixed(0)
                                                                     : '0'}
                                                             </span>
                                                             <span className="text-xs font-black text-gray-400 uppercase">kg</span>
@@ -649,7 +665,7 @@ export function Calculator({ userId }: { userId?: string }) {
                         <div className="flex flex-col items-center justify-center h-full bg-white rounded-xl border-dashed border-2 border-gray-200 p-12 text-gray-400">
                             <span className="text-6xl mb-4">🧬</span>
                             <p className="text-lg font-medium text-gray-500">Simulador de Rendimiento</p>
-                            <p className="text-center text-sm max-w-xs mt-2">Selecciona un animal, configura la dieta y pulsa "Simular" para ver su potencial.</p>
+                            <p className="text-center text-sm max-w-xs mt-2">Selecciona un animal, configura la dieta y pulsa &ldquo;Simular&rdquo; para ver su potencial.</p>
                         </div>
                     )}
                 </div>

@@ -1,6 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Legacy migration/seed script. Operates on heterogeneous localStorage shapes from
+// older versions; strict typing here pays no real safety dividend and would require
+// invasive defensive narrowing on every field. The eslint-disable is scoped to this
+// file only.
+import { useEffect, useRef } from 'react';
 import { useStorage } from '@/context/StorageContext';
-import { EventManager } from '@/services/eventManager';
 import { CarcassQualityEngine } from '@/services/carcassQualityEngine';
 
 export function DataSeeder() {
@@ -9,7 +13,6 @@ export function DataSeeder() {
 
     useEffect(() => {
         if (!isLoaded) return;
-        // removed seededRef check to ensure sanitation always runs on load
 
         const user = read<string>('appSession', '') || read<string>('sessionUser', '');
         if (!user) return;
@@ -18,7 +21,7 @@ export function DataSeeder() {
         const fincasKey = `fincas_${user}`;
         let animals = read<any[]>(animalsKey, []);
         let events = read<any[]>('events', []);
-        let fincas = read<any[]>(fincasKey, []);
+        const fincas = read<any[]>(fincasKey, []);
 
         let changed = false;
 
@@ -43,19 +46,20 @@ export function DataSeeder() {
             changed = true;
         }
 
-        const targetOxenCrotals = ['ES104332181960', 'ES338908386379', 'ES026542351161'];
-        const targetCowsCrotals = ['ES000000000001', 'ES000000000002', 'ES000000000003', 'ES000000000004'];
-
-
+        // Reference lists for the seeded "Buey" and "Cow" cohorts — used as anchors
+        // for future enrichment passes. Kept as documentation.
+        const _targetOxenCrotals = ['ES104332181960', 'ES338908386379', 'ES026542351161'];
+        const _targetCowsCrotals = ['ES000000000001', 'ES000000000002', 'ES000000000003', 'ES000000000004'];
 
         const generateUUID = () => {
             return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                const r = Math.random() * 16 | 0;
+                const v = c == 'x' ? r : (r & 0x3 | 0x8);
                 return v.toString(16);
             });
         };
 
-        const addEvent = (evt: any) => {
+        const _addEvent = (evt: any) => {
             if (!events.some(e => e.id === evt.id || (e.type === evt.type && e.date === evt.date && e.animalCrotal === evt.animalCrotal))) {
                 events.push(evt);
                 changed = true;
@@ -94,7 +98,7 @@ export function DataSeeder() {
             (a.fatherId && oxenSetRaw.has(a.fatherId)) || // TRIGGER IF invalid father found
             events.some(e => e.desc && (e.desc.includes('TORO_CHA') || e.desc.includes('Charolais'))) // TRIGGER IF old bull name in events
         );
-        const isFreshImport = animals.length > 0 && events.length === 0; // Loose check for events
+        const _isFreshImport = animals.length > 0 && events.length === 0; // Loose check for events
 
         const isSeededStorage = read<string>('isSeeded_V10', 'false') === 'true'; // Forced V10 for cleanup
 
@@ -112,7 +116,7 @@ export function DataSeeder() {
                 console.log("Bad data detected - Wiping events for fresh regeneration.");
                 events = [];
             }
-            let historyEvents: any[] = [...events];
+            const historyEvents: any[] = [...events];
 
             // 0. EMERGENCY PURGE (Before any processing to prevent crash)
             if (isDuplicatesDetected) {
@@ -223,8 +227,10 @@ export function DataSeeder() {
                 return 1.0; // Standard Pasture
             };
 
-            // 3. CORE: Biomimetic History Generator (Forward Simulation with Asymptotic Limit)
-            const generateBiomimeticHistory = (animal: any) => {
+            // 3. CORE: Biomimetic History Generator (Forward Simulation with Asymptotic Limit).
+            // Currently disabled by user request — kept here as `_generateBiomimeticHistory` so
+            // re-enabling is a single rename. The disabled call site is in the commented loop below.
+            const _generateBiomimeticHistory = (animal: any) => {
                 // SAFETY CHECK: If animal already has valid history and realistic weight, DO NOT OVERWRITE.
                 // This prevents "magic changes" without user request.
                 if (animal.monthlyRecords && animal.monthlyRecords.length > 0 && animal.currentWeight > 80 && animal.currentWeight < 1600) {
@@ -248,13 +254,12 @@ export function DataSeeder() {
 
                 const birthWeight = 40;
                 let simWeight = birthWeight;
-                let currentDate = new Date(birthDate);
+                const currentDate = new Date(birthDate);
 
                 // Initialize records
                 if (!animal.monthlyRecords) animal.monthlyRecords = [];
                 const newRecords: any[] = [];
 
-                // Start simulation from birth
                 const months: any[] = [];
 
                 // Growth Rate (k)
@@ -354,7 +359,7 @@ export function DataSeeder() {
                 animal.monthlyRecords = newRecords;
 
                 // B. Generate Events from Timeline
-                months.forEach((step, idx) => {
+                months.forEach((step) => {
                     const isMontaneraStart = step.m === 9 && step.diet === 1.5;
                     const isMontaneraEnd = step.m === 1 && step.diet === 1.5;
                     const isYearlyCheck = step.date.getMonth() === 5;
@@ -427,7 +432,7 @@ export function DataSeeder() {
 
             cows.forEach(cow => {
                 const cowBirth = new Date(cow.birthDate || cow.birth);
-                let cycleDate = new Date(cowBirth);
+                const cycleDate = new Date(cowBirth);
                 cycleDate.setMonth(cycleDate.getMonth() + 24); // First mating at 24m
 
                 const now = new Date();
@@ -677,10 +682,8 @@ export function DataSeeder() {
                 if (hasValidId) {
                     a.crotal = a.id;
                 } else if (!a.crotal) {
-                    // 2. Generate deterministic fake crotal based on ID hash or random
-                    const numericHash = a.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
-                    const suffix = (numericHash % 10000).toString().padStart(4, '0');
-                    // Use a clearly "Mock" range if we must
+                    // Fallback: random mock crotal (a deterministic ID-hash variant
+                    // was prototyped but unused — see git history if you need it).
                     const rand = Math.floor(Math.random() * 9000) + 1000;
                     a.crotal = `ES099000${rand}`;
                 }

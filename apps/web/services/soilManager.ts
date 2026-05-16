@@ -38,8 +38,10 @@ export interface SoilIndices {
     aptitud_pastoreo_extensivo: number;
     aptitud_pastoreo_intensivo: number;
     aptitud_cultivos_forrajeros: number;
-    [key: string]: any;
+    [key: string]: string | number;
 }
+
+type CsvRow = Record<string, string>;
 
 export const SoilManager = {
     soilCharacteristicsCSV: `id_suelo,nombre,textura,pH_típico,retención_hídrica,drenaje,riesgos,usos_recomendados,objetivos_productivos
@@ -109,22 +111,23 @@ export const SoilManager = {
 
     parseAllData() {
         const charRows = this.parseCSV(this.soilCharacteristicsCSV);
-        charRows.forEach((row: any) => {
-            if (row.id_suelo) this._data.characteristics[row.id_suelo] = row;
+        charRows.forEach((row) => {
+            if (row.id_suelo) this._data.characteristics[row.id_suelo] = row as unknown as SoilCharacteristics;
         });
 
-        this._data.feedRelations = this.parseCSV(this.soilFeedRelationsCSV) as any[];
-        this._data.logic = this.parseCSV(this.recommendationLogicCSV) as any[];
+        this._data.feedRelations = this.parseCSV(this.soilFeedRelationsCSV) as unknown as SoilFeedRelation[];
+        this._data.logic = this.parseCSV(this.recommendationLogicCSV) as unknown as SoilLogicRule[];
 
         const indexRows = this.parseCSV(this.quantitativeIndexCSV);
-        indexRows.forEach((row: any) => {
+        indexRows.forEach((row) => {
             if (row.id_suelo) {
+                const parsed: Record<string, string | number> = { ...row };
                 Object.keys(row).forEach(key => {
                     if (key.startsWith('indice_') || key.startsWith('aptitud_')) {
-                        row[key] = parseFloat(row[key]);
+                        parsed[key] = parseFloat(row[key]);
                     }
                 });
-                this._data.indices[row.id_suelo] = row;
+                this._data.indices[row.id_suelo] = parsed as unknown as SoilIndices;
             }
         });
     },
@@ -146,7 +149,7 @@ export const SoilManager = {
         return rule || null;
     },
 
-    filterCropsForSoil(criteria: any) {
+    filterCropsForSoil(criteria: { textura_ideal?: string; nombre?: string }) {
         const name = (criteria.textura_ideal || criteria.nombre || '').toLowerCase();
         if (!name) return [];
 
@@ -159,7 +162,7 @@ export const SoilManager = {
     },
 
     calculateMixture(composition: Record<string, number>) {
-        const resultIndices: any = {
+        const resultIndices: Record<string, number> = {
             indice_retencion_hidrica: 0,
             indice_drenaje: 0,
             indice_fertilidad: 0,
@@ -177,7 +180,9 @@ export const SoilManager = {
 
             const weight = pct / 100;
             Object.keys(resultIndices).forEach(key => {
-                resultIndices[key] += (soilIndices[key] || 0) * weight;
+                const val = soilIndices[key];
+                const num = typeof val === 'number' ? val : 0;
+                resultIndices[key] += num * weight;
             });
         });
 
@@ -188,9 +193,9 @@ export const SoilManager = {
         return resultIndices;
     },
 
-    parseCSV(text: string) {
+    parseCSV(text: string): CsvRow[] {
         const lines = text.trim().split('\n');
-        const data: any[] = [];
+        const data: CsvRow[] = [];
         if (lines.length < 2) return data;
 
         const firstLine = lines[0];
@@ -201,7 +206,7 @@ export const SoilManager = {
             const values = this.parseCSVLine(lines[i], delimiter);
             if (values.length < headers.length) continue;
 
-            const row: any = {};
+            const row: CsvRow = {};
             headers.forEach((h, index) => {
                 row[h] = values[index];
             });
@@ -210,11 +215,11 @@ export const SoilManager = {
         return data;
     },
 
-    parseCSVLine(line: string, delimiter: string) {
+    parseCSVLine(line: string, delimiter: string): string[] {
         const regex = new RegExp(`(?:^|${delimiter})("(?:[^"]|"")*"|[^${delimiter}]*)`, 'g');
-        let matches = [];
-        let match;
-        while (match = regex.exec(line)) {
+        const matches: string[] = [];
+        let match: RegExpExecArray | null;
+        while ((match = regex.exec(line)) !== null) {
             let val = match[1];
             if (val) {
                 if (val.startsWith('"') && val.endsWith('"')) {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useSyncExternalStore } from 'react';
 
 interface StorageContextType {
   read: <T>(key: string, fallback: T) => T;
@@ -10,13 +10,15 @@ interface StorageContextType {
 
 const StorageContext = createContext<StorageContextType | undefined>(undefined);
 
-export function StorageProvider({ children }: { children: React.ReactNode }) {
-  const [isLoaded, setIsLoaded] = useState(false);
+// useSyncExternalStore returns false on the server and true once hydrated on the
+// client. This replaces the classic useState(false) + useEffect(setTrue, [])
+// pattern, which the React Compiler flags as "set state in effect".
+const noop = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
 
-  // We need to wait for client-side hydration to access localStorage
-  useEffect(() => {
-    setIsLoaded(true);
-  }, []);
+export function StorageProvider({ children }: { children: React.ReactNode }) {
+  const isLoaded = useSyncExternalStore(noop, getClientSnapshot, getServerSnapshot);
 
   const read = <T,>(key: string, fallback: T): T => {
     if (typeof window === 'undefined') return fallback;
@@ -26,15 +28,15 @@ export function StorageProvider({ children }: { children: React.ReactNode }) {
       try {
         const parsed = JSON.parse(raw);
         return parsed as T;
-      } catch (parseErr) {
-        // Safety: If fallback is an array but we got a string, return the fallback to avoid .map/.find crashes
+      } catch {
+        // Safety: if fallback is an array but we got a non-JSON string, return the
+        // fallback to avoid .map/.find crashes downstream.
         if (Array.isArray(fallback) && typeof raw === 'string') {
           return fallback;
         }
-
         return raw as unknown as T;
       }
-    } catch (err) {
+    } catch {
       return fallback;
     }
   };
@@ -43,8 +45,9 @@ export function StorageProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined') return;
     try {
       localStorage.setItem(key, JSON.stringify(value));
-    } catch (err: any) {
-      if (err.name === 'QuotaExceededError' || err.code === 22 || err.code === 1014) {
+    } catch (err: unknown) {
+      const e = err as { name?: string; code?: number };
+      if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
         console.warn(`Storage Quota Exceeded while writing "${key}". Trying emergency cleanup...`);
         // Emergency: Clear unrelated heavy keys?
         try {
