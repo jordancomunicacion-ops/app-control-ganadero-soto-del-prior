@@ -128,6 +128,10 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
         });
     };
 
+    // Initial dashboard fetch on mount / userId change. setState inside an effect
+    // is the standard React pattern for data-fetching when not using a
+    // framework-specific hook like SWR or TanStack Query.
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         let cancelled = false;
         const sessionUser = read('appSession', '');
@@ -172,6 +176,7 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
 
         return () => { cancelled = true; };
     }, [read, selectedTabIndex, userId]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     return (
         <div className="space-y-6">

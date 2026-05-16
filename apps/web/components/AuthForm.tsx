@@ -23,6 +23,11 @@ export function AuthForm({ onLogin }: AuthFormProps) {
     const [regEmail, setRegEmail] = useState('');
     const [regPass, setRegPass] = useState('');
 
+    // We intentionally hydrate the "remember me" credentials from localStorage in
+    // an effect to avoid SSR hydration mismatches — the server cannot read
+    // localStorage so it must render empty fields, and only the client fills them
+    // in after mount.
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         type RememberedCreds = { user: string; pass: string };
         const remembered = read<RememberedCreds | null>('rememberedCreds', null);
@@ -32,6 +37,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
             setRemember(true);
         }
     }, [read]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     type LocalUser = {
         name: string;

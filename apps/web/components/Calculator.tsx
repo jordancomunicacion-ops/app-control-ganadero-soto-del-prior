@@ -87,6 +87,10 @@ export function Calculator({ userId }: { userId?: string }) {
     const [diet, setDiet] = useState<{ item: FeedItem; amount: number }[]>([]);
     const [availableFeeds] = useState(FEED_DATABASE);
 
+    // Initial data fetch on mount / userId change. setState inside an effect is
+    // the standard React pattern for data-fetching when not using a
+    // framework-specific hook like SWR or TanStack Query.
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         let cancelled = false;
         const sessionUser = read<string>('sessionUser', '');
@@ -113,6 +117,7 @@ export function Calculator({ userId }: { userId?: string }) {
 
         return () => { cancelled = true; };
     }, [read, userId]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     // Diet Handlers
     const addToDiet = (feedId: string) => {
@@ -156,11 +161,15 @@ export function Calculator({ userId }: { userId?: string }) {
 
     const [hasCalculated, setHasCalculated] = useState(false);
 
-    // Sync state reset on animal change
-    useEffect(() => {
+    // Reset hasCalculated/diet when selectedAnimal changes — the canonical React 19
+    // pattern of comparing against a previous value during render, avoiding the
+    // "setState in effect" anti-pattern.
+    const [prevSelectedAnimal, setPrevSelectedAnimal] = useState(selectedAnimal);
+    if (prevSelectedAnimal !== selectedAnimal) {
+        setPrevSelectedAnimal(selectedAnimal);
         setHasCalculated(false);
-        setDiet([]); // Optional: Reset diet on new animal?
-    }, [selectedAnimal]);
+        setDiet([]);
+    }
 
     // Manual Calculation Handler
     const handleSimulate = () => {
@@ -187,30 +196,26 @@ export function Calculator({ userId }: { userId?: string }) {
         return (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
     };
 
-    const [targets, setTargets] = useState<ReturnType<typeof NutritionEngine.calculateKPITargets> | null>(null);
-
-    // Update Targets when parameters change
-    useEffect(() => {
-        if (selectedAnimal) {
-            const effectiveBreed = getEffectiveBreed(selectedAnimal);
-
-            const birthStr = typeof selectedAnimal.birthDate === 'string'
-                ? selectedAnimal.birthDate
-                : selectedAnimal.birthDate?.toISOString();
-            const t = NutritionEngine.calculateKPITargets(
-                {
-                    breed: selectedAnimal.breed || 'Unknown',
-                    sex: selectedAnimal.sex || 'Macho',
-                    weight: parseFloat(String(selectedAnimal.currentWeight ?? selectedAnimal.weight ?? 400)),
-                    ageMonths: calculateAgeInMonths(selectedAnimal.birth ?? birthStr ?? ''),
-                    biological_type: effectiveBreed?.biological_type
-                },
-                objective,
-                effectiveSystem
-            );
-            setTargets(t);
-        }
-    }, [selectedAnimal, objective, effectiveSystem]);
+    // Derived from props/state — no side effects, no useEffect/useState. The React
+    // Compiler handles memoization automatically.
+    const targets = (() => {
+        if (!selectedAnimal) return null;
+        const effectiveBreed = getEffectiveBreed(selectedAnimal);
+        const birthStr = typeof selectedAnimal.birthDate === 'string'
+            ? selectedAnimal.birthDate
+            : selectedAnimal.birthDate?.toISOString();
+        return NutritionEngine.calculateKPITargets(
+            {
+                breed: selectedAnimal.breed || 'Unknown',
+                sex: selectedAnimal.sex || 'Macho',
+                weight: parseFloat(String(selectedAnimal.currentWeight ?? selectedAnimal.weight ?? 400)),
+                ageMonths: calculateAgeInMonths(selectedAnimal.birth ?? birthStr ?? ''),
+                biological_type: effectiveBreed?.biological_type
+            },
+            objective,
+            effectiveSystem
+        );
+    })();
 
     // Dynamic Conformation Helper
     const getDynamicConformation = () => {

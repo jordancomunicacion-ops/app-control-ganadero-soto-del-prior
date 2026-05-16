@@ -55,6 +55,9 @@ export function EventsList({ userId }: { userId?: string }) {
 
     const [alerts, setAlerts] = useState<LifecycleAlert[]>([]);
 
+    // Initial fetch on mount / page change. setState inside an effect is the
+    // standard React pattern for data-fetching when not using SWR / TanStack Query.
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         let cancelled = false;
         const user = read<string>('sessionUser', '');
@@ -95,6 +98,7 @@ export function EventsList({ userId }: { userId?: string }) {
 
         return () => { cancelled = true; };
     }, [read, userId, page]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     const handleCreateEvent = async () => {
         if (!newEvent.notes && !newEvent.type) {

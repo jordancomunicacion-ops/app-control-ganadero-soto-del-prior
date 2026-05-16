@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useSyncExternalStore } from 'react';
 
 interface StorageContextType {
   read: <T>(key: string, fallback: T) => T;
@@ -10,13 +10,15 @@ interface StorageContextType {
 
 const StorageContext = createContext<StorageContextType | undefined>(undefined);
 
-export function StorageProvider({ children }: { children: React.ReactNode }) {
-  const [isLoaded, setIsLoaded] = useState(false);
+// useSyncExternalStore returns false on the server and true once hydrated on the
+// client. This replaces the classic useState(false) + useEffect(setTrue, [])
+// pattern, which the React Compiler flags as "set state in effect".
+const noop = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
 
-  // We need to wait for client-side hydration to access localStorage
-  useEffect(() => {
-    setIsLoaded(true);
-  }, []);
+export function StorageProvider({ children }: { children: React.ReactNode }) {
+  const isLoaded = useSyncExternalStore(noop, getClientSnapshot, getServerSnapshot);
 
   const read = <T,>(key: string, fallback: T): T => {
     if (typeof window === 'undefined') return fallback;
