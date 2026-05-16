@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 import { registerUser } from '@/app/lib/actions';
 import Link from 'next/link';
-import { Tractor } from 'lucide-react';
+import Image from 'next/image';
 
 export default function Page() {
     const [state, formAction, isPending] = useActionState(registerUser, undefined);
@@ -12,7 +12,7 @@ export default function Page() {
         <div className="flex h-screen items-center justify-center bg-gray-50">
             <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-md">
                 <div className="flex justify-center mb-6">
-                    <img src="/logo-icon.png" alt="SOTO DEL PRIOR" className="h-24" />
+                    <Image src="/logo-icon.png" alt="SOTO DEL PRIOR" width={96} height={96} priority className="h-24 w-auto" />
                 </div>
                 <h1 className="mb-6 text-center text-2xl font-bold text-gray-900">
                     Crear Cuenta - App Ganadera

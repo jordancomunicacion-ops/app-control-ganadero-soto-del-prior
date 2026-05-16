@@ -1,4 +1,6 @@
 'use client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// User profile screen — reads heterogeneous user/breed shapes from localStorage.
 
 import React from 'react';
 import { useStorage } from '@/context/StorageContext';
@@ -35,13 +37,14 @@ export function UserProfile() {
     const isGerenciaName = currentUser?.name?.toLowerCase().includes('gerencia') || currentUser?.email === 'gerencia@sotodelprior.com';
     const displayRole = isAdmin ? 'admin' : (currentUser?.role || (isGerenciaName ? 'admin' : 'worker'));
 
-    // Team Management State
+    // Team Management State — the in-place form is currently hidden in the UI;
+    // these hooks are kept for the upcoming re-enablement of inline team creation.
     const [newUserUser, setNewUserUser] = React.useState('');
     const [newUserPass, setNewUserPass] = React.useState('');
-    const [newUserRole, setNewUserRole] = React.useState('worker');
-    const [showTeamForm, setShowTeamForm] = React.useState(false);
+    const [newUserRole, _setNewUserRole] = React.useState('worker');
+    const [_showTeamForm, setShowTeamForm] = React.useState(false);
 
-    const handleCreateUser = () => {
+    const _handleCreateUser = () => {
         if (!newUserUser || !newUserPass) return alert("Completa usuario y contraseña");
         if (users.find(u => u.name === newUserUser)) return alert("El usuario ya existe");
 
@@ -76,6 +79,8 @@ export function UserProfile() {
                         />
                         <label htmlFor="avatar-upload" className="cursor-pointer block">
                             {avatar ? (
+                                // User-uploaded avatar stored as a data URL in localStorage
+                                // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                     src={avatar}
                                     alt="Profile"

@@ -9,7 +9,7 @@ async function getUser(email: string) {
     const cleanEmail = email.trim().toLowerCase();
     try {
         return await prisma.user.findUnique({ where: { email: cleanEmail } });
-    } catch (error) {
+    } catch {
         throw new Error('Failed to fetch user.');
     }
 }
@@ -30,7 +30,8 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
                 const user = await getUser(email);
                 if (!user) return null;
 
-                const isMasterAdmin = user.email === 'gerencia@sotodelprior.com';
+                const masterAdminEmail = process.env.MASTER_ADMIN_EMAIL?.toLowerCase();
+                const isMasterAdmin = !!masterAdminEmail && user.email.toLowerCase() === masterAdminEmail;
                 if (!user.approved && !isMasterAdmin) {
                     throw new Error('AccessDenied');
                 }

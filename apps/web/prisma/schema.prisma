@@ -36,6 +36,9 @@ model User {
   managedById      String?
   managedBy        User?     @relation("Management", fields: [managedById], references: [id])
   managedUsers     User[]    @relation("Management")
+
+  @@index([managedById])
+  @@index([role])
 }
 
 // 1. Entidades Principales (Referenciales y Estructurales)
@@ -73,16 +76,19 @@ model Farm {
   f1Recommendation      String?   // JSON
 
   createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt @default(now())
+  updatedAt             DateTime  @updatedAt
 
   // User Relation
   userId                String?   // Optional for now to avoid breaking existing data, but should be required in strict mode
   user                  User?     @relation(fields: [userId], references: [id])
-  
+
   // Relaciones
   animals               Animal[]
   dailyLogs             FarmDaily[]
   managementEvents      ManagementEvent[]
+
+  @@index([userId])
+  @@index([userId, createdAt])
 }
 
 model Breed {
@@ -159,12 +165,12 @@ model Animal {
   currentWeight         Float?
 
   createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt @default(now())
+  updatedAt             DateTime  @updatedAt
 
   // Relaciones Inversas
   childrenAsMother      Animal[]  @relation("Mother")
   childrenAsFather      Animal[]  @relation("Father")
-  
+
   weights               Weight[]
   rations               Ration[]
   events                ManagementEvent[]
@@ -172,6 +178,12 @@ model Animal {
   alerts                Alert[]
   qualityPredictions    QualityPrediction[]
   traceabilityReports   TraceabilityReport[]
+
+  @@index([farmId])
+  @@index([farmId, createdAt])
+  @@index([genotypeId])
+  @@index([motherId])
+  @@index([fatherId])
 }
 
 model Weight {
@@ -262,19 +274,22 @@ model ManagementEvent {
   id                    String    @id @default(cuid())
   farmId                String
   farm                  Farm      @relation(fields: [farmId], references: [id])
-  
+
   animalId              String?
   animal                Animal?   @relation(fields: [animalId], references: [id])
-  
+
   date                  DateTime
   type                  String    // destete, cambio_lote, tratamiento, cambio_dieta, cubricion, parto, entrada_cebo, salida_cebo
-  
+
   details               String?   // New: Description/Notes
   cost                  Float     @default(0)
   status                String    @default("completed") // scheduled, pending, completed
   eventData             String?   // JSON for extra data
-  
+
   notes                 String?
+
+  @@index([farmId, date])
+  @@index([animalId])
 }
 
 // 4. Motor: Objetivos, Métricas, Alertas y Predicciones

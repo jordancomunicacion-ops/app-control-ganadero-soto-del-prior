@@ -1,5 +1,4 @@
 import { AppConfig } from './appConfig';
-import { Breed } from './breedManager';
 
 interface AnimalInput {
     ageMonths?: number;
@@ -43,7 +42,8 @@ export const CarcassQualityEngine = {
         return thi;
     },
 
-    estimateCarcassResult(animal: AnimalInput, currentWeight: number, adgObs: number, dietEnergy: number, thi: number, breedData: any): CarcassEstResult {
+    estimateCarcassResult(animal: AnimalInput, currentWeight: number, adgObs: number, dietEnergy: number, thi: number, // eslint-disable-next-line @typescript-eslint/no-explicit-any
+breedData: any): CarcassEstResult {
         const C = AppConfig.carcass.rc_adjust;
 
         // Base RC
@@ -89,7 +89,8 @@ export const CarcassQualityEngine = {
         };
     },
 
-    calculateQualityIndex(animal: AnimalInput, breedData: any, dietEnergy: number, adgObs: number, thi: number, daysOnFinishing: number, dietStability: number, healthStatus: number, options: QualityOptions = {}) {
+    calculateQualityIndex(animal: AnimalInput, // eslint-disable-next-line @typescript-eslint/no-explicit-any
+breedData: any, dietEnergy: number, adgObs: number, thi: number, daysOnFinishing: number, dietStability: number, healthStatus: number, options: QualityOptions = {}) {
         const params = {
             nei_min: breedData.nei_min || 12,
             nei_max: breedData.nei_max || 18,

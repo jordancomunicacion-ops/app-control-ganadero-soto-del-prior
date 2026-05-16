@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { sendPasswordResetEmail } from '@/app/lib/auth-actions';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function ForgotPasswordPage() {
     const [state, formAction, isPending] = useActionState(sendPasswordResetEmail, undefined);
@@ -11,7 +12,7 @@ export default function ForgotPasswordPage() {
         <div className="flex h-screen items-center justify-center bg-gray-50">
             <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-md">
                 <div className="flex justify-center mb-6">
-                    <img src="/logo-icon.png" alt="SOTO DEL PRIOR" className="h-24" />
+                    <Image src="/logo-icon.png" alt="SOTO DEL PRIOR" width={96} height={96} priority className="h-24 w-auto" />
                 </div>
 
                 <h2 className="mb-6 text-2xl font-bold text-gray-900 text-center">Recuperar contraseña</h2>

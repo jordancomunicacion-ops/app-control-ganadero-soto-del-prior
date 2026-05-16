@@ -16,9 +16,8 @@ function utmToLatLon(x: number, y: number, zone: number = 30): { lat: number, lo
     const _E5 = Math.pow(_E, 5);
 
     const M1 = 1 - E / 4 - 3 * E2 / 64 - 5 * E3 / 256;
-    const M2 = 3 * E / 8 + 3 * E2 / 32 + 45 * E3 / 1024;
-    const M3 = 15 * E2 / 256 + 45 * E3 / 1024;
-    const M4 = 35 * E3 / 3072;
+    // M2, M3, M4 are part of the inverse Mercator series expansion but only M1
+    // is needed for the simplified approximation we use here.
 
     const P = x - 500000;
     const M = y / K0;
@@ -75,7 +74,7 @@ export const SigpacService = {
             // First attempt: Strict query (common defaults)
             let where = `PROVINCIA=${prov} AND MUNICIPIO=${muni} AND AGREGADO=0 AND ZONA=0 AND POLIGONO=${pol} AND PARCELA=${parc}`;
 
-            let params = new URLSearchParams({
+            const params = new URLSearchParams({
                 where: where,
                 outFields: '*',
                 returnGeometry: 'true',
@@ -182,7 +181,7 @@ export const SigpacService = {
                             // Centroid estimation: average points
                             let sumX = 0, sumY = 0;
                             const points = coords.slice(0, Math.min(coords.length, 50));
-                            points.forEach((p: any) => { sumX += p[0]; sumY += p[1]; });
+                            points.forEach((p: number[]) => { sumX += p[0]; sumY += p[1]; });
                             const utm = utmToLatLon(sumX / points.length, sumY / points.length, 30);
                             lat = utm.lat;
                             lon = utm.lon;

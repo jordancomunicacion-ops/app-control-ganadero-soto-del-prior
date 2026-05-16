@@ -1,6 +1,4 @@
 
-import { Breed } from './breedManager';
-
 /**
  * PriceEngine handles SEUROP carcass classification and pricing logic.
  * Default prices are in Euro/100kg Canal.
@@ -76,7 +74,7 @@ export const PriceEngine = {
         const exactCode = `${letter}${conf}${ft}`;
         const classCode = `${letter}${conf}`;
 
-        let pricePer100Kg = this.defaultPrices[exactCode] ||
+        const pricePer100Kg = this.defaultPrices[exactCode] ||
             this.defaultPrices[classCode] ||
             this.defaultPrices[letter] ||
             500; // Final fallback

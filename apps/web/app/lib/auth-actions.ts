@@ -20,7 +20,13 @@ const ResetPasswordSchema = z.object({
     path: ['confirmPassword'],
 });
 
-export async function sendPasswordResetEmail(prevState: any, formData: FormData) {
+export type PasswordResetState = {
+    errors?: { email?: string[]; token?: string[]; password?: string[]; confirmPassword?: string[] };
+    message?: string;
+    success?: boolean;
+};
+
+export async function sendPasswordResetEmail(_prevState: PasswordResetState | null | undefined, formData: FormData): Promise<PasswordResetState> {
     const validatedFields = ForgotPasswordSchema.safeParse({
         email: formData.get('email'),
     });
@@ -68,7 +74,7 @@ export async function sendPasswordResetEmail(prevState: any, formData: FormData)
     }
 }
 
-export async function resetPassword(prevState: any, formData: FormData) {
+export async function resetPassword(_prevState: PasswordResetState | null | undefined, formData: FormData): Promise<PasswordResetState> {
     const validatedFields = ResetPasswordSchema.safeParse({
         token: formData.get('token'),
         password: formData.get('password'),

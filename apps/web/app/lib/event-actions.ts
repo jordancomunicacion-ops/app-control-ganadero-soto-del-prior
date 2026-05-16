@@ -70,8 +70,8 @@ export async function createEvent(data: unknown) {
                 status: status || 'completed',
                 eventData: JSON.stringify(typeData || {}),
                 farm: { connect: { id: farmId } },
-                ...(valAnimalId ? { animal: { connect: { id: valAnimalId } } } : {})
-            } as any
+                ...(valAnimalId ? { animal: { connect: { id: valAnimalId } } } : {}),
+            },
         });
         revalidatePath('/dashboard');
         return event;

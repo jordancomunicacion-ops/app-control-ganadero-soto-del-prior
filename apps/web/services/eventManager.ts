@@ -2,45 +2,46 @@ import { CarcassQualityEngine } from './carcassQualityEngine';
 import { BreedManager } from './breedManager';
 import { WeightEngine } from './weightEngine';
 import { NutritionEngine } from './nutritionEngine';
+import type { AnimalLike, FarmLike, LivestockEvent } from '@/types/livestock';
 
 export interface EventData {
     type: string;
     date: string;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export interface EventContext {
-    animals: any[];
-    events: any[];
+    animals: AnimalLike[];
+    events: LivestockEvent[];
     currentUser: string;
     storage: {
         read: <T>(key: string, fallback: T) => T;
         write: <T>(key: string, value: T) => void;
     };
-    getFincas?: () => any[];
+    getFincas?: () => FarmLike[];
 }
 
 export const EventManager = {
     generateUUID() {
         if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-            try { return crypto.randomUUID(); } catch (e) { }
+            try { return crypto.randomUUID(); } catch { /* fall through to manual UUID */ }
         }
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16);
         });
     },
 
-    async handleSaneamiento(data: any, context: EventContext) {
+    async handleSaneamiento(data: { result: string; infectedCrotalsText?: string; date: string; farmId: string }, context: EventContext) {
         const { result, infectedCrotalsText, date, farmId } = data;
         const { animals, events, currentUser, storage, getFincas } = context;
 
         const fincas = getFincas ? getFincas() : [];
-        const farm = fincas.find((f: any) => f.id === farmId);
+        const farm = fincas.find((f) => f.id === farmId);
         const farmName = farm ? farm.name : 'Finca Desconocida';
 
-        // Filter herd
-        const herdAnimals = animals.filter((a: any) =>
+        const herdAnimals = animals.filter((a) =>
             (a.farmId === farmId || a.farm === farmName) &&
             a.status !== 'Muerto' && a.status !== 'Vendido' && a.status !== 'Sacrificado'
         );
@@ -51,7 +52,7 @@ export const EventManager = {
         let infectedCount = 0;
 
         if (result === 'Negativo') {
-            herdAnimals.forEach((a: any) => {
+            herdAnimals.forEach((a) => {
                 a.healthStatus = 'Sano';
                 if (!a.status) a.status = 'Activo';
             });
@@ -60,7 +61,7 @@ export const EventManager = {
             const infectedCrotals = (infectedCrotalsText || '').split(',').map((s: string) => s.trim().toUpperCase()).filter((s: string) => s);
             if (infectedCrotals.length === 0) throw new Error('Has indicado POSITIVO. Introduce los crotales infectados.');
 
-            herdAnimals.forEach((a: any) => {
+            herdAnimals.forEach((a) => {
                 const isPositive = infectedCrotals.some((ic: string) => (a.crotal || '').toUpperCase().endsWith(ic));
 
                 if (isPositive) {
@@ -123,11 +124,11 @@ export const EventManager = {
         return { message: 'Saneamiento procesado correctamente.', events, animals };
     },
 
-    async handleInsemination(data: any, context: EventContext) {
+    async handleInsemination(data: { animal: AnimalLike; date: string; bullBreed?: string; desc?: string }, context: EventContext) {
         const { animal, date, bullBreed, desc } = data;
         const { events, storage } = context;
 
-        let breedInfo = bullBreed ? ` Toro: ${bullBreed}.` : '';
+        const breedInfo = bullBreed ? ` Toro: ${bullBreed}.` : '';
 
         const mainId = this.generateUUID();
         const mainEvent = {
@@ -172,7 +173,7 @@ export const EventManager = {
         return { message: 'Protocolo de Inseminación iniciado (5 eventos programados).', events };
     },
 
-    async handleWeighing(data: any, context: EventContext) {
+    async handleWeighing(data: { animal: AnimalLike; weight: number; date: string; notes?: string }, context: EventContext) {
         const { animal, weight, date, notes } = data;
         const { events, animals, currentUser, storage } = context;
 
@@ -180,11 +181,11 @@ export const EventManager = {
         animal.currentWeight = weight;
 
         // Calculate Estimates
-        const animalEvents = events.filter((e: any) => e.animalId === animal.id && e.type === 'Pesaje');
-        animalEvents.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const animalEvents = events.filter((e) => e.animalId === animal.id && e.type === 'Pesaje');
+        animalEvents.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         const lastEvent = animalEvents[0];
 
-        let lastDate = lastEvent ? new Date(lastEvent.date) : new Date(animal.birthDate);
+        const lastDate = lastEvent ? new Date(lastEvent.date) : new Date(animal.birthDate ?? Date.now());
         let lastW = lastEvent ? (lastEvent.weight || prevWeight) : (animal.birthWeight || 0);
 
         if (!lastEvent && prevWeight > 0) lastW = prevWeight;
@@ -200,11 +201,11 @@ export const EventManager = {
         // Recuperar Raza y Sistema Real
         const weatherTemp = 20;
         const thi = CarcassQualityEngine.calculateTHI(weatherTemp, 50);
-        const breed = BreedManager.getBreedByName(animal.breed);
+        const breed = BreedManager.getBreedByName(animal.breed ?? '');
         const system = WeightEngine.inferSystem(animal);
 
         // Calcular parámetros nutricionales reales (Targets)
-        const ageInMonthsForTargets = (curDate.getTime() - new Date(animal.birthDate).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+        const ageInMonthsForTargets = (curDate.getTime() - new Date(animal.birthDate ?? Date.now()).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
 
         const bioTypeMap: Record<string, string> = {
             'British': 'infiltracion',
@@ -217,8 +218,8 @@ export const EventManager = {
         const fType = (breed && bioTypeMap[breed.biological_type]) || 'rustica_adaptada';
 
         const kpiTargets = NutritionEngine.calculateKPITargets({
-            breed: animal.breed,
-            sex: animal.sex,
+            breed: animal.breed ?? '',
+            sex: animal.sex ?? '',
             weight: weight,
             ageMonths: ageInMonthsForTargets,
             functionalType: fType
@@ -306,55 +307,49 @@ export const EventManager = {
         return { message: 'Pesaje registrado y próxima revisión programada.', events, animals };
     },
 
-    async handleStandardEvent(data: any, context: EventContext) {
+    async handleStandardEvent(data: { type: string; animal: AnimalLike; date: string; desc?: string; cost?: number; nextDate?: string; typeData?: Record<string, unknown> }, context: EventContext) {
         const { type, animal, date, desc, cost, nextDate, typeData } = data;
         const { events, animals, storage, currentUser } = context;
 
-        if (['Sacrificio', 'Venta', 'Muerte/Sacrificio', 'Salida'].includes(type) || type.startsWith('Sacrificio')) {
-            const {
-                category, carcassWeight, price, conf, fat,
-                pricePerKg, liveWeight, yield: yieldVal, seuropConf, fatCover
-            } = typeData || {};
+        const td = (typeData || {}) as Record<string, string | number | undefined>;
 
-            // Determine Status
+        if (['Sacrificio', 'Venta', 'Muerte/Sacrificio', 'Salida'].includes(type) || type.startsWith('Sacrificio')) {
+            const { category, carcassWeight, price, conf, fat, pricePerKg, liveWeight, seuropConf, fatCover } = td;
+            const yieldVal = td.yield;
+
             if (type.includes('Sacrificio')) animal.status = 'Sacrificado';
             else if (type === 'Venta') animal.status = 'Vendido';
             else if (type === 'Muerte') animal.status = 'Muerto';
-            else animal.status = 'Baja'; // Generic fallback
+            else animal.status = 'Baja';
 
             animal.exitDate = date;
 
-            // Map Commercial Data
-            if (category) animal.actualCategory = category;
+            if (category) animal.actualCategory = String(category);
 
-            // Weights & Yield
-            if (carcassWeight) animal.actualCarcassWeight = parseFloat(carcassWeight);
-            if (liveWeight) animal.actualLiveWeight = parseFloat(liveWeight);
-            if (yieldVal) animal.actualYield = parseFloat(yieldVal);
+            if (carcassWeight) animal.actualCarcassWeight = parseFloat(String(carcassWeight));
+            if (liveWeight) animal.actualLiveWeight = parseFloat(String(liveWeight));
+            if (yieldVal) animal.actualYield = parseFloat(String(yieldVal));
 
-            // Pricing
-            if (price) animal.actualPrice = parseFloat(price);
-            if (pricePerKg) animal.actualPricePerKg = parseFloat(pricePerKg);
-            else if (price && carcassWeight) animal.actualPricePerKg = parseFloat((parseFloat(price) / parseFloat(carcassWeight)).toFixed(2));
+            if (price) animal.actualPrice = parseFloat(String(price));
+            if (pricePerKg) animal.actualPricePerKg = parseFloat(String(pricePerKg));
+            else if (price && carcassWeight) animal.actualPricePerKg = parseFloat((parseFloat(String(price)) / parseFloat(String(carcassWeight))).toFixed(2));
 
-            // Quality
-            if (conf || seuropConf) animal.actualSeuropConf = conf || seuropConf;
-            if (fat || fatCover) animal.actualSeuropFat = fat || fatCover;
+            if (conf || seuropConf) animal.actualSeuropConf = String(conf || seuropConf);
+            if (fat || fatCover) animal.actualSeuropFat = String(fat || fatCover);
 
             storage.write(`animals_${currentUser}`, animals);
         }
         else if (type === 'Cambio de corral') {
-            const { newCorralId } = typeData || {};
-            animal.corral = parseInt(newCorralId);
+            const { newCorralId } = td;
+            animal.corral = parseInt(String(newCorralId));
             storage.write(`animals_${currentUser}`, animals);
         }
         else if (type === 'Decisión Macho') {
-            const { decision } = typeData || {};
+            const { decision } = td;
             if (decision === 'Castrado') {
                 animal.sex = 'Castrado';
 
-                // Logic: Castration must be between 6 and 9 months to be 'Buey'
-                const birth = new Date(animal.birth || animal.birthDate);
+                const birth = new Date(animal.birth || (animal.birthDate as string | Date) || Date.now());
                 const eventDate = new Date(date);
                 const ageMonths = (eventDate.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
 
@@ -377,19 +372,20 @@ export const EventManager = {
             storage.write(`animals_${currentUser}`, animals);
         }
         else if (type === 'Parto') {
-            const { calfCrotal, calfSex, fatherCrotal, birthWeight } = typeData || {};
-            const newCalf = {
+            const { calfCrotal, calfSex, fatherCrotal, birthWeight } = td;
+            const bw = birthWeight !== undefined ? Number(birthWeight) : undefined;
+            const newCalf: AnimalLike = {
                 id: this.generateUUID(),
-                crotal: calfCrotal,
+                crotal: calfCrotal ? String(calfCrotal) : undefined,
                 farmId: animal.farmId,
                 farm: animal.farm,
                 breed: animal.breed || 'Desconocida',
-                sex: calfSex,
-                father: fatherCrotal,
+                sex: calfSex ? String(calfSex) : undefined,
+                father: fatherCrotal ? String(fatherCrotal) : undefined,
                 mother: animal.crotal,
                 birthDate: date.split('T')[0],
-                birthWeight: birthWeight,
-                currentWeight: birthWeight,
+                birthWeight: bw,
+                currentWeight: bw,
                 notes: `Nacido de ${animal.crotal}`,
                 createdAt: new Date().toISOString()
             };
@@ -429,7 +425,7 @@ export const EventManager = {
         return { message: 'Evento registrado correctamente.', events, animals };
     },
 
-    getUpcomingEvents(events: any[], days: number = 30) {
+    getUpcomingEvents(events: LivestockEvent[], days: number = 30) {
         if (!events || !Array.isArray(events)) return [];
 
         const now = new Date();

@@ -1,33 +1,30 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect } from 'react';
 import { authenticate } from '@/app/lib/actions';
 import Link from 'next/link';
-import { Tractor } from 'lucide-react';
+import Image from 'next/image';
 
 export default function Page() {
-    // @ts-ignore
     const [state, formAction, isPending] = useActionState(
         authenticate,
         undefined,
     );
 
-    // Client-side redirect
-    // @ts-ignore
-    if (state && typeof state === 'object' && state.success) {
-        if (typeof window !== 'undefined') {
+    // Client-side redirect on success
+    useEffect(() => {
+        if (state && typeof state === 'object' && 'success' in state && state.success) {
             window.location.href = '/dashboard';
         }
-    }
+    }, [state]);
 
-    // @ts-ignore
-    const errorMessage = state && typeof state === 'string' ? state : (state && typeof state === 'object' && state.message && !state.success ? state.message : null);
+    const errorMessage = typeof state === 'string' ? state : null;
 
     return (
         <div className="flex h-screen items-center justify-center bg-gray-50">
             <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-md">
                 <div className="flex justify-center mb-6">
-                    <img src="/logo-icon.png" alt="SOTO DEL PRIOR" className="h-24" />
+                    <Image src="/logo-icon.png" alt="SOTO DEL PRIOR" width={96} height={96} priority className="h-24 w-auto" />
                 </div>
                 {/* Visual harmonization: No extra text here */}
 

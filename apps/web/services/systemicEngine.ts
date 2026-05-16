@@ -35,7 +35,7 @@ export const SystemicEngine = {
     checkAlerts(
         metrics: { fcrObserved: number, adgObserved?: number, dietFdn: number, dietEnergy: number },
         targets: { refFcr: number, refAdg: number },
-        system: string
+        _system: string
     ): DietAlert[] {
         const alerts: DietAlert[] = [];
 

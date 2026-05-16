@@ -15,7 +15,6 @@ export type User = {
 
 export async function getUsers() {
     const session = await auth();
-    // @ts-ignore
     if (session?.user?.role?.toUpperCase() !== 'ADMIN') {
         throw new Error('Unauthorized');
     }
@@ -41,7 +40,6 @@ export async function getUsers() {
 
 export async function toggleUserStatus(userId: string, approved: boolean) {
     const session = await auth();
-    // @ts-ignore
     if (session?.user?.role?.toUpperCase() !== 'ADMIN') {
         throw new Error('Unauthorized');
     }

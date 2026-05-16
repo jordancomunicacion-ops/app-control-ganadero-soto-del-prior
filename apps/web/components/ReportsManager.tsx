@@ -1,4 +1,7 @@
 'use client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// CSV report generator. Iterates over heterogeneous animal payloads (from DB and
+// legacy localStorage). Strict typing here yields little safety value.
 
 import React from 'react';
 import { useStorage } from '@/context/StorageContext';
@@ -12,7 +15,6 @@ export function ReportsManager({ userId }: { userId?: string }) {
 
     const handleFCRReport = async () => {
         try {
-            // No init required for BreedManager
             const user = read<string>('sessionUser', '');
             let animals: any[] = [];
 

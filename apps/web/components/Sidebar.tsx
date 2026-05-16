@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import Image from 'next/image';
 import { useStorage } from '@/context/StorageContext';
 import {
     Home,
@@ -22,51 +22,25 @@ interface SidebarProps {
     userRole?: string;
 }
 
+type StoredUser = {
+    name: string;
+    role?: string;
+    permissions?: string[];
+};
+
 export function Sidebar({ activeTab, onTabChange, onLogout, userRole }: SidebarProps) {
-    const { read, write } = useStorage();
+    const { read } = useStorage();
     const sessionUser = read('appSession', 'Usuario') as string;
     const userAvatar = read('userAvatar', null);
 
-    // Auto-promote Gerencia if stuck as worker
-    React.useEffect(() => {
-        const users = read<any[]>('users', []);
-        // Check for Gerencia account existence and permissions
-        const gerenciaUser = users.find((u: any) => u.name.toLowerCase().includes('gerencia') || u.email === 'gerencia@sotodelprior.com');
+    const users = read<StoredUser[]>('users', []);
+    const currentUser = users.find((u) => u.name === sessionUser);
 
-        if (!gerenciaUser) {
-            // Create Gerencia if missing
-            const newGerencia = {
-                name: 'Gerencia',
-                email: 'gerencia@sotodelprior.com',
-                pass: 'admin123',
-                role: 'admin',
-                joined: new Date().toISOString(),
-                jobTitle: 'Dirección General',
-                firstName: 'Gerencia',
-                lastName: 'Soto del Prior'
-            };
-            write('users', [...users, newGerencia]);
-            console.log('Auto-created Gerencia account');
-        } else if (gerenciaUser.role?.toUpperCase() !== 'ADMIN') {
-            // Promote to admin
-            const updatedUser = { ...gerenciaUser, role: 'ADMIN' };
-            const otherUsers = users.filter((u: any) => u.name !== gerenciaUser.name);
-            write('users', [...otherUsers, updatedUser]);
-            // REMOVED window.location.reload() to prevent infinite loop
-        }
-    }, [sessionUser, read, write]);
-
-    const users = read<any[]>('users', []);
-    const currentUser = users.find((u: any) => u.name === sessionUser);
-
-    // Better default role logic
-    const isGerenciaName = sessionUser?.toLowerCase().includes('gerencia') || sessionUser === 'gerencia@sotodelprior.com';
-    // Use prop if available, otherwise fallback to storage/defaults
+    // Heuristic fallback so the legacy "Gerencia" admin still gets full access
+    // even if the local user store has not been hydrated yet.
+    const isGerenciaName = sessionUser?.toLowerCase().includes('gerencia');
     const role = (userRole || currentUser?.role || (isGerenciaName ? 'ADMIN' : 'WORKER'))?.toUpperCase();
-
-    // Hard override for Gerencia to ensure access even if DB is out of sync
-    const isGerencia = sessionUser?.toLowerCase().includes('gerencia') || sessionUser === 'gerencia@sotodelprior.com';
-    const isAdmin = role === 'ADMIN' || isGerencia;
+    const isAdmin = role === 'ADMIN' || isGerenciaName;
 
     const navItems = [
         { id: 'home', label: 'Inicio', icon: Home },
@@ -105,10 +79,12 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole }: SidebarP
     return (
         <aside className="w-64 bg-white border-r border-gray-200 h-screen flex flex-col fixed left-0 top-0 z-30 shadow-sm">
             <div className="p-4 flex justify-center border-b border-gray-100">
-                <img src="/logo-text.png" alt="SOTO DEL PRIOR" className="h-12" />
+                <Image src="/logo-text.png" alt="SOTO DEL PRIOR" width={180} height={48} priority className="h-12 w-auto" />
             </div>
             <div className="p-6 border-b border-gray-100 flex items-center gap-3">
                 {userAvatar ? (
+                    // Avatar persisted in localStorage as a data URL, sized client-side
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                         src={userAvatar}
                         alt="Profile"

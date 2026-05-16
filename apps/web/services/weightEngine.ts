@@ -1,35 +1,29 @@
 
-import { BreedManager, Breed } from './breedManager';
+import { BreedManager, type Breed } from './breedManager';
+import type { AnimalLike, LivestockEvent } from '@/types/livestock';
 
-// --- CONSTANTS ---
-// Diet Quality Factors (0.0 to 2.0) - Multiplier for the "Potential Daily Gain"
+// Diet Quality Factors (0.0 to 2.0) — multiplier for the potential daily gain.
 const DIET_QUALITY_MILK = 1.2;
-const DIET_QUALITY_WEANING = 0.5; // Stress period
-const DIET_QUALITY_FEEDLOT = 1.3; // High energy
-const DIET_QUALITY_MONTANERA = 1.5; // Acorns (High Fat/Energy)
-const DIET_QUALITY_SPRING = 1.1; // Good pasture
-const DIET_QUALITY_SUMMER = 0.4; // Dry pasture
-const DIET_QUALITY_AUTUMN = 0.9; // Regrowth
-const DIET_QUALITY_WINTER = 0.6; // Cold/Scarcity
-
-// Maturation Rates (k) for Von Bertalanffy roughly adapted for daily/monthly steps
-// Higher = Faster maturity (Early breeds)
-const K_MATURITY_EARLY = 0.0025; // Daily rate approx
-const K_MATURITY_LATE = 0.0018;
+const DIET_QUALITY_WEANING = 0.5;
+const DIET_QUALITY_FEEDLOT = 1.3;
+const DIET_QUALITY_MONTANERA = 1.5;
+const DIET_QUALITY_SPRING = 1.1;
+const DIET_QUALITY_SUMMER = 0.4;
+const DIET_QUALITY_AUTUMN = 0.9;
+const DIET_QUALITY_WINTER = 0.6;
 
 export const WeightEngine = {
 
-    isBuey(animal: any, ageMonths: number): boolean {
+    isBuey(animal: AnimalLike, ageMonths: number): boolean {
         if (animal?.category === 'Buey') return true;
         if (animal?.sex === 'Castrado' && ageMonths > 12) return true;
         return false;
     },
 
     /**
-     * Preserved Logic: System Inference
      * Maps farm names or animal properties to the production system.
      */
-    inferSystem(animal: any): string {
+    inferSystem(animal: AnimalLike): string {
         const farm = (animal.farm || '').toLowerCase();
 
         // 1. Feedlot / Intensive
@@ -51,7 +45,7 @@ export const WeightEngine = {
      * Get Repro Adjustment (Fetus weight, etc.)
      * Returns absolute KG adjustment to add to base weight.
      */
-    getReproStatus(animal: any, events: any[], simulationDate: Date): number {
+    getReproStatus(animal: AnimalLike, events: LivestockEvent[], simulationDate: Date): number {
         if (animal.sex !== 'Hembra') return 0;
         if (!events || events.length === 0) return 0;
 
@@ -89,14 +83,13 @@ export const WeightEngine = {
      * MAIN SIMULATION LOGIC (Von Bertalanffy Model)
      * dW/dt = k * (W_inf - W_current)
      */
-    calculateRealisticWeight(animal: any, system: string, events: any[] = []): number {
+    calculateRealisticWeight(animal: AnimalLike, system: string, events: LivestockEvent[] = []): number {
         if (!animal.birth && !animal.birthDate) return 0;
-        const birthDate = new Date(animal.birth || animal.birthDate);
+        const birthDate = new Date((animal.birth ?? animal.birthDate) as string | Date);
         const now = new Date();
 
-        // 1. DETERMINE GENETIC POTENTIAL (Asymptote W_inf)
-        // 1. DETERMINE GENETIC POTENTIAL (Asymptote W_inf)
-        let breed = BreedManager.getBreedByName(animal.breed);
+        // 1. Determine genetic potential (Asymptote W_inf)
+        let breed = BreedManager.getBreedByName(animal.breed ?? '');
 
         // --- 1.1 ROBUST DETECTION (Copied from Inventory) ---
         // Normalize: "Betizú" -> "betizu"
@@ -109,63 +102,63 @@ export const WeightEngine = {
                     id: 'MANUAL_BETIZU', code: 'BET', name: 'Betizu',
                     biological_type: 'Rustic_European', weight_female_adult: 320, weight_male_adult: 450,
                     adg_feedlot: 0.6, slaughter_age_months: 36
-                } as any;
+                } as Breed;
             }
             else if (normalizedBreed.includes('limousin') || normalizedBreed.includes('limusin')) {
                 breed = {
                     id: 'MANUAL_LIM', code: 'LIM', name: 'Limousin',
                     biological_type: 'Continental', weight_female_adult: 700, weight_male_adult: 1100,
                     adg_feedlot: 1.4, slaughter_age_months: 18
-                } as any;
+                } as Breed;
             }
             else if (normalizedBreed.includes('charol')) {
                 breed = {
                     id: 'MANUAL_CHA', code: 'CHA', name: 'Charolais',
                     biological_type: 'Continental', weight_female_adult: 800, weight_male_adult: 1200,
                     adg_feedlot: 1.5, slaughter_age_months: 18
-                } as any;
+                } as Breed;
             }
             else if (normalizedBreed.includes('avile')) {
                 breed = {
                     id: 'MANUAL_AVI', code: 'AVI', name: 'Avileña',
                     biological_type: 'Rustic_European', weight_female_adult: 550, weight_male_adult: 900,
                     adg_feedlot: 1.1, slaughter_age_months: 24
-                } as any;
+                } as Breed;
             }
             else if (normalizedBreed.includes('retinta')) {
                 breed = {
                     id: 'MANUAL_RET', code: 'RET', name: 'Retinta',
                     biological_type: 'Rustic_European', weight_female_adult: 580, weight_male_adult: 950,
                     adg_feedlot: 1.1, slaughter_age_months: 24
-                } as any;
+                } as Breed;
             }
             else if (normalizedBreed.includes('morucha')) {
                 breed = {
                     id: 'MANUAL_MOR', code: 'MOR', name: 'Morucha',
                     biological_type: 'Rustic_European', weight_female_adult: 550, weight_male_adult: 900,
                     adg_feedlot: 1.1, slaughter_age_months: 24
-                } as any;
+                } as Breed;
             }
             else if (normalizedBreed.includes('frison')) {
                 breed = {
                     id: 'MANUAL_FRI', code: 'FRI', name: 'Frisona',
                     biological_type: 'Dairy', weight_female_adult: 650, weight_male_adult: 1000,
                     adg_feedlot: 1.2, slaughter_age_months: 22
-                } as any;
+                } as Breed;
             }
             else if (normalizedBreed.includes('wagyu')) {
                 breed = {
                     id: 'MANUAL_WAG', code: 'WAG', name: 'Wagyu',
                     biological_type: 'British', weight_female_adult: 550, weight_male_adult: 850,
                     adg_feedlot: 0.9, slaughter_age_months: 30
-                } as any;
+                } as Breed;
             }
             else if (normalizedBreed.includes('mestiz') || normalizedBreed.includes('cruzad')) {
                 breed = {
                     id: 'MANUAL_MIX', code: 'MIX', name: 'Mestiza',
                     biological_type: 'Rustic_European', weight_female_adult: 580, weight_male_adult: 950,
                     adg_feedlot: 1.2, slaughter_age_months: 24
-                } as any;
+                } as Breed;
             }
         }
 
@@ -196,7 +189,7 @@ export const WeightEngine = {
         let currentWeight = 40; // Birth
         if (breed) currentWeight = breed.weight_female_adult * 0.07;
 
-        let simDate = new Date(birthDate);
+        const simDate = new Date(birthDate);
         const maxMonths = 240;
         let monthsSimulated = 0;
 
@@ -255,7 +248,7 @@ export const WeightEngine = {
             // BUT: If DietFactor is very low (<0.5), we might lose weight (maintenance cost).
             // Let's simplified: 
             // 1. Calculate Potential Anabolic Gain
-            let potentialGain = maturationRate * (adultWeight - currentWeight);
+            const potentialGain = maturationRate * (adultWeight - currentWeight);
 
             // 2. Apply Diet Modulo
             // If diet is 1.0, we simulate "normal" growth towards asymptote.

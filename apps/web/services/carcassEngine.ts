@@ -48,7 +48,7 @@ export const CarcassEngine = {
         } = {}
     ): CarcassResult {
         // 1. Determine Effective Genetics (Hybrid Logic)
-        let effectiveBreed = { ...breed };
+        const effectiveBreed = { ...breed };
 
         // If strict parents provided, calculate hybrid values
         if (options.fatherBreed && options.motherBreed && options.fatherBreed.name !== options.motherBreed.name) {
@@ -204,7 +204,7 @@ export const CarcassEngine = {
             // Penalize only if immature relative to THEIR potential
             // e.g. Betizu at 320kg is 1.0 maturity -> No penalty.
             // Limousin at 320kg is 0.4 maturity -> Heavy penalty.
-            const immaturity = 0.75 - maturityRatio;
+            // TODO: apply immaturity (= 0.75 - maturityRatio) to the score.
         } else if (maturityRatio > 1.15) {
             // "Analytic" Overweight Check: Fat vs Muscle?
             // User Feedback: If animal is heavy but NOT on intensive feedlot diet, it's superior growth (Muscle).
