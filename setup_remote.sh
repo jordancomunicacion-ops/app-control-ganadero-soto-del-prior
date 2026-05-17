@@ -29,8 +29,13 @@ docker compose up -d --build --force-recreate
 echo "-> Esperando a que inicie la base de datos (10s)..."
 sleep 10
 
-echo "-> Aplicando migraciones de base de datos..."
-docker compose exec -T sotoganaderia-web npx prisma migrate deploy || echo "ADVERTENCIA: Fallaron las migraciones, verifica los logs."
+echo "-> Aplicando schema a la base de datos (db push)..."
+# Usamos `prisma db push` porque este proyecto no mantiene migraciones
+# generadas en `prisma/migrations/`. `db push` sincroniza el schema declarativo
+# contra la BD existente sin requerir histórico de migraciones — idempotente y
+# seguro para añadir índices o columnas nuevas. Si en el futuro se adopta el
+# flujo de migraciones, sustituir por `prisma migrate deploy`.
+docker compose exec -T sotoganaderia-web npx prisma db push --skip-generate || echo "ADVERTENCIA: Falló la sincronización del schema, verifica los logs."
 
 echo "-> Inicializando/Actualizando datos (Seed)..."
 docker compose exec -T sotoganaderia-web npx prisma db seed || echo "ADVERTENCIA: Falló el seed de la base de datos."
