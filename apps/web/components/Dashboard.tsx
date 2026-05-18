@@ -10,6 +10,7 @@ import { getFarms } from '@/app/lib/farm-actions';
 import { getAnimals } from '@/app/lib/animal-actions';
 import { getCorralStocking, type CorralStockingRow } from '@/app/lib/corral-actions';
 import type { AnimalLike, FarmLike, LivestockEvent } from '@/types/livestock';
+import { Droplet, Wind, CloudRain, Radar, CheckCircle2, AlertTriangle, Ban, MinusCircle, MapPin, Beef, Calendar, Bell, PlusCircle, ClipboardList, BarChart3, ArrowRight } from 'lucide-react';
 
 interface WeatherWidget {
     temp: number;
@@ -260,161 +261,99 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
     }, [read, selectedTabIndex, userId]);
     /* eslint-enable react-hooks/set-state-in-effect */
 
+    const sessionUser = read<string>('appSession', '') as string;
+    const greetingHour = new Date().getHours();
+    const greeting = greetingHour < 12 ? 'Buenos días' : greetingHour < 20 ? 'Buenas tardes' : 'Buenas noches';
+    const firstName = sessionUser?.split(/[@\s]/)[0] || '';
+    const displayName = firstName ? firstName.charAt(0).toUpperCase() + firstName.slice(1) : '';
+
+    const totalActiveAnimals =
+        Object.values(animalStats.males).reduce((a, b) => a + b, 0) +
+        Object.values(animalStats.females).reduce((a, b) => a + b, 0);
+
+    const criticalCount = stocking.filter((s) => s.status === 'critical').length;
+    const warningCount = stocking.filter((s) => s.status === 'warning').length;
+    const alertCount = criticalCount + warningCount;
+
+    const isEmpty = farmsList.length === 0 && totalActiveAnimals === 0;
+
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div>
-                <h2 className="text-2xl font-bold text-gray-800">Resumen General</h2>
-                <p className="text-gray-600">Vista general de tu operación ganadera</p>
+            {/* Header con saludo personalizado */}
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+                <div>
+                    <h2 className="text-2xl font-bold text-gray-900">
+                        {displayName ? `${greeting}, ${displayName}` : greeting}
+                    </h2>
+                    <p className="text-gray-600 text-sm">Resumen de tu operación ganadera</p>
+                </div>
             </div>
 
-            {/* Dashboard Main Grid: Weather (Left) & Animals (Right) */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-
-                {/* Weather Card Column */}
-                <div className="flex flex-col h-full space-y-2">
-                    {/* Tabs for Farms */}
-                    {farmsList.length > 0 && (
-                        <div className="flex space-x-1 overflow-x-auto pb-1">
-                            {farmsList.map((farm, idx) => (
-                                <button
-                                    key={farm.id || idx}
-                                    onClick={() => {
-                                        setSelectedTabIndex(idx);
-                                        setLoadingWeather(true); // Trigger loading state
-                                    }}
-                                    className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors border-t border-l border-r ${selectedTabIndex === idx
-                                        ? 'bg-white text-green-700 border-gray-200 border-b-white z-10 -mb-px shadow-[0_-2px_5px_rgba(0,0,0,0.02)]'
-                                        : 'bg-gray-100 text-gray-500 hover:bg-gray_50 border-transparent hover:text-gray-700'
-                                        }`}
-                                >
-                                    {farm.name}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-
-                    {(weather || loadingWeather) && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 h-full flex flex-col justify-between">
-                            {/* Top Row: Current Weather */}
-                            <div className="flex justify-between items-start mb-6">
-                                <div>
-                                    <p className="text-gray-500 font-bold text-xs uppercase tracking-wider mb-1">Clima en: {weather?.location || '...'}</p>
-                                    {loadingWeather ? (
-                                        <p className="text-sm animate-pulse text-gray-400">Cargando...</p>
-                                    ) : weather ? (
-                                        <div className="flex items-center gap-4">
-                                            <span className="text-4xl">{weather.icon}</span>
-                                            <div>
-                                                <span className="text-4xl font-extrabold block text-gray-800">{weather.temp}°C</span>
-                                                <span className="text-sm text-gray-500 capitalize font-medium">{weather.condition}</span>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <p className="text-sm text-gray-400">No disponible</p>
-                                    )}
-                                </div>
-                                {weather && (
-                                    <div className="text-right text-xs text-gray-400 font-medium space-y-1 bg-gray-50 px-3 py-2 rounded-lg">
-                                        <p>💧 {weather.humidity}% Humedad</p>
-                                        <p>💨 {weather.wind} km/h Viento</p>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Bottom Row: Split View */}
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 border-t border-gray-100 pt-4 flex-1">
-
-                                {/* Left: Windy Map */}
-                                {!loadingWeather && weather?.mapUrl && (
-                                    <div className="h-48 rounded-lg overflow-hidden border border-gray-200 shadow-sm relative group">
-                                        <div className="absolute top-2 left-2 z-10 bg-white/80 text-gray-700 text-[10px] px-2 py-1 rounded backdrop-blur-md font-bold shadow-sm">
-                                            🌪️ Viento vivo
-                                        </div>
-                                        <iframe
-                                            src={weather.mapUrl}
-                                            className="w-full h-full border-none"
-                                            title="Windy Weather Map"
-                                        />
-                                    </div>
-                                )}
-
-                                {/* Right: Forecast */}
-                                {!loadingWeather && weather?.forecast && (
-                                    <div className="flex flex-col justify-between h-48">
-                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Pronóstico 3 Días</p>
-                                        <div className="flex-1 flex flex-col gap-2">
-                                            {weather.forecast.map((d, i: number) => (
-                                                <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-100 hover:border-gray-300 transition-colors flex-1">
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="text-xl">{d.icon}</span>
-                                                        <span className="text-sm font-bold text-gray-700 capitalize">
-                                                            {new Date(d.date).toLocaleDateString(undefined, { weekday: 'short' })}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="flex items-center gap-3">
-                                                        {d.precip > 0 && (
-                                                            <span className="text-[10px] font-bold text-gray-800 bg-gray-100 px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                                                                ☔ {d.precip}mm
-                                                            </span>
-                                                        )}
-                                                        <div className="text-sm font-bold text-gray-800">
-                                                            <span className="text-gray-900">{Math.round(d.max)}°</span>
-                                                            <span className="mx-1 text-gray-300">/</span>
-                                                            <span className="text-gray-500">{Math.round(d.min)}°</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* Animals Card Column */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 h-full">
-                    <h3 className="text-lg font-bold text-gray-800 mb-4">Distribución de Animales</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 h-full">
-                        <div>
-                            <h4 className="text-blue-600 font-semibold mb-3 border-b border-blue-100 pb-2">Machos</h4>
-                            <div className="space-y-2 text-sm">
-                                {Object.entries(animalStats.males).map(([cat, count]) => (
-                                    <div key={cat} className="flex justify-between">
-                                        <span className="text-gray-600">{cat}</span>
-                                        <span className="font-bold text-gray-900">{String(count)}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <div>
-                            <h4 className="text-pink-600 font-semibold mb-3 border-b border-pink-100 pb-2">Hembras</h4>
-                            <div className="space-y-2 text-sm">
-                                {Object.entries(animalStats.females).map(([cat, count]) => (
-                                    <div key={cat} className="flex justify-between">
-                                        <span className="text-gray-600">{cat}</span>
-                                        <span className="font-bold text-gray-900">{String(count)}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+            {/* Empty state — sin fincas ni animales */}
+            {isEmpty && (
+                <div className="bg-white rounded-xl shadow-sm border border-dashed border-gray-300 p-8 text-center">
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-green-50 text-green-600 mb-3">
+                        <MapPin className="w-7 h-7" />
                     </div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-1">Aún no tienes datos</h3>
+                    <p className="text-sm text-gray-600 max-w-md mx-auto mb-4">
+                        Empieza creando tu primera finca. Después podrás registrar animales, eventos y obtener análisis automáticos.
+                    </p>
+                    <button
+                        onClick={() => onNavigate?.('farms')}
+                        className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-5 rounded-lg shadow-sm transition-colors"
+                    >
+                        <PlusCircle className="w-4 h-4" /> Crear primera finca
+                    </button>
                 </div>
-            </div>
+            )}
 
-            {/* Stocking-rate analysis per farm — Pulido et al. 2014 model */}
+            {/* KPI strip — solo cuando hay datos */}
+            {!isEmpty && (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <KpiCard label="Fincas" value={farmsList.length} Icon={MapPin} accent="text-emerald-600 bg-emerald-50" onClick={() => onNavigate?.('farms')} />
+                    <KpiCard label="Cabezas activas" value={totalActiveAnimals} Icon={Beef} accent="text-sky-600 bg-sky-50" onClick={() => onNavigate?.('animals')} />
+                    <KpiCard label="Eventos próximos" value={upcomingEvents.length} Icon={Calendar} accent="text-violet-600 bg-violet-50" onClick={() => onNavigate?.('events')} />
+                    <KpiCard label="Avisos de carga" value={alertCount} Icon={Bell} accent={alertCount > 0 ? 'text-amber-600 bg-amber-50' : 'text-gray-400 bg-gray-50'} />
+                </div>
+            )}
+
+            {/* 1. CARGA GANADERA + alertas — prioridad operativa */}
             {stocking.length > 0 && (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 className="text-lg font-bold text-gray-800 mb-1">Carga Ganadera vs Capacidad Sostenible</h3>
-                    <p className="text-sm text-gray-600 mb-1">
-                        ¿Cuánto ganado puede mantener tu finca sin que el pasto se degrade?
-                    </p>
-                    <p className="text-xs italic text-gray-400 mb-4 leading-snug">
-                        Combinamos el tipo de suelo, la lluvia anual y el % de arbolado para estimar cuántas vacas adultas equivalentes (LU) puede soportar cada hectárea. Modelo Pulido et al. 2014 (dehesa Extremadura).
-                    </p>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+                    {/* Alertas arriba, antes de la tabla */}
+                    {stocking.some((r) => r.status === 'critical') && (
+                        <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700 flex items-start gap-2">
+                            <Ban className="w-5 h-5 shrink-0 mt-0.5" />
+                            <div>
+                                <strong>Sobrecarga crítica</strong> en una o más fincas (&gt;20 % por encima de la capacidad sostenible).
+                                <p className="mt-1 text-xs">
+                                    <strong>Qué hacer:</strong> reduce cabezas, amplía superficie útil, o suplementa con forraje comprado mientras se recupera el pasto natural.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                    {stocking.every((r) => r.status !== 'critical') && stocking.some((r) => r.status === 'warning') && (
+                        <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg text-sm text-amber-700 flex items-start gap-2">
+                            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+                            <div>
+                                <strong>Carga ajustada.</strong>
+                                <p className="mt-1 text-xs">
+                                    Estás cerca del tope. Vigila que el pasto recupere bien después del pastoreo — si ves clareos persistentes, baja cabezas.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-900 mb-1">Carga ganadera vs capacidad sostenible</h3>
+                        <p className="text-sm text-gray-600">
+                            ¿Cuánto ganado puede mantener tu finca sin que el pasto se degrade?
+                        </p>
+                        <p className="text-xs italic text-gray-400 mt-1 leading-snug">
+                            Combinamos el tipo de suelo, la lluvia anual y el % de arbolado para estimar cuántas vacas adultas equivalentes (LU) puede soportar cada hectárea. Modelo Pulido et al. 2014 (dehesa Extremadura).
+                        </p>
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
@@ -457,12 +396,13 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
                                                     <span
                                                         title={r.status === 'ok' ? 'Carga dentro del óptimo' : r.status === 'warning' ? 'Cerca del tope, vigila el pasto' : 'Por encima del tope sostenible'}
                                                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold cursor-help ${
-                                                            r.status === 'ok' ? 'bg-green-50 text-green-700 border border-green-100'
+                                                            r.status === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                                                             : r.status === 'warning' ? 'bg-amber-50 text-amber-700 border border-amber-100'
                                                             : 'bg-red-50 text-red-700 border border-red-100'
                                                         }`}
                                                     >
-                                                        {r.status === 'ok' ? '✓' : r.status === 'warning' ? '⚠' : '⛔'} {(r.ratio * 100).toFixed(0)}%
+                                                        {r.status === 'ok' ? <CheckCircle2 className="w-3.5 h-3.5" /> : r.status === 'warning' ? <AlertTriangle className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
+                                                        {(r.ratio * 100).toFixed(0)}%
                                                     </span>
                                                 </td>
                                             </tr>
@@ -486,14 +426,14 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
                                                                                 <span className="text-gray-700">
                                                                                     {c.currentLU} {c.capacityLU ? `/ ${c.capacityLU}` : ''} LU
                                                                                 </span>
-                                                                                <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                                                                    c.status === 'ok' ? 'bg-green-50 text-green-700 border border-green-100'
+                                                                                <span className={`ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                                                    c.status === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                                                                                     : c.status === 'warning' ? 'bg-amber-50 text-amber-700 border border-amber-100'
                                                                                     : c.status === 'critical' ? 'bg-red-50 text-red-700 border border-red-100'
                                                                                     : 'bg-gray-50 text-gray-500 border border-gray-100'
                                                                                 }`}>
-                                                                                    {c.status === 'ok' ? '✓' : c.status === 'warning' ? '⚠' : c.status === 'critical' ? '⛔' : '–'}
-                                                                                    {c.capacityLU ? ` ${(c.ratio * 100).toFixed(0)}%` : ' sin capacidad'}
+                                                                                    {c.status === 'ok' ? <CheckCircle2 className="w-3 h-3" /> : c.status === 'warning' ? <AlertTriangle className="w-3 h-3" /> : c.status === 'critical' ? <Ban className="w-3 h-3" /> : <MinusCircle className="w-3 h-3" />}
+                                                                                    {c.capacityLU ? `${(c.ratio * 100).toFixed(0)}%` : 'sin capacidad'}
                                                                                 </span>
                                                                             </div>
                                                                         </div>
@@ -513,68 +453,47 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
                             </tbody>
                         </table>
                     </div>
-                    <p className="text-[11px] italic text-gray-400 mt-3 leading-snug">
+                    <p className="text-[11px] italic text-gray-400 leading-snug">
                         1 LU = 1 vaca adulta de unos 600 kg. Verde &lt;100 % = todo en orden. Ámbar 100-120 % = vigila. Rojo &gt;120 % = sobrecarga: reduce cabezas o suplementa pasto.
                     </p>
-                    {stocking.some((r) => r.status === 'critical') && (
-                        <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700">
-                            <strong>⛔ Sobrecarga crítica</strong> en una o más fincas (&gt;20 % por encima de la capacidad sostenible).
-                            <p className="mt-1 text-xs">
-                                <strong>Qué hacer:</strong> reduce cabezas, amplía superficie útil, o suplementa con forraje comprado mientras se recupera el pasto natural.
-                            </p>
-                        </div>
-                    )}
-                    {stocking.every((r) => r.status !== 'critical') && stocking.some((r) => r.status === 'warning') && (
-                        <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-lg text-sm text-amber-700">
-                            <strong>⚠ Carga ajustada.</strong>
-                            <p className="mt-1 text-xs">
-                                Estás cerca del tope. Vigila que el pasto recupere bien después del pastoreo — si ves clareos persistentes, baja cabezas.
-                            </p>
-                        </div>
-                    )}
                 </div>
             )}
 
-            {/* Grid: Actions & Alerts */}
+            {/* 2. Acciones rápidas + próximos eventos */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Quick Actions */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 className="text-lg font-bold text-gray-800 mb-4">Acciones Rápidas</h3>
-                    <div className="space-y-3">
-                        <button
-                            onClick={() => onNavigate?.('animals')}
-                            className="w-full bg-green-50 text-green-700 font-medium py-2 px-4 rounded-lg hover:bg-green-100 transition-colors text-left flex items-center gap-2"
-                        >
-                            Registrar nuevo animal
-                        </button>
-                        <button
-                            onClick={() => onNavigate?.('events')}
-                            className="w-full bg-green-50 text-green-700 font-medium py-2 px-4 rounded-lg hover:bg-green-100 transition-colors text-left flex items-center gap-2"
-                        >
-                            Registrar evento sanitario
-                        </button>
-                        <button
-                            onClick={() => onNavigate?.('reports')}
-                            className="w-full bg-green-50 text-green-700 font-medium py-2 px-4 rounded-lg hover:bg-green-100 transition-colors text-left flex items-center gap-2"
-                        >
-                            Generar reporte mensual
-                        </button>
+                    <h3 className="text-lg font-bold text-gray-900 mb-4">Acciones rápidas</h3>
+                    <div className="space-y-2">
+                        <QuickAction Icon={Beef} label="Registrar nuevo animal" onClick={() => onNavigate?.('animals')} />
+                        <QuickAction Icon={ClipboardList} label="Registrar evento sanitario" onClick={() => onNavigate?.('events')} />
+                        <QuickAction Icon={BarChart3} label="Ver informes" onClick={() => onNavigate?.('reports')} />
                     </div>
                 </div>
 
                 {/* Events */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 className="text-lg font-bold text-gray-800 mb-4">Próximos Eventos</h3>
-                    <div className="space-y-3">
+                    <div className="flex items-baseline justify-between mb-4">
+                        <h3 className="text-lg font-bold text-gray-900">Próximos eventos</h3>
+                        {upcomingEvents.length > 0 && (
+                            <button onClick={() => onNavigate?.('events')} className="text-xs font-medium text-green-700 hover:text-green-800 inline-flex items-center gap-1">
+                                Ver todos <ArrowRight className="w-3 h-3" />
+                            </button>
+                        )}
+                    </div>
+                    <div className="space-y-2">
                         {upcomingEvents.length === 0 ? (
                             <p className="text-gray-500 italic text-sm">No hay eventos próximos.</p>
                         ) : (
-                            upcomingEvents.map((evt, i) => (
+                            upcomingEvents.slice(0, 5).map((evt, i) => (
                                 <div key={i} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
                                     <div className="w-2 h-2 mt-2 rounded-full bg-green-500 shrink-0"></div>
-                                    <div>
-                                        <p className="font-medium text-gray-800 text-sm">{evt.type}</p>
-                                        <p className="text-xs text-gray-500">{new Date(evt.date).toLocaleDateString()} - {evt.animalId || 'General'}</p>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-medium text-gray-900 text-sm truncate">{evt.type}</p>
+                                        <p className="text-xs text-gray-500">
+                                            {new Date(evt.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                                            {evt.animalId ? ` · ${evt.animalId}` : ''}
+                                        </p>
                                     </div>
                                 </div>
                             ))
@@ -582,6 +501,178 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
                     </div>
                 </div>
             </div>
+
+            {/* 3. Distribución de animales */}
+            {!isEmpty && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div className="flex items-baseline justify-between mb-4">
+                        <h3 className="text-lg font-bold text-gray-900">Distribución de animales</h3>
+                        <button onClick={() => onNavigate?.('animals')} className="text-xs font-medium text-green-700 hover:text-green-800 inline-flex items-center gap-1">
+                            Inventario <ArrowRight className="w-3 h-3" />
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                            <h4 className="text-sky-700 font-semibold mb-3 border-b border-sky-100 pb-2 text-sm uppercase tracking-wide">Machos</h4>
+                            <div className="space-y-2 text-sm">
+                                {Object.entries(animalStats.males).map(([cat, count]) => (
+                                    <div key={cat} className="flex justify-between">
+                                        <span className="text-gray-600">{cat}</span>
+                                        <span className="font-bold text-gray-900">{String(count)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <h4 className="text-rose-600 font-semibold mb-3 border-b border-rose-100 pb-2 text-sm uppercase tracking-wide">Hembras</h4>
+                            <div className="space-y-2 text-sm">
+                                {Object.entries(animalStats.females).map(([cat, count]) => (
+                                    <div key={cat} className="flex justify-between">
+                                        <span className="text-gray-600">{cat}</span>
+                                        <span className="font-bold text-gray-900">{String(count)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 4. Clima y pronóstico — informativo, al final */}
+            {(weather || loadingWeather) && farmsList.length > 0 && (
+                <div>
+                    {/* Tabs for Farms */}
+                    <div className="flex space-x-1 overflow-x-auto pb-1">
+                        {farmsList.map((farm, idx) => (
+                            <button
+                                key={farm.id || idx}
+                                onClick={() => {
+                                    setSelectedTabIndex(idx);
+                                    setLoadingWeather(true);
+                                }}
+                                className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors border-t border-l border-r ${selectedTabIndex === idx
+                                    ? 'bg-white text-green-700 border-gray-200 border-b-white z-10 -mb-px shadow-[0_-2px_5px_rgba(0,0,0,0.02)]'
+                                    : 'bg-gray-100 text-gray-500 hover:bg-gray-50 border-transparent hover:text-gray-700'
+                                    }`}
+                            >
+                                {farm.name}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-6">
+                        {/* Top Row: Current Weather */}
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-gray-500 font-bold text-xs uppercase tracking-wider mb-1">Clima en {weather?.location || '...'}</p>
+                                {loadingWeather ? (
+                                    <p className="text-sm animate-pulse text-gray-400">Cargando...</p>
+                                ) : weather ? (
+                                    <div className="flex items-center gap-4">
+                                        <span className="text-4xl">{weather.icon}</span>
+                                        <div>
+                                            <span className="text-4xl font-extrabold block text-gray-900">{weather.temp}°C</span>
+                                            <span className="text-sm text-gray-500 capitalize font-medium">{weather.condition}</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-gray-400">No disponible</p>
+                                )}
+                            </div>
+                            {weather && (
+                                <div className="text-right text-xs text-gray-500 font-medium space-y-1 bg-gray-50 px-3 py-2 rounded-lg">
+                                    <p className="flex items-center justify-end gap-1.5"><Droplet className="w-3.5 h-3.5 text-sky-500" /> {weather.humidity}% humedad</p>
+                                    <p className="flex items-center justify-end gap-1.5"><Wind className="w-3.5 h-3.5 text-gray-400" /> {weather.wind} km/h viento</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Bottom Row: Map + Forecast */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 border-t border-gray-100 pt-4">
+                            {!loadingWeather && weather?.mapUrl && (
+                                <div className="h-48 rounded-lg overflow-hidden border border-gray-200 shadow-sm relative group">
+                                    <div className="absolute top-2 left-2 z-10 bg-white/80 text-gray-700 text-[10px] px-2 py-1 rounded backdrop-blur-md font-bold shadow-sm inline-flex items-center gap-1">
+                                        <Radar className="w-3 h-3" /> Viento vivo
+                                    </div>
+                                    <iframe src={weather.mapUrl} className="w-full h-full border-none" title="Windy Weather Map" />
+                                </div>
+                            )}
+
+                            {!loadingWeather && weather?.forecast && (
+                                <div className="flex flex-col h-48">
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Pronóstico 3 días</p>
+                                    <div className="flex-1 flex flex-col gap-2">
+                                        {weather.forecast.map((d, i: number) => (
+                                            <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-100 hover:border-gray-300 transition-colors flex-1">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xl">{d.icon}</span>
+                                                    <span className="text-sm font-bold text-gray-700 capitalize">
+                                                        {new Date(d.date).toLocaleDateString(undefined, { weekday: 'short' })}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    {d.precip > 0 && (
+                                                        <span className="text-[10px] font-bold text-gray-800 bg-gray-100 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                                                            <CloudRain className="w-3 h-3 text-sky-600" /> {d.precip}mm
+                                                        </span>
+                                                    )}
+                                                    <div className="text-sm font-bold text-gray-800">
+                                                        <span className="text-gray-900">{Math.round(d.max)}°</span>
+                                                        <span className="mx-1 text-gray-300">/</span>
+                                                        <span className="text-gray-500">{Math.round(d.min)}°</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
+    );
+}
+
+// Helpers locales — KPI card y acción rápida
+function KpiCard({ label, value, Icon, accent, onClick }: {
+    label: string;
+    value: number;
+    Icon: React.ComponentType<{ className?: string }>;
+    accent: string;
+    onClick?: () => void;
+}) {
+    const Wrapper: React.ElementType = onClick ? 'button' : 'div';
+    return (
+        <Wrapper
+            onClick={onClick}
+            className={`bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3 ${onClick ? 'hover:border-green-200 hover:shadow-md transition-all text-left w-full' : ''}`}
+        >
+            <span className={`inline-flex items-center justify-center w-10 h-10 rounded-lg ${accent}`}>
+                <Icon className="w-5 h-5" />
+            </span>
+            <div className="min-w-0">
+                <p className="text-xs uppercase tracking-wider text-gray-500 font-medium">{label}</p>
+                <p className="text-2xl font-bold text-gray-900 leading-tight">{value}</p>
+            </div>
+        </Wrapper>
+    );
+}
+
+function QuickAction({ Icon, label, onClick }: {
+    Icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            className="w-full bg-green-50 text-green-700 font-medium py-2.5 px-4 rounded-lg hover:bg-green-100 transition-colors text-left flex items-center gap-3 group"
+        >
+            <Icon className="w-4 h-4" />
+            <span className="flex-1">{label}</span>
+            <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 -translate-x-1 group-hover:translate-x-0 transition-all" />
+        </button>
     );
 }

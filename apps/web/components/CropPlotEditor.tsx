@@ -10,6 +10,7 @@ import { CROP_CATALOG, calendarForMonth, MONTH_NAMES_ES } from '@/services/cropC
 import { suggestNextCrop } from '@/services/rotationEngine';
 import { SoilEngine } from '@/services/soilEngine';
 import { searchParcel } from '@/app/lib/sigpac-actions';
+import { useUi } from '@/components/Toast';
 
 // =============================================================================
 // CROP PLOT EDITOR
@@ -48,6 +49,7 @@ export function CropPlotEditor({
     farmProvinciaCode?: string;
     farmMunicipioCode?: string;
 }) {
+    const ui = useUi();
     const [loadingSigpac, setLoadingSigpac] = useState(false);
     const [plots, setPlots] = useState<Plot[]>([]);
     const [draftPlot, setDraftPlot] = useState<Partial<Plot> | null>(null);
@@ -71,11 +73,11 @@ export function CropPlotEditor({
 
     const handleSigpacLookup = async () => {
         if (!draftPlot?.sigpacPoligono || !draftPlot?.sigpacParcela) {
-            alert('Indica polígono y parcela SIGPAC');
+            ui.warning('Indica polígono y parcela SIGPAC');
             return;
         }
         if (!farmProvinciaCode || !farmMunicipioCode) {
-            alert('La finca aún no tiene provincia/municipio definidos. Guarda la finca primero.');
+            ui.warning('La finca aún no tiene provincia/municipio definidos. Guarda la finca primero.');
             return;
         }
         setLoadingSigpac(true);
@@ -92,11 +94,12 @@ export function CropPlotEditor({
                     surfaceHa: parseFloat(result.data.area_ha.toFixed(2)),
                     pacUseCode: result.data.use,
                 });
+                ui.success(`Parcela localizada: ${result.data.area_ha.toFixed(2)} ha`);
             } else {
-                alert(result.error ?? 'Parcela no encontrada en SIGPAC');
+                ui.error(result.error ?? 'Parcela no encontrada en SIGPAC');
             }
         } catch (e) {
-            alert('Error consultando SIGPAC: ' + (e instanceof Error ? e.message : String(e)));
+            ui.error('Error consultando SIGPAC: ' + (e instanceof Error ? e.message : String(e)));
         } finally {
             setLoadingSigpac(false);
         }
@@ -104,7 +107,7 @@ export function CropPlotEditor({
 
     const handleSavePlot = async () => {
         if (!draftPlot?.name) {
-            alert('La parcela necesita un nombre');
+            ui.warning('La parcela necesita un nombre');
             return;
         }
         try {
@@ -117,24 +120,32 @@ export function CropPlotEditor({
             }
             setDraftPlot(null);
             setEditingId(null);
+            ui.success('Parcela guardada');
         } catch (e) {
-            alert('Error guardando parcela: ' + (e instanceof Error ? e.message : String(e)));
+            ui.error('Error guardando parcela: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
 
     const handleDeletePlot = async (id: string) => {
-        if (!confirm('¿Eliminar esta parcela y todo su historial de cultivos?')) return;
+        const ok = await ui.confirm({
+            title: 'Eliminar parcela',
+            message: '¿Eliminar esta parcela y todo su historial de cultivos? Esta acción no se puede deshacer.',
+            tone: 'danger',
+            confirmLabel: 'Eliminar',
+        });
+        if (!ok) return;
         try {
             await deleteCropPlot(id);
             setPlots(plots.filter((p) => p.id !== id));
+            ui.success('Parcela eliminada');
         } catch (e) {
-            alert('Error eliminando: ' + (e instanceof Error ? e.message : String(e)));
+            ui.error('Error eliminando: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
 
     const handleSaveRotation = async (plotId: string) => {
         if (!draftRotation?.cropName || !draftRotation.sowDate) {
-            alert('Necesita cultivo y fecha de siembra');
+            ui.warning('Indica el cultivo y la fecha de siembra');
             return;
         }
         try {
@@ -151,13 +162,20 @@ export function CropPlotEditor({
                 : p,
             ));
             setDraftRotation(null);
+            ui.success('Cultivo añadido al historial');
         } catch (e) {
-            alert('Error guardando cultivo: ' + (e instanceof Error ? e.message : String(e)));
+            ui.error('Error guardando cultivo: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
 
     const handleDeleteRotation = async (rotationId: string, plotId: string) => {
-        if (!confirm('¿Eliminar este cultivo del historial?')) return;
+        const ok = await ui.confirm({
+            title: 'Eliminar cultivo',
+            message: '¿Eliminar este cultivo del historial?',
+            tone: 'danger',
+            confirmLabel: 'Eliminar',
+        });
+        if (!ok) return;
         try {
             await deleteRotation(rotationId);
             setPlots(plots.map((p) => p.id === plotId
@@ -165,7 +183,7 @@ export function CropPlotEditor({
                 : p,
             ));
         } catch (e) {
-            alert('Error eliminando: ' + (e instanceof Error ? e.message : String(e)));
+            ui.error('Error eliminando: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
 
@@ -285,12 +303,12 @@ export function CropPlotEditor({
                                                 onChange={(e) => setDraftRotation({ ...draftRotation, destinationFor: e.target.value })}
                                                 className="text-xs border rounded px-2 py-1 bg-white"
                                             >
-                                                <option value="pastoreo_directo">🐄 Pastoreo directo (el ganado come en la parcela)</option>
-                                                <option value="henificacion">🌾 Henificación (siega y empacado)</option>
+                                                <option value="pastoreo_directo">Pastoreo directo (el ganado come en la parcela)</option>
+                                                <option value="henificacion">Henificación (siega y empacado)</option>
                                                 <option value="ensilado">🪣 Ensilado (silo húmedo)</option>
                                                 <option value="grano">🌽 Grano (cosecha y almacén)</option>
                                                 <option value="venta">💶 Venta externa</option>
-                                                <option value="mejora_suelo">🌱 Mejora del suelo (abono verde, sin cosechar)</option>
+                                                <option value="mejora_suelo">Mejora del suelo (abono verde, sin cosechar)</option>
                                             </select>
                                         </div>
                                         <div className="flex justify-end gap-2">

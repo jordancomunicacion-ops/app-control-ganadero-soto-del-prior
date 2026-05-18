@@ -7,9 +7,8 @@ import {
     MapPin,
     Beef,
     Calendar,
-    TrendingUp,
+    Wheat,
     BarChart3,
-    Database,
     User,
     Users,
     LogOut,
@@ -46,39 +45,63 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole, mobileOpen
     const role = (userRole || currentUser?.role || (isGerenciaName ? 'ADMIN' : 'WORKER'))?.toUpperCase();
     const isAdmin = role === 'ADMIN' || isGerenciaName;
 
-    const navItems = [
-        { id: 'home', label: 'Inicio', icon: Home },
-        { id: 'farms', label: 'Fincas', icon: MapPin },
-        { id: 'animals', label: 'Animales', icon: Beef },
-        { id: 'events', label: 'Eventos', icon: Calendar },
-        { id: 'calculator', label: 'Rendimiento', icon: TrendingUp },
-        { id: 'reports', label: 'Reportes', icon: BarChart3 },
-        { id: 'data', label: 'Datos', icon: Database },
-        { id: 'users', label: 'Gestión Usuarios', icon: Users }
-    ].filter(item => {
+    // Grupos lógicos: operativa diaria, gestión, administración.
+    // "data" se oculta hasta que el módulo esté implementado (hoy es 100% «Próximamente»).
+    const navGroups: Array<{ label: string; items: Array<{ id: string; label: string; icon: typeof Home }> }> = [
+        {
+            label: 'Operativa',
+            items: [
+                { id: 'home', label: 'Inicio', icon: Home },
+                { id: 'animals', label: 'Animales', icon: Beef },
+                { id: 'events', label: 'Eventos', icon: Calendar },
+                { id: 'calculator', label: 'Nutrición', icon: Wheat },
+            ],
+        },
+        {
+            label: 'Gestión',
+            items: [
+                { id: 'farms', label: 'Fincas', icon: MapPin },
+                { id: 'reports', label: 'Reportes', icon: BarChart3 },
+            ],
+        },
+        {
+            label: 'Administración',
+            items: [
+                { id: 'users', label: 'Equipo', icon: Users },
+            ],
+        },
+    ];
+
+    const isItemVisible = (id: string): boolean => {
         // 1. Admin / Gerencia always sees everything
         if (isAdmin) return true;
 
         // 2. Strict check for Users tab: Admin or Manager (USER)
-        if (item.id === 'users' && role !== 'ADMIN' && role !== 'USER') return false;
+        if (id === 'users' && role !== 'ADMIN' && role !== 'USER') return false;
 
         // 3. For other roles (worker, vet, etc.), check permissions list
-        // If no permissions defined (legacy), defaulting to allowing basic tabs or blocking? 
-        // Let's default to allowing basic tabs if empty, or strict mode?
-        // User requested "authorize what sections they see". So strict mode is better.
-        // But we need to handle legacy/null permissions.
         const permissions = currentUser?.permissions || [];
-
-        // If permissions exist, strict check
         if (permissions.length > 0) {
-            return permissions.includes(item.id) || item.id === 'home'; // Always allow Home
+            return permissions.includes(id) || id === 'home'; // Always allow Home
         }
 
         // Fallback for users without permissions set yet (allow basics)
-        return ['home', 'farms', 'animals', 'events', 'calculator'].includes(item.id);
-    });
+        return ['home', 'farms', 'animals', 'events', 'calculator'].includes(id);
+    };
+
+    const visibleGroups = navGroups
+        .map((g) => ({ ...g, items: g.items.filter((i) => isItemVisible(i.id)) }))
+        .filter((g) => g.items.length > 0);
 
     const displayUser = sessionUser || 'Usuario';
+    const roleLabel = isAdmin
+        ? 'Administrador'
+        : role === 'VET' ? 'Veterinario'
+        : role === 'WORKER' ? 'Trabajador'
+        : role === 'USER' ? 'Cliente'
+        : role
+            ? role.charAt(0) + role.slice(1).toLowerCase()
+            : 'Usuario';
 
     return (
         <>
@@ -122,25 +145,34 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole, mobileOpen
                         {displayUser.charAt(0).toUpperCase()}
                     </div>
                 )}
-                <div>
-                    <p className="font-bold text-gray-800 text-sm truncate w-32">{displayUser}</p>
-                    <p className="text-xs text-gray-500 capitalize">{isAdmin ? 'Administrador' : role}</p>
+                <div className="min-w-0">
+                    <p className="font-bold text-gray-900 text-sm truncate">{displayUser}</p>
+                    <p className="text-xs text-gray-500">{roleLabel}</p>
                 </div>
             </div>
 
-            <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-                {navItems.map((item) => (
-                    <button
-                        key={item.id}
-                        onClick={() => onTabChange(item.id)}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === item.id
-                            ? 'bg-green-50 text-green-700'
-                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                            }`}
-                    >
-                        <item.icon className="w-5 h-5" />
-                        {item.label}
-                    </button>
+            <nav className="flex-1 px-4 py-3 overflow-y-auto" aria-label="Secciones">
+                {visibleGroups.map((group, gi) => (
+                    <div key={group.label} className={gi > 0 ? 'mt-5' : ''}>
+                        <p className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                            {group.label}
+                        </p>
+                        <div className="space-y-1">
+                            {group.items.map((item) => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => onTabChange(item.id)}
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeTab === item.id
+                                        ? 'bg-green-50 text-green-700'
+                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                        }`}
+                                >
+                                    <item.icon className="w-5 h-5" />
+                                    {item.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 ))}
             </nav>
 

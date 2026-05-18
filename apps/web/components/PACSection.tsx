@@ -5,6 +5,7 @@ import { getPACDeclarations, upsertPACDeclaration, estimatePACPayment, getFarmAg
 import { Wand2 } from 'lucide-react';
 import { Save } from 'lucide-react';
 import { TechValue } from './InfoTip';
+import { useUi } from './Toast';
 
 type PAC = Awaited<ReturnType<typeof getPACDeclarations>>[number];
 
@@ -24,6 +25,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
 
 export function PACSection({ farmId }: { farmId: string }) {
+    const ui = useUi();
     const [declarations, setDeclarations] = useState<PAC[]>([]);
     const [activeYear, setActiveYear] = useState(CURRENT_YEAR);
     const [draft, setDraft] = useState<Partial<PAC> | null>(null);
@@ -75,7 +77,7 @@ export function PACSection({ farmId }: { farmId: string }) {
             setNumCows(agg.numNurseCows);
             setNumCalves(agg.numFatteningCalves);
         } catch (e) {
-            alert('No se pudo precargar: ' + (e instanceof Error ? e.message : String(e)));
+            ui.error('No se pudo precargar: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
 
@@ -96,7 +98,7 @@ export function PACSection({ farmId }: { farmId: string }) {
             setEstimate(result);
             setDraft({ ...draft, estimatedPayment: result.total });
         } catch (e) {
-            alert('Error estimando ayudas: ' + (e instanceof Error ? e.message : String(e)));
+            ui.error('Error estimando ayudas: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
 
@@ -105,9 +107,9 @@ export function PACSection({ farmId }: { farmId: string }) {
         try {
             const saved = await upsertPACDeclaration({ ...draft, farmId, campaignYear: activeYear });
             setDeclarations([...declarations.filter((d) => d.campaignYear !== activeYear), saved]);
-            alert('Declaración PAC guardada');
+            ui.success('Declaración PAC guardada');
         } catch (e) {
-            alert('Error guardando: ' + (e instanceof Error ? e.message : String(e)));
+            ui.error('Error guardando: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
 

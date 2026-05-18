@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import { useStorage } from '@/context/StorageContext';
-import { User, Shield, Briefcase, Phone, Calendar, Trash2, Edit2, Search, Plus, Save, X } from 'lucide-react';
+import { User, Shield, Briefcase, Phone, Calendar, Trash2, Edit2, Search, Plus, Save, X, CheckCircle2, Ban } from 'lucide-react';
 import { getUsers, createUser, updateUserStatus, updateUserProfile, deleteUser } from '@/app/lib/user-actions';
+import { useUi } from '@/components/Toast';
 
 type UserRole = 'ADMIN' | 'VET' | 'WORKER' | 'USER';
 
@@ -71,6 +72,7 @@ function getErrorMessage(e: unknown): string {
 
 export function UsersManager({ userId, currentUserRole }: { userId?: string, currentUserRole?: string }) {
     const { read } = useStorage();
+    const ui = useUi();
     const [users, setUsers] = useState<FullUser[]>([]);
     const [, setLoading] = useState(true);
 
@@ -104,7 +106,10 @@ export function UsersManager({ userId, currentUserRole }: { userId?: string, cur
     });
 
     const handleSave = async () => {
-        if (!formData.name || !formData.email) return alert("Usuario y Email son obligatorios");
+        if (!formData.name || !formData.email) {
+            ui.warning("Usuario y email son obligatorios");
+            return;
+        }
 
         try {
             if (isCreating) {
@@ -119,6 +124,7 @@ export function UsersManager({ userId, currentUserRole }: { userId?: string, cur
                     permissions: formData.permissions,
                 });
                 setUsers([toFullUser(created as RawDbUser), ...users]);
+                ui.success("Usuario creado");
             } else if (editingUser) {
                 await updateUserProfile(editingUser.id, {
                     role: formData.role,
@@ -133,12 +139,13 @@ export function UsersManager({ userId, currentUserRole }: { userId?: string, cur
                 });
                 // Update local state optimistic
                 setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...formData } as FullUser : u));
+                ui.success("Usuario actualizado");
             }
             setEditingUser(null);
             setIsCreating(false);
             setFormData({ role: 'WORKER', jobTitle: 'Peón Ganadero', permissions: ['farms', 'animals', 'events', 'calculator'] });
         } catch (e: unknown) {
-            alert("Error: " + getErrorMessage(e));
+            ui.error("Error: " + getErrorMessage(e));
         }
     };
 
@@ -148,7 +155,7 @@ export function UsersManager({ userId, currentUserRole }: { userId?: string, cur
             await updateUserStatus(id, !currentStatus);
             setUsers(users.map(u => u.id === id ? { ...u, approved: !currentStatus } : u));
         } catch (e: unknown) {
-            alert("Error al actualizar estado: " + getErrorMessage(e));
+            ui.error("Error al actualizar estado: " + getErrorMessage(e));
         }
     };
 
@@ -166,14 +173,23 @@ export function UsersManager({ userId, currentUserRole }: { userId?: string, cur
 
     const handleDelete = async (user: FullUser) => {
         if (!userId) return;
-        if (user.name === sessionUser) return alert("No puedes eliminar tu propio usuario");
-        if (confirm(`¿Eliminar usuario ${user.name}?`)) {
-            try {
-                await deleteUser(user.id);
-                setUsers(users.filter(u => u.id !== user.id));
-            } catch (e: unknown) {
-                alert("Error eliminando: " + getErrorMessage(e));
-            }
+        if (user.name === sessionUser) {
+            ui.error("No puedes eliminar tu propio usuario");
+            return;
+        }
+        const ok = await ui.confirm({
+            title: 'Eliminar usuario',
+            message: `¿Eliminar el usuario ${user.name}?`,
+            tone: 'danger',
+            confirmLabel: 'Eliminar',
+        });
+        if (!ok) return;
+        try {
+            await deleteUser(user.id);
+            setUsers(users.filter(u => u.id !== user.id));
+            ui.success("Usuario eliminado");
+        } catch (e: unknown) {
+            ui.error("Error eliminando: " + getErrorMessage(e));
         }
     };
 
@@ -475,12 +491,12 @@ export function UsersManager({ userId, currentUserRole }: { userId?: string, cur
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             {user.approved ? (
-                                                <span className="inline-flex items-center gap-1 text-green-700 font-semibold text-xs bg-green-50 px-2 py-1 rounded-md border border-green-100">
-                                                    ✅ Autorizado
+                                                <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold text-xs bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">
+                                                    <CheckCircle2 className="w-3.5 h-3.5" /> Autorizado
                                                 </span>
                                             ) : (
                                                 <span className="inline-flex items-center gap-1 text-orange-600 font-semibold text-xs bg-orange-50 px-2 py-1 rounded-md border border-orange-100">
-                                                    🚫 Bloqueado
+                                                    <Ban className="w-3.5 h-3.5" /> Bloqueado
                                                 </span>
                                             )}
                                         </td>

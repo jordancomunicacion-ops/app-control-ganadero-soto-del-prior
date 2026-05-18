@@ -8,6 +8,8 @@ import { BreedManager } from '@/services/breedManager';
 import type { AnimalLike } from '@/types/livestock';
 
 import { Breed } from '@/services/breedManager';
+import { useUi } from '@/components/Toast';
+import { Save, Trash2, Dna, Globe, AlertTriangle, Ban, CheckCircle2, FlaskConical } from 'lucide-react';
 
 interface DietComposerProps {
     animal: AnimalLike;
@@ -32,6 +34,7 @@ interface RationItem {
 }
 
 export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: DietComposerProps) {
+    const ui = useUi();
     // --- State ---
     const [ration, setRation] = useState<RationItem[]>([]);
     const [availableFeeds, _setAvailableFeeds] = useState<FeedItem[]>(FEED_DATABASE);
@@ -241,8 +244,8 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
             <div className="bg-gray-900 text-white p-4 flex justify-between items-center">
                 <div>
                     <h3 className="font-bold text-lg flex items-center gap-2">
-                        🧪 Compositor de Dieta Científica
-                        {synergies.length > 0 && <span className="bg-yellow-500 text-black text-xs px-2 py-0.5 rounded font-black animate-pulse">SINERGIA ACTIVA</span>}
+                        <FlaskConical className="w-5 h-5" /> Compositor de dieta científica
+                        {synergies.length > 0 && <span className="bg-amber-400 text-amber-950 text-xs px-2 py-0.5 rounded font-black animate-pulse">SINERGIA ACTIVA</span>}
                     </h3>
                     <p className="text-gray-400 text-xs">{animal.breed} • {animal.weight}kg • {animal.sex}</p>
                 </div>
@@ -346,8 +349,9 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
                                     <button
                                         onClick={() => removeFeed(item.id)}
                                         className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        aria-label="Eliminar ingrediente"
                                     >
-                                        🗑️
+                                        <Trash2 className="w-4 h-4" />
                                     </button>
                                 </div>
                             </div>
@@ -366,9 +370,11 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
                     {/* 1. Alerts Section */}
                     <div className="p-4 space-y-2">
                         {alerts.map((alert, i) => (
-                            <div key={i} className={`p-3 rounded-lg border text-sm flex items-start gap-3 ${alert.level === 'critical' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-yellow-50 border-yellow-200 text-yellow-800'
+                            <div key={i} className={`p-3 rounded-lg border text-sm flex items-start gap-3 ${alert.level === 'critical' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-800'
                                 }`}>
-                                <span className="text-xl">{alert.level === 'critical' ? '⛔' : '⚠️'}</span>
+                                {alert.level === 'critical'
+                                    ? <Ban className="w-5 h-5 shrink-0 mt-0.5" />
+                                    : <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />}
                                 <div>
                                     <div className="font-bold">{alert.message}</div>
                                     {alert.action && <div className="text-xs mt-1 opacity-80 font-medium">Recomendación: {alert.action}</div>}
@@ -381,13 +387,16 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
                                 : syn.confidence === 'moderate' ? 'bg-indigo-50 border border-indigo-200 text-indigo-900'
                                 : 'bg-amber-50 border border-amber-200 text-amber-900'
                             }`}>
-                                <span className="text-xl">🧬</span>
+                                <Dna className="w-5 h-5 shrink-0 mt-0.5" />
                                 <div className="flex-1 min-w-0">
                                     <div className="font-bold flex items-center gap-2">
                                         {syn.name.replace(/_/g, ' ')}
                                         {syn.confidence && (
-                                            <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full bg-white/60">
-                                                {syn.confidence === 'high' ? '✓ probado' : syn.confidence === 'moderate' ? '~ moderado' : '? no validado'}
+                                            <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full bg-white/60 inline-flex items-center gap-1">
+                                                {syn.confidence === 'high'
+                                                    ? <><CheckCircle2 className="w-3 h-3" /> probado</>
+                                                    : syn.confidence === 'moderate' ? 'moderado'
+                                                    : 'no validado'}
                                             </span>
                                         )}
                                     </div>
@@ -467,7 +476,7 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
                     {stats?.env && (
                         <div className={`p-4 border-t ${stats.env.is_critical ? 'bg-red-50' : 'bg-green-50'}`}>
                             <h4 className="text-xs font-bold uppercase mb-2 flex items-center gap-2">
-                                <span className="text-lg">🌍</span> Impacto Ambiental
+                                <Globe className="w-4 h-4 text-emerald-700" /> Impacto ambiental
                             </h4>
                             <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div>
@@ -496,9 +505,9 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
                 </button>
                 <button
                     className="px-6 py-2 bg-gray-900 text-white rounded-lg text-sm font-bold hover:bg-black transition-colors shadow-lg flex items-center gap-2"
-                    onClick={() => alert("Guardado en historial (Simulado)")}
+                    onClick={() => ui.info("Guardado en historial (simulado)")}
                 >
-                    💾 Guardar Dieta
+                    <Save className="w-4 h-4" /> Guardar dieta
                 </button>
             </div>
         </div>
