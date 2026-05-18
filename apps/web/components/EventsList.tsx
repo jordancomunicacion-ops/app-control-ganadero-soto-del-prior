@@ -8,6 +8,8 @@ import { getFarms } from '@/app/lib/farm-actions';
 import { getAnimals } from '@/app/lib/animal-actions';
 import { glossary } from '@/lib/glossary';
 import type { AnimalLike, FarmLike, LivestockEvent } from '@/types/livestock';
+import { useUi } from '@/components/Toast';
+import { Bell, Plus, Calendar, PlusCircle } from 'lucide-react';
 
 // Mapeo de tipo de evento (visible en el dropdown) → clave del glosario.
 const EVENT_TYPE_GLOSSARY: Record<string, string> = {
@@ -32,6 +34,7 @@ const EVENT_TYPES = {
 
 export function EventsList({ userId }: { userId?: string }) {
     const { read, write } = useStorage();
+    const ui = useUi();
     const [events, setEvents] = useState<LivestockEvent[]>([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
@@ -112,7 +115,7 @@ export function EventsList({ userId }: { userId?: string }) {
 
     const handleCreateEvent = async () => {
         if (!newEvent.notes && !newEvent.type) {
-            alert("Añade al menos una nota o tipo");
+            ui.warning("Añade al menos una nota o tipo");
             return;
         }
 
@@ -180,7 +183,7 @@ export function EventsList({ userId }: { userId?: string }) {
         };
 
         if (!payload.farmId) {
-            alert("Error: No se pudo determinar la finca para este evento.");
+            ui.error("No se pudo determinar la finca para este evento.");
             return;
         }
 
@@ -188,6 +191,7 @@ export function EventsList({ userId }: { userId?: string }) {
             const created = await createEvent(payload);
             setEvents([created as unknown as LivestockEvent, ...events]);
             setShowModal(false);
+            ui.success("Evento registrado");
 
             // Reset form
             setNewEvent({
@@ -209,7 +213,7 @@ export function EventsList({ userId }: { userId?: string }) {
             });
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
-            alert("Error guardando evento: " + msg);
+            ui.error("Error guardando evento: " + msg);
         }
     };
 
@@ -218,7 +222,7 @@ export function EventsList({ userId }: { userId?: string }) {
             {alerts.length > 0 && (
                 <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 animate-in slide-in-from-top-2">
                     <h3 className="text-orange-800 font-bold flex items-center gap-2 text-sm mb-3">
-                        <span className="text-xl">🔔</span> Alertas del Ciclo de Vida
+                        <Bell className="w-5 h-5" /> Alertas del ciclo de vida
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {alerts.map((alert, i) => (
@@ -241,14 +245,14 @@ export function EventsList({ userId }: { userId?: string }) {
             <div className="flex justify-between items-center">
 
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-800">Eventos</h2>
+                    <h2 className="text-2xl font-bold text-gray-900">Eventos</h2>
                     <p className="text-gray-600">Registro histórico de acciones y sucesos</p>
                 </div>
                 <button
                     onClick={() => setShowModal(true)}
                     className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
                 >
-                    <span>+</span> Nuevo Evento
+                    <Plus className="w-4 h-4" /> Nuevo evento
                 </button>
             </div>
 
@@ -451,6 +455,26 @@ export function EventsList({ userId }: { userId?: string }) {
                 </div>
             )}
 
+            {/* Empty state */}
+            {!loading && events.length === 0 && (
+                <div className="bg-white rounded-xl shadow-sm border border-dashed border-gray-300 p-10 text-center">
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-green-50 text-green-600 mb-3">
+                        <Calendar className="w-7 h-7" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-1">Aún no hay eventos registrados</h3>
+                    <p className="text-sm text-gray-600 max-w-md mx-auto mb-5">
+                        Registra saneamientos, pesajes, partos, inseminaciones y movimientos para construir el historial sanitario y reproductivo.
+                    </p>
+                    <button
+                        onClick={() => setShowModal(true)}
+                        className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-5 rounded-lg shadow-sm transition-colors"
+                    >
+                        <PlusCircle className="w-4 h-4" /> Registrar primer evento
+                    </button>
+                </div>
+            )}
+
+            {!(!loading && events.length === 0) && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <table className="w-full text-left">
                     <thead className="bg-gray-50 text-gray-600 font-medium text-sm">
@@ -465,8 +489,6 @@ export function EventsList({ userId }: { userId?: string }) {
                     <tbody className="divide-y divide-gray-100">
                         {loading ? (
                             <tr><td colSpan={5} className="p-8 text-center text-gray-500">Cargando eventos...</td></tr>
-                        ) : events.length === 0 ? (
-                            <tr><td colSpan={5} className="p-8 text-center text-gray-500">No hay eventos recientes.</td></tr>
                         ) : (
                             events.map((e, i) => (
                                 <tr key={i} className="hover:bg-gray-50 transition-colors">
@@ -495,6 +517,7 @@ export function EventsList({ userId }: { userId?: string }) {
                     </tbody>
                 </table>
             </div>
+            )}
 
             {/* Pagination */}
             {totalEvents > PAGE_SIZE && (

@@ -11,6 +11,7 @@ import { WeatherService } from '../services/weatherService';
 import { InfoTip } from '@/components/InfoTip';
 import { glossary } from '@/lib/glossary';
 import type { AnimalLike, LivestockEvent } from '@/types/livestock';
+import { Dna } from 'lucide-react';
 
 
 import { getAnimals } from '@/app/lib/animal-actions';
@@ -776,8 +777,8 @@ export function Calculator({ userId }: { userId?: string }) {
                         </>
                     ) : (
                         <div className="flex flex-col items-center justify-center h-full bg-white rounded-xl border-dashed border-2 border-gray-200 p-12 text-gray-400">
-                            <span className="text-6xl mb-4">🧬</span>
-                            <p className="text-lg font-medium text-gray-500">Simulador de Rendimiento</p>
+                            <Dna className="w-16 h-16 mb-4 text-gray-300" />
+                            <p className="text-lg font-medium text-gray-500">Simulador de rendimiento</p>
                             <p className="text-center text-sm max-w-xs mt-2">Selecciona un animal, configura la dieta y pulsa &ldquo;Simular&rdquo; para ver su potencial.</p>
                         </div>
                     )}

@@ -13,7 +13,7 @@ import {
     type FCRReport,
 } from '@/app/lib/reports-actions';
 import { getFarms } from '@/app/lib/farm-actions';
-import { Download, X, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Download, X, Loader2, ChevronDown, ChevronUp, Coins, LineChart, Dna, AlertTriangle } from 'lucide-react';
 
 type ReportKind = 'economic' | 'reproductive' | 'fcr';
 type FarmOption = { id: string; name: string };
@@ -75,7 +75,8 @@ export function ReportsManager() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <ReportCard
-                    icon="📊"
+                    Icon={Coins}
+                    accent="text-emerald-600 bg-emerald-50"
                     title="Informe Económico"
                     subtitle="Ingresos por ventas y PAC, costes de eventos y mortalidad, valor de inventario."
                     longHelp={glossary('report_economic')?.plain ?? ''}
@@ -83,7 +84,8 @@ export function ReportsManager() {
                 />
 
                 <ReportCard
-                    icon="📈"
+                    Icon={LineChart}
+                    accent="text-sky-600 bg-sky-50"
                     title="Informe de Rendimiento (FCR)"
                     subtitle="GMD por animal a partir de pesajes, ingesta objetivo y eficiencia alimentaria."
                     longHelp={glossary('report_fcr')?.plain ?? ''}
@@ -91,7 +93,8 @@ export function ReportsManager() {
                 />
 
                 <ReportCard
-                    icon="🧬"
+                    Icon={Dna}
+                    accent="text-rose-600 bg-rose-50"
                     title="Informe Reproductivo"
                     subtitle="Tasa de fertilidad, partos, intervalo entre partos y estado sanitario actual."
                     longHelp={glossary('report_reproductive')?.plain ?? ''}
@@ -116,16 +119,23 @@ export function ReportsManager() {
 // Card reutilizable
 // ───────────────────────────────────────────────────────────────────────
 
-function ReportCard({ icon, title, subtitle, longHelp, onClick }: {
-    icon: string; title: string; subtitle: string; longHelp: string; onClick: () => void;
+function ReportCard({ Icon, accent, title, subtitle, longHelp, onClick }: {
+    Icon: React.ComponentType<{ className?: string }>;
+    accent: string;
+    title: string;
+    subtitle: string;
+    longHelp: string;
+    onClick: () => void;
 }) {
     return (
         <button
             onClick={onClick}
             className="text-left bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:border-green-300 hover:shadow-md transition-all group"
         >
-            <span className="text-3xl mb-4 block group-hover:scale-110 transition-transform">{icon}</span>
-            <h3 className="font-bold text-lg text-gray-800 mb-2">{title}</h3>
+            <span className={`mb-4 inline-flex items-center justify-center w-12 h-12 rounded-lg ${accent} group-hover:scale-110 transition-transform`}>
+                <Icon className="w-6 h-6" />
+            </span>
+            <h3 className="font-bold text-lg text-gray-900 mb-2">{title}</h3>
             <p className="text-gray-600 text-sm mb-2">{subtitle}</p>
             {longHelp && (
                 <p className="text-[11px] italic text-gray-400 leading-snug">{longHelp}</p>
@@ -686,7 +696,7 @@ function ReproductiveReportModal({ farms, onClose }: { farms: FarmOption[]; onCl
                                 </p>
                                 <p>Resultado: <strong className={data.sanitary.lastSaneamiento.result.toLowerCase().includes('positiv') ? 'text-red-700' : 'text-green-700'}>{data.sanitary.lastSaneamiento.result}</strong></p>
                                 {data.sanitary.lastSaneamientoDaysAgo && data.sanitary.lastSaneamientoDaysAgo > 365 && (
-                                    <p className="text-amber-700 text-xs italic mt-1">⚠ Más de un año desde el último saneamiento — campaña pendiente.</p>
+                                    <p className="text-amber-700 text-xs italic mt-1 inline-flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Más de un año desde el último saneamiento — campaña pendiente.</p>
                                 )}
                             </div>
                         ) : (

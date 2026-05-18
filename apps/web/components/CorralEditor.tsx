@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { getCorrals, createCorral, updateCorral, deleteCorral } from '@/app/lib/corral-actions';
 import { getCropPlots } from '@/app/lib/crop-actions';
-import { Trash2, Plus, Save } from 'lucide-react';
+import { Trash2, Plus, Save, Wheat, Beef, Droplet, TreePine, Warehouse, Ruler } from 'lucide-react';
 import { TechValue } from './InfoTip';
+import { useUi } from './Toast';
 
 // =============================================================================
 // CORRAL EDITOR
@@ -33,6 +34,7 @@ function emptyCorral(farmId: string): Partial<Corral> & { farmId: string } {
 }
 
 export function CorralEditor({ farmId }: { farmId: string }) {
+    const ui = useUi();
     const [corrals, setCorrals] = useState<Corral[]>([]);
     const [plots, setPlots] = useState<PlotLite[]>([]);
     const [draft, setDraft] = useState<Partial<Corral> | null>(null);
@@ -54,7 +56,7 @@ export function CorralEditor({ farmId }: { farmId: string }) {
 
     const handleSave = async () => {
         if (!draft?.name || !draft.kind) {
-            alert('El corral necesita al menos un nombre y un tipo');
+            ui.warning('El corral necesita al menos un nombre y un tipo');
             return;
         }
         try {
@@ -67,18 +69,26 @@ export function CorralEditor({ farmId }: { farmId: string }) {
             }
             setDraft(null);
             setEditingId(null);
+            ui.success('Corral guardado');
         } catch (e) {
-            alert('Error guardando corral: ' + (e instanceof Error ? e.message : String(e)));
+            ui.error('Error guardando corral: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('¿Eliminar este corral?')) return;
+        const ok = await ui.confirm({
+            title: 'Eliminar corral',
+            message: '¿Eliminar este corral?',
+            tone: 'danger',
+            confirmLabel: 'Eliminar',
+        });
+        if (!ok) return;
         try {
             await deleteCorral(id);
             setCorrals(corrals.filter((c) => c.id !== id));
+            ui.success('Corral eliminado');
         } catch (e) {
-            alert('Error eliminando: ' + (e instanceof Error ? e.message : String(e)));
+            ui.error('Error eliminando: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
 
@@ -116,17 +126,17 @@ export function CorralEditor({ farmId }: { farmId: string }) {
                                     <p className="text-xs text-gray-600">{kindMeta?.label || c.kind}</p>
                                     <p className="text-[11px] italic text-gray-400 mt-0.5">{kindMeta?.explain}</p>
                                     {c.linkedPlot && (
-                                        <p className="text-[11px] text-green-700 mt-1">
-                                            🌾 Pradera vinculada: <strong>{c.linkedPlot.name}</strong> ({c.linkedPlot.surfaceHa} ha)
+                                        <p className="text-[11px] text-green-700 mt-1 inline-flex items-center gap-1">
+                                            <Wheat className="w-3 h-3" /> Pradera vinculada: <strong>{c.linkedPlot.name}</strong> ({c.linkedPlot.surfaceHa} ha)
                                         </p>
                                     )}
                                     <div className="flex flex-wrap gap-2 mt-1 text-[10px] text-gray-500">
-                                        {c.surfaceM2 ? <span>📏 {c.surfaceM2.toLocaleString()} m²</span> : null}
-                                        {c.capacityLU ? <span>🐄 {c.capacityLU} LU</span> : null}
-                                        {c.hasWater ? <span>💧</span> : null}
-                                        {c.hasShade ? <span>🌳</span> : null}
-                                        {c.hasFeeder ? <span>🌾</span> : null}
-                                        {c.hasSilo ? <span>🏗️ silo</span> : null}
+                                        {c.surfaceM2 ? <span className="inline-flex items-center gap-1"><Ruler className="w-3 h-3" /> {c.surfaceM2.toLocaleString()} m²</span> : null}
+                                        {c.capacityLU ? <span className="inline-flex items-center gap-1"><Beef className="w-3 h-3" /> {c.capacityLU} LU</span> : null}
+                                        {c.hasWater ? <span title="Agua"><Droplet className="w-3 h-3 text-sky-500" /></span> : null}
+                                        {c.hasShade ? <span title="Sombra"><TreePine className="w-3 h-3 text-emerald-600" /></span> : null}
+                                        {c.hasFeeder ? <span title="Comedero"><Wheat className="w-3 h-3 text-amber-600" /></span> : null}
+                                        {c.hasSilo ? <span className="inline-flex items-center gap-1"><Warehouse className="w-3 h-3" /> silo</span> : null}
                                     </div>
                                 </div>
                                 <div className="flex gap-1">
@@ -216,19 +226,19 @@ export function CorralEditor({ farmId }: { farmId: string }) {
                     <div className="flex flex-wrap gap-3 text-xs">
                         <label className="flex items-center gap-1.5">
                             <input type="checkbox" checked={!!draft.hasWater} onChange={(e) => setDraft({ ...draft, hasWater: e.target.checked })} />
-                            💧 Agua
+                            <Droplet className="w-3.5 h-3.5 text-sky-500" /> Agua
                         </label>
                         <label className="flex items-center gap-1.5">
                             <input type="checkbox" checked={!!draft.hasShade} onChange={(e) => setDraft({ ...draft, hasShade: e.target.checked })} />
-                            🌳 Sombra
+                            <TreePine className="w-3.5 h-3.5 text-emerald-600" /> Sombra
                         </label>
                         <label className="flex items-center gap-1.5">
                             <input type="checkbox" checked={!!draft.hasFeeder} onChange={(e) => setDraft({ ...draft, hasFeeder: e.target.checked })} />
-                            🌾 Comedero
+                            <Wheat className="w-3.5 h-3.5 text-amber-600" /> Comedero
                         </label>
                         <label className="flex items-center gap-1.5">
                             <input type="checkbox" checked={!!draft.hasSilo} onChange={(e) => setDraft({ ...draft, hasSilo: e.target.checked })} />
-                            🏗️ Silo
+                            <Warehouse className="w-3.5 h-3.5 text-gray-600" /> Silo
                         </label>
                     </div>
                     <div className="flex justify-end gap-2 pt-1">

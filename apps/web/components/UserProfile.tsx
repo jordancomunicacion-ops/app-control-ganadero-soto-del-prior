@@ -4,9 +4,11 @@
 
 import React from 'react';
 import { useStorage } from '@/context/StorageContext';
+import { useUi } from '@/components/Toast';
 
 export function UserProfile() {
     const { read, write } = useStorage();
+    const ui = useUi();
     const sessionUser = read<string>('sessionUser', 'Usuario');
     const [avatar, setAvatar] = React.useState<string | null>(null);
 
@@ -45,8 +47,14 @@ export function UserProfile() {
     const [_showTeamForm, setShowTeamForm] = React.useState(false);
 
     const _handleCreateUser = () => {
-        if (!newUserUser || !newUserPass) return alert("Completa usuario y contraseña");
-        if (users.find(u => u.name === newUserUser)) return alert("El usuario ya existe");
+        if (!newUserUser || !newUserPass) {
+            ui.warning("Completa usuario y contraseña");
+            return;
+        }
+        if (users.find(u => u.name === newUserUser)) {
+            ui.error("El usuario ya existe");
+            return;
+        }
 
         const newUser = {
             name: newUserUser,
@@ -60,7 +68,7 @@ export function UserProfile() {
         setNewUserUser('');
         setNewUserPass('');
         setShowTeamForm(false);
-        alert(`Usuario ${newUserUser} creado correctamente con rol ${newUserRole}`);
+        ui.success(`Usuario ${newUserUser} creado con rol ${newUserRole}`);
     };
 
     return (

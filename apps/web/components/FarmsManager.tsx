@@ -15,6 +15,8 @@ import { PACSection } from '@/components/PACSection';
 import { BreedManager } from '@/services/breedManager';
 import { createFarm, getFarms, updateFarm, deleteFarm } from '@/app/lib/farm-actions';
 import { searchParcel } from '@/app/lib/sigpac-actions';
+import { useUi } from '@/components/Toast';
+import { AlertTriangle, Wheat, MapPin, PlusCircle } from 'lucide-react';
 
 interface Farm {
     id: string;
@@ -45,6 +47,7 @@ interface Farm {
 
 export function FarmsManager({ userId }: { userId?: string }) {
     const { read } = useStorage(); // Keep read for other things if needed, but remove write for farms
+    const ui = useUi();
     const [farms, setFarms] = useState<Farm[]>([]);
     const [showForm, setShowForm] = useState(false);
     const [sessionUser, setSessionUser] = useState('');
@@ -108,29 +111,37 @@ export function FarmsManager({ userId }: { userId?: string }) {
         if (draft) {
             try {
                 const d = JSON.parse(draft);
-                if (confirm("Hemos encontrado datos de una finca que no se guardó. ¿Quieres recuperarlos?")) {
-                    setNewName(d.newName || '');
-                    setProvincia(d.provincia || '10');
-                    setMunicipio(d.municipio || '');
-                    setMunicipioName(d.municipioName || '');
-                    setPoligono(d.poligono || '');
-                    setParcela(d.parcela || '');
-                    setLicense(d.license || '');
-                    setMaxHeads(d.maxHeads || '');
-                    setSoilId(d.soilId || '');
-                    setCorrals(d.corrals || '');
-                    setFeedingSystem(d.feedingSystem || '');
-                    setShowForm(true);
-                } else {
-                    localStorage.removeItem(`farm_draft_${user}`);
-                }
+                ui.confirm({
+                    title: 'Borrador recuperado',
+                    message: 'Hemos encontrado datos de una finca que no se guardó. ¿Quieres recuperarlos?',
+                    confirmLabel: 'Recuperar',
+                    cancelLabel: 'Descartar',
+                }).then((restore) => {
+                    if (cancelled) return;
+                    if (restore) {
+                        setNewName(d.newName || '');
+                        setProvincia(d.provincia || '10');
+                        setMunicipio(d.municipio || '');
+                        setMunicipioName(d.municipioName || '');
+                        setPoligono(d.poligono || '');
+                        setParcela(d.parcela || '');
+                        setLicense(d.license || '');
+                        setMaxHeads(d.maxHeads || '');
+                        setSoilId(d.soilId || '');
+                        setCorrals(d.corrals || '');
+                        setFeedingSystem(d.feedingSystem || '');
+                        setShowForm(true);
+                    } else {
+                        localStorage.removeItem(`farm_draft_${user}`);
+                    }
+                });
             } catch (e) {
                 console.error("Error restoring draft", e);
             }
         }
 
         return () => { cancelled = true; };
-    }, [read, userId]);
+    }, [read, userId, ui]);
 
     // Auto-Save Draft
     useEffect(() => {
@@ -271,7 +282,7 @@ export function FarmsManager({ userId }: { userId?: string }) {
 
     const handleSearchSigpac = async () => {
         if (!municipio || !poligono || !parcela) {
-            alert("Completa los datos de SIGPAC");
+            ui.warning("Completa los datos de SIGPAC");
             return;
         }
         setLoadingSigpac(true);
@@ -301,7 +312,7 @@ export function FarmsManager({ userId }: { userId?: string }) {
                     handleAnalyzeClimate(39.4, -6.0);
                 }
 
-                alert(`✅ Parcela Localizada: ${data.area_ha.toFixed(2)} ha - Uso: ${data.use}`);
+                ui.success(`Parcela localizada: ${data.area_ha.toFixed(2)} ha · Uso: ${data.use}`);
             } else {
                 console.log("SIGPAC: Parcel not found, falling back to municipality coordinates for weather.");
                 // Fallback: If SIGPAC fails, at least get weather for the municipality
@@ -311,14 +322,14 @@ export function FarmsManager({ userId }: { userId?: string }) {
                 const coords = await getCoordinatesForCity(cityQuery);
                 if (coords) {
                     handleAnalyzeClimate(coords.lat, coords.lon);
-                    alert("⚠️ No se encontró la parcela exacta en SIGPAC, pero hemos cargado el clima de tu municipio.");
+                    ui.warning("No se encontró la parcela exacta en SIGPAC. Hemos cargado el clima de tu municipio.");
                 } else {
-                    alert("No se encontró la parcela en SIGPAC ni se pudo determinar la ubicación del municipio.");
+                    ui.error("No se encontró la parcela en SIGPAC ni se pudo localizar el municipio.");
                 }
             }
         } catch (e) {
             console.error(e);
-            alert("Error consultando SIGPAC");
+            ui.error("Error consultando SIGPAC");
         } finally {
             setLoadingSigpac(false);
         }
@@ -336,7 +347,7 @@ export function FarmsManager({ userId }: { userId?: string }) {
             if (climateSource === 'private' && privateApiUrl) {
                 // Mock Private Station Call
                 // In production: await fetch(`${privateApiUrl}?lat=${lat}&lon=${lon}&key=${privateApiKey}`)
-                alert(`Conectando a estación privada en: ${privateApiUrl}... (Simulación)`);
+                ui.info(`Conectando a estación privada en: ${privateApiUrl}... (simulación)`);
                 // Simulate data for now
                 setClimateData({ avgTemp: 16.5, classification: 'Clima Local (Estación)', annualPrecip: 550 });
             } else {
@@ -374,15 +385,24 @@ export function FarmsManager({ userId }: { userId?: string }) {
 
     const [selectedFarm, setSelectedFarm] = useState<Farm | null>(null);
 
-    const handleDeleteFarm = (id: string) => {
-        if (confirm("¿Estás seguro de que quieres eliminar esta finca? Esta acción no se puede deshacer.")) {
-            if (userId) {
-                deleteFarm(id, userId).then(() => {
-                    setFarms(farms.filter(f => f.id !== id));
-                });
+    const handleDeleteFarm = async (id: string) => {
+        const ok = await ui.confirm({
+            title: 'Eliminar finca',
+            message: '¿Eliminar esta finca? Esta acción no se puede deshacer.',
+            tone: 'danger',
+            confirmLabel: 'Eliminar',
+        });
+        if (!ok) return;
+        if (userId) {
+            try {
+                await deleteFarm(id, userId);
+                setFarms(farms.filter(f => f.id !== id));
+                ui.success('Finca eliminada');
+            } catch (e) {
+                ui.error('Error eliminando finca: ' + (e instanceof Error ? e.message : String(e)));
             }
-            setSelectedFarm(null);
         }
+        setSelectedFarm(null);
     };
 
     const handleEditFarm = (farm: Farm) => {
@@ -424,7 +444,7 @@ export function FarmsManager({ userId }: { userId?: string }) {
 
         if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors);
-            alert("Por favor, completa todos los campos obligatorios marcados en rojo.");
+            ui.warning("Completa los campos obligatorios marcados en rojo.");
             return;
         }
 
@@ -521,7 +541,7 @@ export function FarmsManager({ userId }: { userId?: string }) {
         // Clear Draft
         localStorage.removeItem(`farm_draft_${sessionUser}`);
 
-        alert(editingId ? "✅ Finca actualizada correctamente" : "✅ Finca guardada correctamente");
+        ui.success(editingId ? "Finca actualizada correctamente" : "Finca guardada correctamente");
     };
 
     // Capacity Logic Helper
@@ -719,7 +739,7 @@ export function FarmsManager({ userId }: { userId?: string }) {
                                             {soil.typical_mineral_deficiencies && soil.typical_mineral_deficiencies.length > 0 && (
                                                 <div className="pt-1 border-t border-green-200">
                                                     <div className="flex justify-between text-xs">
-                                                        <span className="text-amber-700 font-bold">⚠ Suplementar</span>
+                                                        <span className="text-amber-700 font-bold inline-flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Suplementar</span>
                                                         <span className="font-bold text-amber-700">{soil.typical_mineral_deficiencies.join(', ')}</span>
                                                     </div>
                                                     <p className="text-[11px] italic text-gray-400 mt-0.5">
@@ -728,8 +748,8 @@ export function FarmsManager({ userId }: { userId?: string }) {
                                                 </div>
                                             )}
                                             {soil.hoof_damage_risk === 'alto' && (
-                                                <p className="text-[11px] text-orange-700 italic pt-1">
-                                                    ⚠ <strong>Riesgo pezuña alto:</strong> rota parcelas en lluvia para evitar daños.
+                                                <p className="text-[11px] text-orange-700 italic pt-1 inline-flex items-start gap-1">
+                                                    <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" /> <span><strong>Riesgo pezuña alto:</strong> rota parcelas en lluvia para evitar daños.</span>
                                                 </p>
                                             )}
                                         </div>
@@ -1132,8 +1152,42 @@ export function FarmsManager({ userId }: { userId?: string }) {
                 )
             }
 
+            {/* Empty state */}
+            {!showForm && farms.length === 0 && (
+                <div className="bg-white rounded-xl shadow-sm border border-dashed border-gray-300 p-10 text-center">
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-green-50 text-green-600 mb-3">
+                        <MapPin className="w-7 h-7" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-1">Aún no tienes fincas registradas</h3>
+                    <p className="text-sm text-gray-600 max-w-md mx-auto mb-5">
+                        Registra tu primera finca para empezar a gestionar parcelas SIGPAC, suelo, ganado y declaraciones PAC.
+                    </p>
+                    <button
+                        onClick={() => {
+                            setEditingId(null);
+                            setNewName('');
+                            setLicense('');
+                            setMaxHeads('');
+                            setSoilId('');
+                            setCorrals('');
+                            setCorralNames([]);
+                            setFeedingSystem('');
+                            setFarmType('');
+                            setPurpose('');
+                            setParentFarmId('');
+                            setClimateData(null);
+                            setRecommendations({ crops: [], breeds: [] });
+                            setShowForm(true);
+                        }}
+                        className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-5 rounded-lg shadow-sm transition-colors"
+                    >
+                        <PlusCircle className="w-4 h-4" /> Crear primera finca
+                    </button>
+                </div>
+            )}
+
             {/* List — agrupado por jerarquía: cada finca principal seguida de sus fincas asociadas */}
-            {(() => {
+            {farms.length > 0 && (() => {
                 type FarmWithHierarchy = Farm & { parentFarmId?: string | null };
                 const farmsTyped = farms as FarmWithHierarchy[];
                 const principals = farmsTyped.filter((f) => !f.parentFarmId);
@@ -1157,8 +1211,8 @@ export function FarmsManager({ userId }: { userId?: string }) {
                             <div className="flex justify-between items-start mb-2">
                                 <div>
                                     {isChild && (
-                                        <span className="inline-block text-[10px] uppercase font-bold tracking-wider bg-amber-100 text-amber-700 px-2 py-0.5 rounded mb-1">
-                                            🌾 Finca de producción asociada
+                                        <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider bg-amber-100 text-amber-700 px-2 py-0.5 rounded mb-1">
+                                            <Wheat className="w-3 h-3" /> Finca de producción asociada
                                         </span>
                                     )}
                                     <h3 className="text-xl font-bold text-gray-800 group-hover:text-green-700 transition-colors">{f.name}</h3>
@@ -1224,8 +1278,8 @@ export function FarmsManager({ userId }: { userId?: string }) {
                                     </div>
                                     {kids.length > 0 && (
                                         <div className="pl-4 border-l-2 border-amber-200 ml-2">
-                                            <p className="text-[11px] font-bold uppercase text-amber-700 tracking-wide mb-2">
-                                                🌾 Fincas de producción asociadas a «{principal.name}»
+                                            <p className="text-[11px] font-bold uppercase text-amber-700 tracking-wide mb-2 inline-flex items-center gap-1">
+                                                <Wheat className="w-3 h-3" /> Fincas de producción asociadas a «{principal.name}»
                                             </p>
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                 {kids.map((k) => renderFarmCard(k, true))}

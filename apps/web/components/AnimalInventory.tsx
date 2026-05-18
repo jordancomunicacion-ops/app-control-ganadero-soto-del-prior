@@ -11,12 +11,54 @@ import { useStorage } from '@/context/StorageContext';
 import { BreedManager } from '@/services/breedManager';
 import { DietComposer } from './DietComposer';
 import { NutritionEngine } from '@/services/nutritionEngine';
+import { useUi } from '@/components/Toast';
 
 import { createAnimal, getAnimals } from '@/app/lib/animal-actions';
 import { getFarms } from '@/app/lib/farm-actions';
+import { ArrowDownToLine, ArrowUpFromLine, Beef, ChevronRight, FlaskConical, PlusCircle, Printer, Scale, Wheat } from 'lucide-react';
 
 export function AnimalInventory({ userId }: { userId?: string }) {
     const { read, write } = useStorage(); // Keep read for other things/legacy logic if needed
+    const ui = useUi();
+
+    // Edad compacta para la tabla: "2a 3m" o "4m" o "8d".
+    const calculateAgeShort = (birthDateStr: string) => {
+        if (!birthDateStr) return '—';
+        const birth = new Date(birthDateStr);
+        const now = new Date();
+        const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+        if (months >= 24) {
+            const years = Math.floor(months / 12);
+            const rem = months % 12;
+            return rem ? `${years}a ${rem}m` : `${years}a`;
+        }
+        if (months >= 1) return `${months}m`;
+        const days = Math.max(0, Math.floor((now.getTime() - birth.getTime()) / 86400000));
+        return `${days}d`;
+    };
+
+    // Categoría derivada — replica la lógica de calculateAnimalStats para
+    // los animales que aún no tienen 'category' persistida.
+    const deriveCategory = (a: any): string => {
+        if (a.category && a.category !== 'Sin Clasificar') return a.category;
+        const birth = new Date((a.birth ?? a.birthDate) as string | Date | number);
+        if (Number.isNaN(birth.getTime())) return '—';
+        const ageMonths = (Date.now() - birth.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+        if (a.sex === 'Castrado') return 'Buey';
+        if (a.sex === 'Macho') {
+            if (ageMonths < 6) return 'Becerro';
+            if (ageMonths < 12) return 'Ternero';
+            if (ageMonths < 24) return 'Añojo';
+            if (ageMonths < 36) return 'Novillo';
+            if (ageMonths < 48) return 'Utrero';
+            return 'Toro';
+        }
+        if (ageMonths < 6) return 'Becerra';
+        if (ageMonths < 12) return 'Ternera';
+        if (ageMonths < 24) return 'Añoja';
+        if (ageMonths < 36) return 'Novilla';
+        return 'Vaca';
+    };
 
     // Helper for Detailed Age
     const calculateAgeDetailed = (birthDateStr: string) => {
@@ -234,20 +276,20 @@ export function AnimalInventory({ userId }: { userId?: string }) {
     const handleSaveAnimal = (e: React.FormEvent) => {
         e.preventDefault();
         if (!newAnimal.id || !newAnimal.farm || !newAnimal.sex || !newAnimal.breed) {
-            alert("Por favor completa los campos obligatorios");
+            ui.warning("Completa los campos obligatorios");
             return;
         }
 
         // Check duplicate ID (local check + DB check will happen on create)
         if (animals.find(a => a.id === newAnimal.id)) {
-            alert("Ya existe un animal con ese Crotal (en vista actual)");
+            ui.error("Ya existe un animal con ese crotal en la vista actual");
             return;
         }
 
         // Find farm ID
         const selectedFarmObj = farms.find(f => f.name === newAnimal.farm);
         if (!selectedFarmObj) {
-            alert("Finca no válida");
+            ui.error("Finca no válida");
             return;
         }
 
@@ -262,7 +304,8 @@ export function AnimalInventory({ userId }: { userId?: string }) {
         if (userId) {
             createAnimal(animalEntry).then(created => {
                 setAnimals([created as any, ...animals]);
-            }).catch(err => alert("Error guardando animal: " + err.message));
+                ui.success("Animal registrado");
+            }).catch(err => ui.error("Error guardando animal: " + err.message));
         }
 
         setShowForm(false);
@@ -328,9 +371,11 @@ export function AnimalInventory({ userId }: { userId?: string }) {
                 const updated = [...animals, ...newAnimals];
                 setAnimals(updated);
                 write(`animals_${sessionUser}`, updated);
-                alert(`Importados ${newAnimals.length} animales.${errorCount > 0 ? `(${errorCount} errores)` : ''} `);
+                const msg = `Importados ${newAnimals.length} animales${errorCount > 0 ? ` (${errorCount} con errores)` : ''}`;
+                if (errorCount > 0) ui.warning(msg);
+                else ui.success(msg);
             } else {
-                alert("No se pudieron importar animales. Verifica el formato del CSV.");
+                ui.error("No se pudieron importar animales. Verifica el formato del CSV.");
             }
         };
         reader.readAsText(file);
@@ -410,12 +455,12 @@ export function AnimalInventory({ userId }: { userId?: string }) {
                 <div className="flex gap-2">
                     <button
                         onClick={handleDownloadCSV}
-                        className="bg-green-50 text-green-700 hover:bg-green-100 font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+                        className="bg-green-50 text-green-700 hover:bg-green-100 font-medium py-2 px-4 rounded-lg transition-colors text-sm inline-flex items-center gap-2"
                     >
-                        ⬇ Plantilla CSV
+                        <ArrowDownToLine className="w-4 h-4" /> Plantilla CSV
                     </button>
-                    <label className="bg-green-50 text-green-700 hover:bg-green-100 font-medium py-2 px-4 rounded-lg transition-colors cursor-pointer text-sm flex items-center">
-                        ⬆ Cargar CSV
+                    <label className="bg-green-50 text-green-700 hover:bg-green-100 font-medium py-2 px-4 rounded-lg transition-colors cursor-pointer text-sm flex items-center gap-2">
+                        <ArrowUpFromLine className="w-4 h-4" /> Cargar CSV
                         <input type="file" accept=".csv" onChange={handleImportCSV} className="hidden" />
                     </label>
 
@@ -563,37 +608,96 @@ export function AnimalInventory({ userId }: { userId?: string }) {
                 </div>
             )}
 
+            {/* Empty state — sin animales en absoluto y sin filtro */}
+            {!showForm && animals.length === 0 && !searchTerm && !showArchived && (
+                <div className="bg-white rounded-xl shadow-sm border border-dashed border-gray-300 p-10 text-center">
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-green-50 text-green-600 mb-3">
+                        <Beef className="w-7 h-7" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-1">Aún no tienes animales registrados</h3>
+                    <p className="text-sm text-gray-600 max-w-md mx-auto mb-5">
+                        Registra animales uno a uno o importa un CSV con la plantilla. Cada animal queda vinculado a una finca y un corral.
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                        <button
+                            onClick={() => setShowForm(true)}
+                            className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-5 rounded-lg shadow-sm transition-colors"
+                        >
+                            <PlusCircle className="w-4 h-4" /> Registrar primer animal
+                        </button>
+                        <button
+                            onClick={handleDownloadCSV}
+                            className="inline-flex items-center gap-2 bg-green-50 text-green-700 hover:bg-green-100 font-medium py-2 px-5 rounded-lg transition-colors"
+                        >
+                            <ArrowDownToLine className="w-4 h-4" /> Descargar plantilla CSV
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* List */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <table className="w-full text-left">
-                    <thead className="bg-gray-50 text-gray-600 font-medium text-sm">
+            {!(animals.length === 0 && !searchTerm && !showArchived) && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
                         <tr>
-                            <th className="p-4 w-1/3">Crotal</th>
-                            <th className="p-4 w-1/3">Sexo</th>
-                            <th className="p-4 w-1/3">Finca</th>
+                            <th className="px-4 py-3">Crotal</th>
+                            <th className="px-4 py-3 hidden sm:table-cell">Sexo</th>
+                            <th className="px-4 py-3">Categoría</th>
+                            <th className="px-4 py-3 text-right hidden md:table-cell">Edad</th>
+                            <th className="px-4 py-3 text-right hidden md:table-cell">Peso</th>
+                            <th className="px-4 py-3 hidden lg:table-cell">Finca</th>
+                            <th className="px-4 py-3 text-right">Estado</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {filteredAnimals.length === 0 ? (
-                            <tr><td colSpan={3} className="p-8 text-center text-gray-500">No hay animales que coincidan.</td></tr>
+                            <tr><td colSpan={7} className="p-8 text-center text-gray-500">No hay animales que coincidan.</td></tr>
                         ) : (
                             filteredAnimals.map((a, i) => {
+                                const isFemale = a.sex === 'Hembra';
+                                const isOx = a.sex === 'Castrado';
+                                const sexAccent = isFemale ? 'text-rose-600' : isOx ? 'text-amber-700' : 'text-sky-700';
+                                const weight = a.currentWeight ?? a.weight;
+                                const statusRaw = (a.status || 'Activo').toString();
+                                const statusKey = statusRaw.toLowerCase();
+                                const isActive = !a.status || statusKey === 'activo';
+                                const statusClass = isActive
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                    : ['muerto', 'sacrificado', 'baja', 'retirado', 'inactivo'].includes(statusKey)
+                                        ? 'bg-gray-100 text-gray-600 border-gray-200'
+                                        : statusKey === 'vendido'
+                                            ? 'bg-sky-50 text-sky-700 border-sky-100'
+                                            : 'bg-amber-50 text-amber-700 border-amber-100';
                                 return (
                                     <tr key={i}
                                         onClick={() => setSelectedAnimal(a)}
-                                        className="hover:bg-green-50 transition-colors cursor-pointer group"
+                                        className="hover:bg-green-50 transition-colors cursor-pointer"
                                     >
-                                        <td className="p-4">
+                                        <td className="px-4 py-3">
                                             <div className="flex flex-col">
                                                 {formatCrotal(a.id)}
+                                                {a.breed && <span className="text-[11px] text-gray-400 mt-0.5">{a.breed}</span>}
                                             </div>
                                         </td>
-                                        <td className="p-4 text-gray-600">{a.sex}</td>
-                                        <td className="p-4 text-gray-600">
-                                            <div className="flex flex-col text-sm">
-                                                <span>{a.farm}</span>
-                                                {a.corral && <span className="text-xs text-green-600 font-medium">➜ {a.corral}</span>}
+                                        <td className={`px-4 py-3 hidden sm:table-cell font-medium ${sexAccent}`}>{a.sex || '—'}</td>
+                                        <td className="px-4 py-3 text-gray-700">{deriveCategory(a)}</td>
+                                        <td className="px-4 py-3 text-right text-gray-600 hidden md:table-cell tabular-nums">
+                                            {calculateAgeShort(a.birth || a.birthDate)}
+                                        </td>
+                                        <td className="px-4 py-3 text-right text-gray-700 hidden md:table-cell tabular-nums">
+                                            {weight ? <><span className="font-medium">{Math.round(Number(weight))}</span><span className="text-gray-400 text-xs"> kg</span></> : '—'}
+                                        </td>
+                                        <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">
+                                            <div className="flex flex-col">
+                                                <span className="truncate max-w-[14ch]">{a.farm || '—'}</span>
+                                                {a.corral && <span className="text-xs text-green-700 font-medium inline-flex items-center gap-1"><ChevronRight className="w-3 h-3" /> {a.corral}</span>}
                                             </div>
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                            <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full border ${statusClass}`}>
+                                                {isActive ? 'Activo' : statusRaw.charAt(0).toUpperCase() + statusRaw.slice(1).toLowerCase()}
+                                            </span>
                                         </td>
                                     </tr>
                                 )
@@ -602,6 +706,7 @@ export function AnimalInventory({ userId }: { userId?: string }) {
                     </tbody>
                 </table>
             </div>
+            )}
 
             {/* Pagination */}
             {totalAnimals > PAGE_SIZE && (
@@ -678,13 +783,13 @@ export function AnimalInventory({ userId }: { userId?: string }) {
                                     <div className="flex gap-2 z-10 items-center">
                                         <button
                                             onClick={() => setShowDiet(true)}
-                                            className="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 px-4 py-2 rounded-lg font-bold text-sm shadow-lg transform hover:scale-105 transition-all flex items-center gap-2"
-                                            title="Simular Dieta Científica"
+                                            className="bg-amber-400 hover:bg-amber-300 text-amber-900 px-4 py-2 rounded-lg font-bold text-sm shadow-lg transform hover:scale-105 transition-all flex items-center gap-2"
+                                            title="Simular dieta científica"
                                         >
-                                            🧪 Crear Dieta
+                                            <FlaskConical className="w-4 h-4" /> Crear dieta
                                         </button>
-                                        <button onClick={() => window.print()} className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-lg backdrop-blur-sm transition-colors" title="Imprimir Ficha">
-                                            🖨️
+                                        <button onClick={() => window.print()} className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-lg backdrop-blur-sm transition-colors" title="Imprimir ficha" aria-label="Imprimir ficha">
+                                            <Printer className="w-5 h-5" />
                                         </button>
                                         <button onClick={() => { setSelectedAnimal(null); setShowDiet(false); }} className="text-white hover:text-green-200 text-3xl leading-none">&times;</button>
                                     </div>
@@ -701,7 +806,7 @@ export function AnimalInventory({ userId }: { userId?: string }) {
                                                 <span className="text-base font-medium text-gray-500">kg</span>
                                             </div>
                                             <p className="text-xs text-green-700 mt-1 flex items-center gap-1">
-                                                <span>⚖️</span> Último pesaje verificado
+                                                <Scale className="w-3.5 h-3.5" /> Último pesaje verificado
                                             </p>
                                         </div>
                                         <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
@@ -718,7 +823,7 @@ export function AnimalInventory({ userId }: { userId?: string }) {
                                     {/* Strategy */}
                                     <div className="bg-gray-50 rounded-xl border border-gray-100 p-4">
                                         <h4 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
-                                            <span>🌾</span> Estrategia Nutricional
+                                            <Wheat className="w-4 h-4 text-amber-600" /> Estrategia nutricional
                                         </h4>
                                         {(() => {
                                             const diet = getDietStatus(selectedAnimal);

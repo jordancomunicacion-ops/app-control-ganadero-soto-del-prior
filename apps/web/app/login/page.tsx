@@ -1,15 +1,17 @@
 'use client';
 
-import { useActionState, useEffect } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { authenticate } from '@/app/lib/actions';
 import Link from 'next/link';
 import Image from 'next/image';
+import { AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export default function Page() {
     const [state, formAction, isPending] = useActionState(
         authenticate,
         undefined,
     );
+    const [showPassword, setShowPassword] = useState(false);
 
     // Client-side redirect on success
     useEffect(() => {
@@ -21,12 +23,11 @@ export default function Page() {
     const errorMessage = typeof state === 'string' ? state : null;
 
     return (
-        <div className="flex h-screen items-center justify-center bg-gray-50">
-            <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-md">
+        <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+            <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-md border border-gray-100">
                 <div className="flex justify-center mb-6">
                     <Image src="/logo-icon.png" alt="SOTO DEL PRIOR" width={96} height={96} priority className="h-24 w-auto" />
                 </div>
-                {/* Visual harmonization: No extra text here */}
 
                 <form action={formAction} className="space-y-4">
                     <div>
@@ -37,7 +38,7 @@ export default function Page() {
                             Email
                         </label>
                         <input
-                            className="block w-full rounded-md border border-gray-300 px-3 py-2 placeholder-gray-400 shadow-sm focus:border-green-500 focus:outline-none focus:ring-green-500 sm:text-sm"
+                            className="block w-full rounded-md border border-gray-300 px-3 py-2 placeholder-gray-400 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 sm:text-sm"
                             id="email"
                             type="email"
                             name="email"
@@ -53,47 +54,45 @@ export default function Page() {
                         >
                             Contraseña
                         </label>
-                        <input
-                            className="block w-full rounded-md border border-gray-300 px-3 py-2 placeholder-gray-400 shadow-sm focus:border-green-500 focus:outline-none focus:ring-green-500 sm:text-sm"
-                            id="password"
-                            type="password"
-                            name="password"
-                            placeholder="********"
-                            required
-                            minLength={6}
-                            autoComplete="current-password"
-                        />
-                    </div>
-                    <div
-                        className="flex items-end space-x-1"
-                        aria-live="polite"
-                        aria-atomic="true"
-                    >
-                        {errorMessage && (
-                            <p className="text-sm text-red-500">{errorMessage}</p>
-                        )}
-                    </div>
-
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center">
+                        <div className="relative">
                             <input
-                                id="remember-me"
-                                name="remember-me"
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                className="block w-full rounded-md border border-gray-300 px-3 py-2 pr-10 placeholder-gray-400 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 sm:text-sm"
+                                id="password"
+                                type={showPassword ? 'text' : 'password'}
+                                name="password"
+                                placeholder="********"
+                                required
+                                minLength={6}
+                                autoComplete="current-password"
                             />
-                            <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                                Recuérdame
-                            </label>
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword((v) => !v)}
+                                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                                className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-700"
+                            >
+                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
                         </div>
                     </div>
+
+                    {errorMessage && (
+                        <div
+                            role="alert"
+                            aria-live="polite"
+                            className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                        >
+                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                            <span>{errorMessage}</span>
+                        </div>
+                    )}
 
                     <button
                         className="flex w-full justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50"
                         aria-disabled={isPending}
                         disabled={isPending}
                     >
-                        Iniciar Sesión
+                        {isPending ? 'Entrando…' : 'Iniciar sesión'}
                     </button>
 
                     <div className="text-center text-sm mt-4 space-y-2">
