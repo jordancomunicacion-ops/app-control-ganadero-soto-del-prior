@@ -84,12 +84,26 @@ export const BreedManager = {
         if (!sire || !dam) return null;
 
         // --- 1. GENETIC DISTANCE HETEROSIS ---
+        // Calibrated against Cundiff/USMARC weaning-weight heterosis estimates
+        // (Williams et al., USDA ARS): British × British 6.43 kg, British ×
+        // Continental 8.65 kg, Continental × Continental 5.86 kg — i.e. 2.6 %,
+        // 3.5 %, 2.3 % of mean WW (~250 kg). Loyola et al. 2020 add taurus ×
+        // indicus at ~10 % of WW (21.9 kg, P<0.001).
         const typeGroups = { 'British': 1, 'Continental': 2, 'Rustic_European': 3, 'Dairy': 4, 'Indicus': 5, 'Composite': 3 };
         const sireG = typeGroups[sire.biological_type] || 3;
         const damG = typeGroups[dam.biological_type] || 3;
 
-        let heterosisFactor = (sireG === damG) ? 0.02 : 0.05;
-        if (sire.biological_type === 'Indicus' !== (dam.biological_type === 'Indicus')) heterosisFactor = 0.12;
+        let heterosisFactor = (sireG === damG) ? 0.025 : 0.05;
+        // British × Continental shows the strongest within-taurus heterosis
+        // (Cundiff USMARC) — bump beyond the default cross-biotype value.
+        const isBxC =
+            (sire.biological_type === 'British' && dam.biological_type === 'Continental') ||
+            (sire.biological_type === 'Continental' && dam.biological_type === 'British');
+        if (isBxC) heterosisFactor = 0.065;
+        // Bos taurus × Bos indicus: largest heterosis (Loyola et al. 2020).
+        if ((sire.biological_type === 'Indicus') !== (dam.biological_type === 'Indicus')) {
+            heterosisFactor = 0.12;
+        }
 
         // --- 2. DYSTOCIA RISK (Gradual Weight Mismatch) ---
         // Reflected from user feedback: "gradual... diferencias del 50%"
@@ -138,6 +152,29 @@ export const BreedManager = {
         const baseCalving = (sire.calving_ease * 0.3) + (dam.calving_ease * 0.7);
         const finalCalving = Math.max(1, baseCalving - calvingPenalty);
 
+        // G. DIRECT-MATERNAL ANTAGONISM
+        // Quintanilla et al. (2013, Retinta) found a genetic correlation of
+        // −0.62 to −0.78 between direct and maternal effects for preweaning
+        // growth in rustic Spanish beef. Loyola et al. (2020) corroborate:
+        // Hereford has +ve direct conformation but −ve maternal milk; Angus
+        // direct +ve but maternal weight −ve.
+        //
+        // We approximate this antagonism by penalising milk_potential when
+        // both parents share a "high-direct" Continental biotype — F1
+        // Cha × Cha-style crosses inherit growth but lose mothering ability.
+        let baseMilk = (sire.milk_potential * M_SIRE) + (dam.milk_potential * M_DAM);
+        if (
+            sire.biological_type === 'Continental' &&
+            dam.biological_type === 'Continental' &&
+            (sire.conformation_potential ?? 3) >= 5 &&
+            (dam.conformation_potential ?? 3) >= 5
+        ) {
+            // Penalty: same-biotype double-Continental selection erodes
+            // future maternal traits (≈ −20 % milk potential).
+            baseMilk *= 0.8;
+        }
+        const finalMilk = Math.max(1, baseMilk);
+
         return {
             id: `F1_${sire.code}_${dam.code}`,
             code: `${sire.code}x${dam.code}`,
@@ -154,7 +191,7 @@ export const BreedManager = {
             heat_tolerance: Math.max(sire.heat_tolerance, dam.heat_tolerance),
             marbling_potential: finalMarbling,
             calving_ease: finalCalving,
-            milk_potential: (sire.milk_potential * M_DAM) + (dam.milk_potential * M_SIRE),
+            milk_potential: finalMilk,
             conformation_potential: finalConf,
             yield_potential: finalYield,
             is_hybrid: true,

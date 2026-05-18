@@ -342,7 +342,7 @@ export function AnimalInventory({ userId }: { userId?: string }) {
     const formatCrotal = (crotal: string, invert: boolean = false) => {
         if (!crotal) return '';
         const len = crotal.length;
-        if (len < 4) return <span className={`font - medium ${invert ? 'text-white' : 'text-gray-900'} `}>{crotal}</span>;
+        if (len < 4) return <span className={`font-medium ${invert ? 'text-white' : 'text-gray-900'}`}>{crotal}</span>;
 
         const prefix = crotal.substring(0, len - 4);
         const suffix = crotal.substring(len - 4);

@@ -8,6 +8,10 @@ import { useStorage } from '@/context/StorageContext';
 import { WeatherService } from '@/services/weatherService';
 import { SPANISH_PROVINCES, getCoordinatesForCity } from '@/services/locationService';
 import { SoilEngine } from '@/services/soilEngine';
+import { TechValue } from '@/components/InfoTip';
+import { CorralEditor } from '@/components/CorralEditor';
+import { CropPlotEditor } from '@/components/CropPlotEditor';
+import { PACSection } from '@/components/PACSection';
 import { BreedManager } from '@/services/breedManager';
 import { createFarm, getFarms, updateFarm, deleteFarm } from '@/app/lib/farm-actions';
 import { searchParcel } from '@/app/lib/sigpac-actions';
@@ -60,6 +64,11 @@ export function FarmsManager({ userId }: { userId?: string }) {
     const [corrals, setCorrals] = useState('');
     const [corralNames, setCorralNames] = useState<string[]>([]);
     const [feedingSystem, setFeedingSystem] = useState('');
+    // Nuevos: tipo y propósito de la finca
+    const [farmType, setFarmType] = useState<'extensivo' | 'semi_intensivo' | 'intensivo' | ''>('');
+    const [purpose, setPurpose] = useState<'livestock' | 'cropland' | 'mixed' | ''>('');
+    // Jerarquía: vínculo opcional a la finca principal
+    const [parentFarmId, setParentFarmId] = useState<string>('');
 
     const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -390,6 +399,9 @@ export function FarmsManager({ userId }: { userId?: string }) {
         setCorrals(farm.corrals?.toString() || '');
         setCorralNames(farm.corralNames || Array.from({ length: farm.corrals || 0 }, (_, i) => `Corral ${i + 1}`)); // Load or default
         setFeedingSystem(farm.feedingSystem || ''); // Edit feeding system
+        setFarmType((farm as Farm & { farmType?: string }).farmType as typeof farmType || '');
+        setPurpose((farm as Farm & { purpose?: string }).purpose as typeof purpose || '');
+        setParentFarmId((farm as Farm & { parentFarmId?: string | null }).parentFarmId ?? '');
 
         if (farm.climateStudy) setClimateData(farm.climateStudy);
         if (farm.cropsRecommendation) {
@@ -465,8 +477,13 @@ export function FarmsManager({ userId }: { userId?: string }) {
             climateStudy: climateData,
             cropsRecommendation: recommendations.crops,
             breedsRecommendation: recommendations.breeds,
-            f1Recommendation: recommendations.f1s
-        };
+            f1Recommendation: recommendations.f1s,
+            ...(farmType ? { farmType } : {}),
+            ...(purpose ? { purpose } : {}),
+            // null explícito para desvincular la finca de su principal cuando
+            // el usuario vacía el selector durante una edición.
+            parentFarmId: parentFarmId || null,
+        } as Farm & { farmType?: string; purpose?: string; parentFarmId?: string | null };
 
         if (editingId && userId) {
             updateFarm(editingId, userId, newFarm).then((updatedFarm) => {
@@ -486,6 +503,9 @@ export function FarmsManager({ userId }: { userId?: string }) {
         setCorrals('');
         setCorralNames([]);
         setFeedingSystem('');
+        setFarmType('');
+        setPurpose('');
+        setParentFarmId('');
         setClimateData(null);
         setRecommendations({ crops: [], breeds: [] });
         setErrors({}); // Clear errors
@@ -538,6 +558,9 @@ export function FarmsManager({ userId }: { userId?: string }) {
                         setCorrals('');
                         setCorralNames([]);
                         setFeedingSystem(''); // Reset
+                        setFarmType('');
+                        setPurpose('');
+                        setParentFarmId('');
                         setClimateData(null);
                         setRecommendations({ crops: [], breeds: [] });
                         setShowForm(true);
@@ -642,6 +665,76 @@ export function FarmsManager({ userId }: { userId?: string }) {
                                     <option value="">Selecciona Suelo</option>
                                     {soilTypes.map(s => <option key={s.id_suelo} value={s.id_suelo}>{s.nombre}</option>)}
                                 </select>
+                                {soilId && (() => {
+                                    // Ficha científica + traducción al cristiano.
+                                    // Source: SoilEngine (FAO WRB 2022 + Carsel & Parrish
+                                    // 1988 + Pulido et al. 2014). Cada valor lleva su
+                                    // explicación clara desde lib/glossary.ts.
+                                    const soil = SoilEngine.getSoilById(soilId);
+                                    if (!soil) return null;
+                                    const wrbKey = soil.wrb_group ? `wrb_${soil.wrb_group.toLowerCase()}` : undefined;
+                                    return (
+                                        <div className="mt-2 p-3 bg-green-50 border border-green-100 rounded-lg space-y-2">
+                                            {soil.wrb_group && (
+                                                <TechValue
+                                                    label="WRB"
+                                                    value={`${soil.wrb_group}${soil.wrb_qualifier ? ` ${soil.wrb_qualifier}` : ''}`}
+                                                    termKey={wrbKey}
+                                                />
+                                            )}
+                                            {soil.texture_class && (
+                                                <TechValue
+                                                    label="Textura"
+                                                    value={soil.texture_class}
+                                                    termKey="usda_texture"
+                                                />
+                                            )}
+                                            <TechValue
+                                                label="pH"
+                                                value={`${soil.ph_typical}${soil.ph_min && soil.ph_max ? ` (${soil.ph_min}–${soil.ph_max})` : ''}`}
+                                                termKey="soil_ph"
+                                            />
+                                            {soil.awc_mm_per_m !== undefined && (
+                                                <TechValue
+                                                    label="Agua útil"
+                                                    value={`${soil.awc_mm_per_m} mm/m`}
+                                                    termKey="awc"
+                                                />
+                                            )}
+                                            {soil.organic_matter_pct !== undefined && (
+                                                <TechValue
+                                                    label="Materia orgánica"
+                                                    value={`${soil.organic_matter_pct} %`}
+                                                    termKey="organic_matter"
+                                                />
+                                            )}
+                                            {soil.baseline_carrying_capacity_lu_ha !== undefined && (
+                                                <TechValue
+                                                    label="Carga base"
+                                                    value={`${soil.baseline_carrying_capacity_lu_ha} LU/ha`}
+                                                    termKey="carrying_capacity"
+                                                    highlight
+                                                />
+                                            )}
+                                            {soil.typical_mineral_deficiencies && soil.typical_mineral_deficiencies.length > 0 && (
+                                                <div className="pt-1 border-t border-green-200">
+                                                    <div className="flex justify-between text-xs">
+                                                        <span className="text-amber-700 font-bold">⚠ Suplementar</span>
+                                                        <span className="font-bold text-amber-700">{soil.typical_mineral_deficiencies.join(', ')}</span>
+                                                    </div>
+                                                    <p className="text-[11px] italic text-gray-400 mt-0.5">
+                                                        Aporta estos minerales en el bloque o el corrector para evitar deficiencias en el ganado.
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {soil.hoof_damage_risk === 'alto' && (
+                                                <p className="text-[11px] text-orange-700 italic pt-1">
+                                                    ⚠ <strong>Riesgo pezuña alto:</strong> rota parcelas en lluvia para evitar daños.
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Sistema Alimentación *</label>
@@ -653,6 +746,59 @@ export function FarmsManager({ userId }: { userId?: string }) {
                                     <option value="mixto">Mixto (Suplementación)</option>
                                     <option value="ecologico">Ecológico</option>
                                 </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Intensidad productiva</label>
+                                <select
+                                    value={farmType}
+                                    onChange={(e) => setFarmType(e.target.value as typeof farmType)}
+                                    className="w-full border rounded-lg px-3 py-2 bg-white"
+                                >
+                                    <option value="">Selecciona...</option>
+                                    <option value="extensivo">Extensivo</option>
+                                    <option value="semi_intensivo">Semi-intensivo</option>
+                                    <option value="intensivo">Intensivo</option>
+                                </select>
+                                <p className="text-[11px] italic text-gray-400 mt-1 leading-snug">
+                                    Extensivo: pastoreo libre. Intensivo: estabulación. Semi: combina ambos con suplementación reglada.
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Propósito de la finca</label>
+                                <select
+                                    value={purpose}
+                                    onChange={(e) => setPurpose(e.target.value as typeof purpose)}
+                                    className="w-full border rounded-lg px-3 py-2 bg-white"
+                                >
+                                    <option value="">Selecciona...</option>
+                                    <option value="livestock">Solo ganado</option>
+                                    <option value="cropland">Solo cultivo</option>
+                                    <option value="mixed">Mixta (ganado + cultivo)</option>
+                                </select>
+                                <p className="text-[11px] italic text-gray-400 mt-1 leading-snug">
+                                    Si la finca también produce forraje o grano para el ganado, marca <em>Mixta</em> o <em>Solo cultivo</em>.
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Finca principal asociada
+                                    <span className="text-gray-400 font-normal"> (opcional)</span>
+                                </label>
+                                <select
+                                    value={parentFarmId}
+                                    onChange={(e) => setParentFarmId(e.target.value)}
+                                    className="w-full border rounded-lg px-3 py-2 bg-white"
+                                >
+                                    <option value="">Esta es una finca principal</option>
+                                    {farms
+                                        .filter((f) => f.id !== editingId && !(f as Farm & { parentFarmId?: string | null }).parentFarmId)
+                                        .map((f) => (
+                                            <option key={f.id} value={f.id}>{f.name}</option>
+                                        ))}
+                                </select>
+                                <p className="text-[11px] italic text-gray-400 mt-1 leading-snug">
+                                    Si esta finca <strong>abastece de alimento</strong> a otra finca ganadera, selecciónala aquí. La identificación SIGPAC (provincia·municipio·polígono·parcela) sigue siendo la propia de cada finca — solo se agrupan lógicamente.
+                                </p>
                             </div>
                             {/* Corrals Section - Number & Names Side-by-Side */}
                             <div className="flex gap-4">
@@ -815,6 +961,27 @@ export function FarmsManager({ userId }: { userId?: string }) {
                         </div>
                     </div>
 
+                    {/* Editores avanzados (solo disponibles si la finca ya existe) */}
+                    {editingId && (
+                        <div className="space-y-4 pt-4 border-t">
+                            <CorralEditor farmId={editingId} />
+                            {(purpose === 'cropland' || purpose === 'mixed') && (
+                                <CropPlotEditor
+                                    farmId={editingId}
+                                    farmSoilId={soilId}
+                                    farmProvinciaCode={provincia}
+                                    farmMunicipioCode={municipio}
+                                />
+                            )}
+                            <PACSection farmId={editingId} />
+                        </div>
+                    )}
+                    {!editingId && (
+                        <p className="text-xs italic text-gray-400 pt-4 border-t">
+                            Los corrales, parcelas de cultivo y la declaración PAC podrán configurarse tras guardar la finca por primera vez.
+                        </p>
+                    )}
+
                     <div className="flex justify-end gap-3 pt-4 border-t">
                         <button onClick={() => setShowForm(false)} className="text-gray-600 hover:text-gray-800 font-medium px-4">
                             Cancelar
@@ -965,16 +1132,37 @@ export function FarmsManager({ userId }: { userId?: string }) {
                 )
             }
 
-            {/* List */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {farms.map(f => {
+            {/* List — agrupado por jerarquía: cada finca principal seguida de sus fincas asociadas */}
+            {(() => {
+                type FarmWithHierarchy = Farm & { parentFarmId?: string | null };
+                const farmsTyped = farms as FarmWithHierarchy[];
+                const principals = farmsTyped.filter((f) => !f.parentFarmId);
+                const childrenByParent = new Map<string, FarmWithHierarchy[]>();
+                for (const f of farmsTyped) {
+                    if (f.parentFarmId) {
+                        const arr = childrenByParent.get(f.parentFarmId) ?? [];
+                        arr.push(f);
+                        childrenByParent.set(f.parentFarmId, arr);
+                    }
+                }
+
+                const renderFarmCard = (f: FarmWithHierarchy, isChild: boolean) => {
                     const cap = getCapacityStatus(f);
                     return (
                         <div key={f.id}
                             onClick={() => setSelectedFarm(f)}
-                            className="cursor-pointer bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-lg transition-all transform hover:-translate-y-1 group">
+                            className={`cursor-pointer bg-white p-6 rounded-xl shadow-sm border hover:shadow-lg transition-all transform hover:-translate-y-1 group ${
+                                isChild ? 'border-amber-200 border-l-4 border-l-amber-400' : 'border-gray-100'
+                            }`}>
                             <div className="flex justify-between items-start mb-2">
-                                <h3 className="text-xl font-bold text-gray-800 group-hover:text-green-700 transition-colors">{f.name}</h3>
+                                <div>
+                                    {isChild && (
+                                        <span className="inline-block text-[10px] uppercase font-bold tracking-wider bg-amber-100 text-amber-700 px-2 py-0.5 rounded mb-1">
+                                            🌾 Finca de producción asociada
+                                        </span>
+                                    )}
+                                    <h3 className="text-xl font-bold text-gray-800 group-hover:text-green-700 transition-colors">{f.name}</h3>
+                                </div>
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">{f.license || 'Sin Licencia'}</span>
                                     {(() => {
@@ -999,18 +1187,20 @@ export function FarmsManager({ userId }: { userId?: string }) {
 
                             <div className="text-sm text-gray-600 space-y-2 mb-4">
                                 <p>{f.municipio} ({Number(f.superficie / 10000).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} ha)</p>
-                                <div className="space-y-1">
-                                    <div className="flex justify-between text-xs">
-                                        <span>Capacidad ({cap.current}/{f.maxHeads})</span>
-                                        <span className={cap.pct >= 100 ? 'text-red-600 font-bold' : 'text-gray-500'}>
-                                            {cap.pct.toFixed(0)}%
-                                        </span>
+                                {!isChild && (
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between text-xs">
+                                            <span>Capacidad ({cap.current}/{f.maxHeads})</span>
+                                            <span className={cap.pct >= 100 ? 'text-red-600 font-bold' : 'text-gray-500'}>
+                                                {cap.pct.toFixed(0)}%
+                                            </span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-2">
+                                            <div className={`${cap.color} h-2 rounded-full`} style={{ width: `${Math.min(cap.pct, 100)}%` }}></div>
+                                        </div>
+                                        {cap.pct >= 100 && <p className="text-xs text-red-600 font-bold">Exceso de capacidad</p>}
                                     </div>
-                                    <div className="w-full bg-gray-200 rounded-full h-2">
-                                        <div className={`${cap.color} h-2 rounded-full`} style={{ width: `${Math.min(cap.pct, 100)}%` }}></div>
-                                    </div>
-                                    {cap.pct >= 100 && <p className="text-xs text-red-600 font-bold">Exceso de capacidad</p>}
-                                </div>
+                                )}
                                 <p className="text-xs text-gray-500">
                                     Suelo: {soilTypes.find(s => s.id_suelo === f.soilId)?.nombre || 'Desconocido'}
                                     {f.climateStudy && ` | Clima: ${f.climateStudy.classification}`}
@@ -1021,8 +1211,33 @@ export function FarmsManager({ userId }: { userId?: string }) {
                             </div>
                         </div>
                     );
-                })}
-            </div>
+                };
+
+                return (
+                    <div className="space-y-6">
+                        {principals.map((principal) => {
+                            const kids = childrenByParent.get(principal.id ?? '') ?? [];
+                            return (
+                                <div key={principal.id} className="space-y-3">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {renderFarmCard(principal, false)}
+                                    </div>
+                                    {kids.length > 0 && (
+                                        <div className="pl-4 border-l-2 border-amber-200 ml-2">
+                                            <p className="text-[11px] font-bold uppercase text-amber-700 tracking-wide mb-2">
+                                                🌾 Fincas de producción asociadas a «{principal.name}»
+                                            </p>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {kids.map((k) => renderFarmCard(k, true))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            })()}
         </div >
     );
 }

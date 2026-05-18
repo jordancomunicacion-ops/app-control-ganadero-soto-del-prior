@@ -38,7 +38,7 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
     const [selectedFeedId, setSelectedFeedId] = useState('');
 
     // NEW: Bellota Type State
-    const [bellotaType, setBellotaType] = useState<string>('ENCINA'); // ENCINA | ROBLE
+    const [bellotaType, setBellotaType] = useState<'ENCINA' | 'ROBLE'>('ENCINA');
 
     type DietStats = {
         dmi: number;
@@ -376,14 +376,31 @@ export function DietComposer({ animal, onClose, fatherBreed, motherBreed }: Diet
                             </div>
                         ))}
                         {synergies.map((syn, i) => (
-                            <div key={`syn-${i}`} className="bg-indigo-50 border border-indigo-200 p-3 rounded-lg text-sm flex items-start gap-3 text-indigo-900">
+                            <div key={`syn-${i}`} className={`p-3 rounded-lg text-sm flex items-start gap-3 ${
+                                syn.confidence === 'high' ? 'bg-emerald-50 border border-emerald-200 text-emerald-900'
+                                : syn.confidence === 'moderate' ? 'bg-indigo-50 border border-indigo-200 text-indigo-900'
+                                : 'bg-amber-50 border border-amber-200 text-amber-900'
+                            }`}>
                                 <span className="text-xl">🧬</span>
-                                <div>
-                                    <div className="font-bold">{syn.name.replace(/_/g, ' ')} DETECTADA</div>
-                                    <div className="text-xs mt-1">{syn.description}</div>
-                                    <div className="text-xs mt-1 font-mono bg-indigo-100 px-1 rounded inline-block">
-                                        +{(syn.bonus_marbling || 0).toFixed(1)} BMS • +{(syn.bonus_yield || 0).toFixed(1)}% Rendimiento
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-bold flex items-center gap-2">
+                                        {syn.name.replace(/_/g, ' ')}
+                                        {syn.confidence && (
+                                            <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full bg-white/60">
+                                                {syn.confidence === 'high' ? '✓ probado' : syn.confidence === 'moderate' ? '~ moderado' : '? no validado'}
+                                            </span>
+                                        )}
                                     </div>
+                                    <div className="text-xs mt-1">{syn.description}</div>
+                                    <p className="text-[11px] italic opacity-80 mt-1 leading-snug">
+                                        Cuando hay bellota (o concentrado alto-oleico) más lecitina de soja protegida en la ración, mejora la infiltración de grasa intramuscular. Probado en bueyes Morucha ≥36 m y terneras F1×Angus (Viera et al. 2024, ITACyL).
+                                    </p>
+                                    {syn.active && (
+                                        <div className="text-xs mt-2 font-mono bg-white/60 px-1.5 py-0.5 rounded inline-block">
+                                            +{(syn.bonus_marbling || 0).toFixed(1)} pts infiltración
+                                            {syn.bonus_yield ? ` · +${syn.bonus_yield.toFixed(1)}% rendimiento` : ''}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}

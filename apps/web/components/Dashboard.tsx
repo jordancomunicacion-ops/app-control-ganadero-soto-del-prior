@@ -4,8 +4,11 @@ import React, { useEffect, useState } from 'react';
 import { useStorage } from '@/context/StorageContext';
 import { WeatherService, type DailyForecast } from '@/services/weatherService';
 import { EventManager } from '@/services/eventManager';
+import { SoilEngine, estimateCarryingCapacity } from '@/services/soilEngine';
+import { InfoTip } from '@/components/InfoTip';
 import { getFarms } from '@/app/lib/farm-actions';
 import { getAnimals } from '@/app/lib/animal-actions';
+import { getCorralStocking, type CorralStockingRow } from '@/app/lib/corral-actions';
 import type { AnimalLike, FarmLike, LivestockEvent } from '@/types/livestock';
 
 interface WeatherWidget {
@@ -32,10 +35,11 @@ function calculateAnimalStats(animals: AnimalLike[]): AnimalStats {
         'Nodrizas': 0, 'Vacas': 0, 'Novillas': 0, 'Añojas': 0, 'Terneras': 0, 'Becerras': 0
     };
 
+    const excludedStatuses = ['sacrificado', 'muerto', 'vendido', 'baja', 'inactivo', 'retirado'];
     animals.forEach((a) => {
-        const excludedStatuses = ['Sacrificado', 'Muerto', 'Vendido', 'Baja', 'Inactivo', 'Retirado'];
-        if (a.status && excludedStatuses.includes(a.status)) return;
-        if (a.status && a.status !== 'Activo') return;
+        // Count every animal whose status is not in the exclusion list. A null /
+        // undefined status counts as "active" — older records lack the field.
+        if (a.status && excludedStatuses.includes(a.status.toLowerCase())) return;
 
         let cat = a.category;
 
@@ -85,6 +89,34 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
     const [upcomingEvents, setUpcomingEvents] = useState<LivestockEvent[]>([]);
     const [selectedTabIndex, setSelectedTabIndex] = useState(0);
     const [farmsList, setFarmsList] = useState<FarmLike[]>([]);
+    const [stocking, setStocking] = useState<Array<{
+        farmId: string;
+        name: string;
+        soilName: string;
+        haUtil: number;
+        currentLU: number;
+        supportableLU: number;
+        ratio: number;
+        status: 'ok' | 'warning' | 'critical';
+    }>>([]);
+    const [expandedFarmId, setExpandedFarmId] = useState<string | null>(null);
+    const [corralBreakdown, setCorralBreakdown] = useState<Record<string, CorralStockingRow[]>>({});
+
+    const handleToggleFarm = async (farmId: string) => {
+        if (expandedFarmId === farmId) {
+            setExpandedFarmId(null);
+            return;
+        }
+        setExpandedFarmId(farmId);
+        if (!corralBreakdown[farmId]) {
+            try {
+                const rows = await getCorralStocking(farmId);
+                setCorralBreakdown((prev) => ({ ...prev, [farmId]: rows }));
+            } catch {
+                /* noop */
+            }
+        }
+    };
 
     const loadWeatherForFarm = (currentFarm: FarmLike | undefined) => {
         if (!currentFarm) return;
@@ -164,7 +196,57 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
         if (userId) {
             getAnimals(userId).then(({ data: animalsData }) => {
                 if (cancelled) return;
-                setAnimalStats(calculateAnimalStats(animalsData as unknown as AnimalLike[]));
+                const animals = animalsData as unknown as AnimalLike[];
+                setAnimalStats(calculateAnimalStats(animals));
+                // Compute stocking-rate analysis per farm. Uses Pulido 2014
+                // baseline carrying capacity from SoilEngine + the farm's
+                // climate study to estimate the supportable LU/ha for each
+                // farm and compares it with active head count.
+                getFarms(userId).then(({ data: farmsRaw }) => {
+                    if (cancelled) return;
+                    type FarmRow = FarmLike & {
+                        id?: string;
+                        soilId?: string;
+                        superficie?: number;
+                        climateStudy?: { annualPrecip?: number };
+                    };
+                    const farms = farmsRaw as unknown as FarmRow[];
+                    const excludedStatuses = new Set(['sacrificado', 'muerto', 'vendido', 'baja', 'inactivo', 'retirado']);
+                    const byFarm = new Map<string, number>();
+                    for (const a of animals) {
+                        if (a.status && excludedStatuses.has(String(a.status).toLowerCase())) continue;
+                        const fid = (a as unknown as { farmId?: string }).farmId;
+                        if (!fid) continue;
+                        byFarm.set(fid, (byFarm.get(fid) ?? 0) + 1);
+                    }
+                    const rows = farms.map((f) => {
+                        const farmId = f.id ?? '';
+                        const haUtil = f.superficie ? f.superficie / 10000 : 0; // m² → ha
+                        const annualPrecip = f.climateStudy?.annualPrecip ?? 500;
+                        const cap = f.soilId
+                            ? estimateCarryingCapacity(f.soilId, annualPrecip, 30).lu_per_ha
+                            : 0.4;
+                        const supportableLU = parseFloat((cap * haUtil).toFixed(1));
+                        const currentLU = byFarm.get(farmId) ?? 0; // 1 cow ≈ 1 LU (NDSU)
+                        const ratio = supportableLU > 0 ? currentLU / supportableLU : 0;
+                        const status: 'ok' | 'warning' | 'critical' =
+                            ratio <= 1.0 ? 'ok' : ratio <= 1.2 ? 'warning' : 'critical';
+                        const soil = f.soilId ? SoilEngine.getSoilById(f.soilId) : undefined;
+                        return {
+                            farmId,
+                            name: f.name ?? 'Finca',
+                            soilName: soil?.wrb_group
+                                ? `${soil.wrb_group}${soil.wrb_qualifier ? ` ${soil.wrb_qualifier}` : ''}`
+                                : (soil?.name ?? '—'),
+                            haUtil: parseFloat(haUtil.toFixed(1)),
+                            currentLU,
+                            supportableLU,
+                            ratio: parseFloat(ratio.toFixed(2)),
+                            status,
+                        };
+                    }).filter((r) => r.haUtil > 0);
+                    setStocking(rows);
+                }).catch(() => { /* noop */ });
             }).catch(() => { /* noop */ });
         } else {
             const animals = read<AnimalLike[]>(`animals_${sessionUser}`, []);
@@ -322,6 +404,136 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
                     </div>
                 </div>
             </div>
+
+            {/* Stocking-rate analysis per farm — Pulido et al. 2014 model */}
+            {stocking.length > 0 && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <h3 className="text-lg font-bold text-gray-800 mb-1">Carga Ganadera vs Capacidad Sostenible</h3>
+                    <p className="text-sm text-gray-600 mb-1">
+                        ¿Cuánto ganado puede mantener tu finca sin que el pasto se degrade?
+                    </p>
+                    <p className="text-xs italic text-gray-400 mb-4 leading-snug">
+                        Combinamos el tipo de suelo, la lluvia anual y el % de arbolado para estimar cuántas vacas adultas equivalentes (LU) puede soportar cada hectárea. Modelo Pulido et al. 2014 (dehesa Extremadura).
+                    </p>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="text-left border-b border-gray-200 text-gray-500 text-xs uppercase tracking-wider">
+                                    <th className="pb-2 pr-4">Finca</th>
+                                    <th className="pb-2 pr-4">Suelo</th>
+                                    <th className="pb-2 pr-4 text-right">ha</th>
+                                    <th className="pb-2 pr-4 text-right">
+                                        <span className="inline-flex items-center gap-1">
+                                            LU actual <InfoTip termKey="stocking_rate" />
+                                        </span>
+                                    </th>
+                                    <th className="pb-2 pr-4 text-right">
+                                        <span className="inline-flex items-center gap-1">
+                                            Soportable <InfoTip termKey="supportable_lu" />
+                                        </span>
+                                    </th>
+                                    <th className="pb-2 text-right">Carga</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {stocking.map((r) => {
+                                    const isExpanded = expandedFarmId === r.farmId;
+                                    const corrals = corralBreakdown[r.farmId];
+                                    return (
+                                        <React.Fragment key={r.farmId}>
+                                            <tr
+                                                className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
+                                                onClick={() => handleToggleFarm(r.farmId)}
+                                            >
+                                                <td className="py-2 pr-4 font-medium text-gray-800 flex items-center gap-1">
+                                                    <span className="text-gray-400 text-xs">{isExpanded ? '▾' : '▸'}</span>
+                                                    {r.name}
+                                                </td>
+                                                <td className="py-2 pr-4 text-xs text-gray-500">{r.soilName}</td>
+                                                <td className="py-2 pr-4 text-right text-gray-700">{r.haUtil}</td>
+                                                <td className="py-2 pr-4 text-right text-gray-700">{r.currentLU}</td>
+                                                <td className="py-2 pr-4 text-right text-gray-700">{r.supportableLU}</td>
+                                                <td className="py-2 text-right">
+                                                    <span
+                                                        title={r.status === 'ok' ? 'Carga dentro del óptimo' : r.status === 'warning' ? 'Cerca del tope, vigila el pasto' : 'Por encima del tope sostenible'}
+                                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold cursor-help ${
+                                                            r.status === 'ok' ? 'bg-green-50 text-green-700 border border-green-100'
+                                                            : r.status === 'warning' ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                                            : 'bg-red-50 text-red-700 border border-red-100'
+                                                        }`}
+                                                    >
+                                                        {r.status === 'ok' ? '✓' : r.status === 'warning' ? '⚠' : '⛔'} {(r.ratio * 100).toFixed(0)}%
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                            {isExpanded && corrals && (
+                                                <tr key={`${r.farmId}-corrals`} className="bg-gray-50/40">
+                                                    <td colSpan={6} className="px-4 py-3">
+                                                        {corrals.length === 0 ? (
+                                                            <p className="text-xs italic text-gray-500">No hay corrales declarados en esta finca. Edita la finca para añadirlos.</p>
+                                                        ) : (
+                                                            <div>
+                                                                <p className="text-[11px] font-bold text-gray-600 uppercase tracking-wide mb-2">Desglose por corral · LU actual vs capacidad declarada</p>
+                                                                <div className="space-y-1">
+                                                                    {corrals.map((c) => (
+                                                                        <div key={c.corralId} className="flex items-center justify-between bg-white border border-gray-100 rounded px-3 py-1.5 text-xs">
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <span className="font-bold text-gray-800">{c.name}</span>
+                                                                                <span className="text-gray-400 ml-2">· {c.kind}</span>
+                                                                                {c.surfaceM2 ? <span className="text-gray-400 ml-2">· {c.surfaceM2.toLocaleString()} m²</span> : null}
+                                                                            </div>
+                                                                            <div className="text-right">
+                                                                                <span className="text-gray-700">
+                                                                                    {c.currentLU} {c.capacityLU ? `/ ${c.capacityLU}` : ''} LU
+                                                                                </span>
+                                                                                <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                                                    c.status === 'ok' ? 'bg-green-50 text-green-700 border border-green-100'
+                                                                                    : c.status === 'warning' ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                                                                    : c.status === 'critical' ? 'bg-red-50 text-red-700 border border-red-100'
+                                                                                    : 'bg-gray-50 text-gray-500 border border-gray-100'
+                                                                                }`}>
+                                                                                    {c.status === 'ok' ? '✓' : c.status === 'warning' ? '⚠' : c.status === 'critical' ? '⛔' : '–'}
+                                                                                    {c.capacityLU ? ` ${(c.ratio * 100).toFixed(0)}%` : ' sin capacidad'}
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                                <p className="text-[11px] italic text-gray-400 mt-2">
+                                                                    LU actual = animales con ese corral asignado, ajustados por edad. «Sin capacidad» = el corral no tiene capacityLU declarada; edita la finca para añadirla.
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                    <p className="text-[11px] italic text-gray-400 mt-3 leading-snug">
+                        1 LU = 1 vaca adulta de unos 600 kg. Verde &lt;100 % = todo en orden. Ámbar 100-120 % = vigila. Rojo &gt;120 % = sobrecarga: reduce cabezas o suplementa pasto.
+                    </p>
+                    {stocking.some((r) => r.status === 'critical') && (
+                        <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700">
+                            <strong>⛔ Sobrecarga crítica</strong> en una o más fincas (&gt;20 % por encima de la capacidad sostenible).
+                            <p className="mt-1 text-xs">
+                                <strong>Qué hacer:</strong> reduce cabezas, amplía superficie útil, o suplementa con forraje comprado mientras se recupera el pasto natural.
+                            </p>
+                        </div>
+                    )}
+                    {stocking.every((r) => r.status !== 'critical') && stocking.some((r) => r.status === 'warning') && (
+                        <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-lg text-sm text-amber-700">
+                            <strong>⚠ Carga ajustada.</strong>
+                            <p className="mt-1 text-xs">
+                                Estás cerca del tope. Vigila que el pasto recupere bien después del pastoreo — si ves clareos persistentes, baja cabezas.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Grid: Actions & Alerts */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

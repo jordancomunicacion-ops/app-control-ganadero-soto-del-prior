@@ -70,7 +70,7 @@ describe('user-actions: autorización', () => {
     });
 
     describe('getUsers', () => {
-        it('ADMIN ve a todos los usuarios', async () => {
+        it('ADMIN ve a todos los usuarios y nunca expone password', async () => {
             mockAuth.mockResolvedValue(asAuth({ id: 'admin-1', role: 'ADMIN' }));
             mockFindUnique.mockResolvedValue({ id: 'admin-1', role: 'ADMIN' } as never);
             mockFindMany.mockResolvedValue([
@@ -79,20 +79,33 @@ describe('user-actions: autorización', () => {
 
             await getUsers();
 
-            expect(mockFindMany).toHaveBeenCalledWith({ orderBy: { createdAt: 'desc' } });
+            expect(mockFindMany).toHaveBeenCalledOnce();
+            const arg = mockFindMany.mock.calls[0][0]!;
+            expect(arg.orderBy).toEqual({ createdAt: 'desc' });
+            // ADMIN sees the whole user table (no `where`) but the select must
+            // be explicit and must NEVER include the password hash.
+            expect(arg.where).toBeUndefined();
+            const select = arg.select as Record<string, unknown> | undefined;
+            expect(select).toBeDefined();
+            expect(select!.password).toBeUndefined();
+            expect(select!.id).toBe(true);
+            expect(select!.email).toBe(true);
         });
 
-        it('USER solo ve a sus managed', async () => {
+        it('USER solo ve a sus managed y sin password', async () => {
             mockAuth.mockResolvedValue(asAuth({ id: 'mgr-1', role: 'USER' }));
             mockFindUnique.mockResolvedValue({ id: 'mgr-1', role: 'USER' } as never);
             mockFindMany.mockResolvedValue([] as never);
 
             await getUsers();
 
-            expect(mockFindMany).toHaveBeenCalledWith({
-                where: { managedById: 'mgr-1' },
-                orderBy: { createdAt: 'desc' },
-            });
+            expect(mockFindMany).toHaveBeenCalledOnce();
+            const arg = mockFindMany.mock.calls[0][0]!;
+            expect(arg.where).toEqual({ managedById: 'mgr-1' });
+            expect(arg.orderBy).toEqual({ createdAt: 'desc' });
+            const select = arg.select as Record<string, unknown> | undefined;
+            expect(select).toBeDefined();
+            expect(select!.password).toBeUndefined();
         });
 
         it('WORKER no puede listar usuarios', async () => {

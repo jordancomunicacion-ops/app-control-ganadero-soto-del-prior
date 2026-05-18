@@ -1,13 +1,17 @@
 
 import { Breed } from './breedManager';
+import { heatBrahmanGuess, hliThresholdByGenotype } from './nutritionEngine';
 
 export interface CarcassResult {
     rc_est: number; // 0.60 etc
     rc_percent: number; // 60%
     carcass_weight: number;
-    marbling_score: number; // 1-5 (Genetic + Diet)
-    bms: number; // 1-12 (Standard Scale)
-    conformation: string; // S, E, U, R, O, P
+    marbling_score: number; // 1-5 (intramuscular fat / "veteado")
+    bms: number; // 1-12 (Beef Marbling Standard scale)
+    conformation: string; // SEUROP muscularity: S, E, U, R, O, P
+    fat_cover: number; // SEUROP subcutaneous fat cover (1-5). Distinct axis
+                      // from marbling: this is what the EU grid pairs with
+                      // conformation to price the carcass.
     synergy_bonus_applied: number;
     is_premium: boolean;
 }
@@ -43,8 +47,14 @@ export const CarcassEngine = {
             sex?: 'Macho' | 'Hembra' | 'Castrado',
             synergyBonuses?: { marbling: number, yield_percent: number },
             currentMonth?: number, // 0-11
-            fatherBreed?: Breed, // New: Specific genetics
-            motherBreed?: Breed  // New: Specific genetics
+            fatherBreed?: Breed, // Specific genetics
+            motherBreed?: Breed, // Specific genetics
+            // Heat-stress context. `thi` is the local Temperature-Humidity
+            // Index (NRC dairy formula). When supplied, replaces the
+            // month-based heuristic with Gaughan/Mader 2008 HLI thresholds
+            // adjusted by the animal's `brahmanPercent` (Mateescu 2020).
+            thi?: number,
+            brahmanPercent?: number,
         } = {}
     ): CarcassResult {
         // 1. Determine Effective Genetics (Hybrid Logic)
@@ -133,15 +143,31 @@ export const CarcassEngine = {
             marblingScoreInternal += options.synergyBonuses.marbling;
         }
 
-        // E. Climate Stress (Cortisol reduces intramuscular fat deposition)
-        if (options.currentMonth !== undefined) {
+        // E. Climate Stress — el cortisol crónico reduce la deposición de
+        // grasa intramuscular y el desarrollo muscular. Cuando hay THI
+        // disponible usamos el modelo HLI por genotipo (Gaughan/Mader 2008)
+        // calibrado con la plasticidad de temperatura corporal de Mateescu
+        // et al. 2020 por % Brahman; en su ausencia caemos a la heurística
+        // mes-vs-tolerancia clásica.
+        if (options.thi !== undefined) {
+            const brahmanPct = options.brahmanPercent ?? heatBrahmanGuess(effectiveBreed as Breed);
+            const threshold = hliThresholdByGenotype(brahmanPct);
+            const excess = options.thi - threshold;
+            if (excess > 0) {
+                // Pendiente Mateescu: 0.417 °C/5 THI Angus, 0.194 °C/5 THI
+                // Brahman puro. Cada °C de elevación corporal cuesta ~0.05
+                // puntos de marbling (cortisol + reducción de DMI).
+                const sensitivity = 0.417 - 0.223 * brahmanPct;
+                const bodyTempRise = (excess * sensitivity) / 5;
+                marblingScoreInternal -= bodyTempRise;
+            }
+        } else if (options.currentMonth !== undefined) {
             const m = options.currentMonth;
             const isSummer = m >= 5 && m <= 8;
             if (isSummer) {
                 const tolerance = effectiveBreed.heat_tolerance || 5;
-                if (tolerance < 5) marblingScoreInternal -= 0.5; // Stress penalty
+                if (tolerance < 5) marblingScoreInternal -= 0.5;
             }
-
         }
 
         // F. Castration/Ox Bonus (Marbling)
@@ -174,16 +200,27 @@ export const CarcassEngine = {
         const dietBonusConformation = this.norm(dietEnergyMcal, 1.8, 2.8) * 1.5; // More responsive range 1.8-2.8
         score += dietBonusConformation;
 
-        // C. Climate Adaptation (Genetics vs Environment)
-        // If heat tolerant breed in summer -> Bonus (Thrives)
-        if (options.currentMonth !== undefined) {
+        // C. Climate Adaptation — Brahman thrives in heat, British/Continental
+        // suffer. With THI we use the HLI threshold by genotype; otherwise we
+        // fall back to season-based heuristic.
+        if (options.thi !== undefined) {
+            const brahmanPct = options.brahmanPercent ?? heatBrahmanGuess(effectiveBreed as Breed);
+            const threshold = hliThresholdByGenotype(brahmanPct);
+            const excess = options.thi - threshold;
+            if (excess <= 0 && brahmanPct >= 0.5) {
+                // Breed below its threshold in hot climate: thrives.
+                score += 0.3;
+            } else if (excess > 5) {
+                // Beyond comfort zone: chronic stress degrades frame.
+                score -= 0.3 + Math.min(0.5, (excess - 5) * 0.05);
+            }
+        } else if (options.currentMonth !== undefined) {
             const m = options.currentMonth;
             const isSummer = m >= 5 && m <= 8; // Jun-Sep
-            const tolerance = effectiveBreed.heat_tolerance || 5; // 1-10
-
+            const tolerance = effectiveBreed.heat_tolerance || 5;
             if (isSummer) {
-                if (tolerance >= 8) score += 0.3; // Thrives in heat (Brahman)
-                if (tolerance <= 3) score -= 0.5; // Suffers in heat (Angus/Hereford)
+                if (tolerance >= 8) score += 0.3;
+                if (tolerance <= 3) score -= 0.5;
             }
         }
 
@@ -230,6 +267,30 @@ export const CarcassEngine = {
         const maps = ['P', 'O', 'R', 'U', 'E', 'S'];
         const conf = maps[score - 1] || 'R';
 
+        // --- 4. SUBCUTANEOUS FAT COVER (SEUROP 1–5) ---
+        // Distinct from marbling: subcutaneous fat builds late and depends on
+        // diet energy, physiological maturity and sex. The EU pricing grid
+        // pairs this 1–5 score with the conformation letter.
+        let fat = 1.8;
+        fat += this.norm(dietEnergyMcal, 1.5, 3.0) * 2.2;   // up to +2.2 from energy
+        fat += this.norm(currentWeight / (targetAdultWeight || 600), 0.5, 1.1) * 1.5; // up to +1.5 from maturity
+
+        // Castrates and finished steers deposit subcutaneous fat far more
+        // readily than entire bulls.
+        if (options.sex === 'Castrado' || options.isOx) fat += 0.6;
+        else if (options.sex === 'Hembra') fat += 0.3;
+        else fat -= 0.2; // entire male
+
+        const btype = effectiveBreed.biological_type;
+        if (btype === 'British' || btype === 'Rustic_European') fat += 0.4;
+        else if (btype === 'Continental') fat -= 0.4;
+        else if (btype === 'Dairy') fat += 0.2;
+
+        // Bellota / synergy "finisher" deposits a final layer.
+        if (options.isBellota) fat += 0.4;
+
+        const fatCover = this.clamp(Math.round(fat), 1, 5);
+
         return {
             rc_est: parseFloat(rc.toFixed(4)),
             rc_percent: parseFloat((rc * 100).toFixed(2)),
@@ -237,9 +298,10 @@ export const CarcassEngine = {
             marbling_score: parseFloat(finalMarblingScore.toFixed(1)),
             bms: this.clamp(bms, 1, 12),
             conformation: conf,
+            fat_cover: fatCover,
             synergy_bonus_applied: options.synergyBonuses?.marbling || 0,
             // Premium Logic: Conformation U/E/S AND Marbling (BMS) >= 5
-            is_premium: score >= 4 && bms >= 5
+            is_premium: score >= 4 && bms >= 5,
         };
     }
 };

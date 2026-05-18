@@ -4,8 +4,24 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { headers } from 'next/headers';
 import { sendEmail } from './email';
 import { redirect } from 'next/navigation';
+
+async function resolveBaseUrl(): Promise<string> {
+    // Prefer an explicit env var so external links survive proxies and CDN.
+    if (process.env.NEXTAUTH_URL) return process.env.NEXTAUTH_URL.replace(/\/$/, '');
+    if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '');
+    try {
+        const h = await headers();
+        const host = h.get('x-forwarded-host') ?? h.get('host');
+        const proto = h.get('x-forwarded-proto') ?? 'https';
+        if (host) return `${proto}://${host}`;
+    } catch {
+        // headers() is unavailable outside a request scope; fall through.
+    }
+    return 'http://localhost:3001';
+}
 
 const ForgotPasswordSchema = z.object({
     email: z.string().email('Email inválido'),
@@ -55,7 +71,8 @@ export async function sendPasswordResetEmail(_prevState: PasswordResetState | nu
             data: { resetToken: token, resetTokenExpiry: expiry },
         });
 
-        const resetLink = `${process.env.NEXTAUTH_URL || 'http://localhost:3001'}/reset-password?token=${token}`;
+        const baseUrl = await resolveBaseUrl();
+        const resetLink = `${baseUrl}/reset-password?token=${token}`;
 
         await sendEmail(
             email,

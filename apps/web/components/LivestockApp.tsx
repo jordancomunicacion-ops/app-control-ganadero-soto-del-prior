@@ -92,7 +92,7 @@ export function LivestockApp({ session }: { session: Session | null }) {
             {activeTab === 'events' && <EventsList userId={session?.user?.id} />}
             {activeTab === 'users' && <UsersManager userId={session?.user?.id} currentUserRole={serverRole} />}
             {activeTab === 'calculator' && <Calculator userId={session?.user?.id} />}
-            {activeTab === 'reports' && <ReportsManager userId={session?.user?.id} />}
+            {activeTab === 'reports' && <ReportsManager />}
             {activeTab === 'profile' && <UserProfile />}
             {activeTab === 'data' && <DataManager />}
         </AppShell>

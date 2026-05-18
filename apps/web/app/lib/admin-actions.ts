@@ -20,6 +20,7 @@ export async function getUsers() {
     }
 
     try {
+        // Explicit select prevents leaking hashed password / reset tokens.
         const users = await prisma.user.findMany({
             orderBy: { createdAt: 'desc' },
             select: {

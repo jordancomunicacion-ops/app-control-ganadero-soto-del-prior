@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
 import { auth } from '@/auth';
@@ -34,6 +35,26 @@ const UpdateUserSchema = z.object({
 export type CreateUserInput = z.infer<typeof CreateUserSchema>;
 export type UpdateUserInput = z.infer<typeof UpdateUserSchema>;
 
+// Fields we are willing to expose to clients. Excludes password, resetToken
+// and resetTokenExpiry so the hashed password never leaves the server.
+const PUBLIC_USER_SELECT = {
+    id: true,
+    name: true,
+    email: true,
+    role: true,
+    approved: true,
+    permissions: true,
+    firstName: true,
+    lastName: true,
+    dni: true,
+    phone: true,
+    jobTitle: true,
+    dob: true,
+    managedById: true,
+    createdAt: true,
+    updatedAt: true,
+} as const;
+
 async function requireSession() {
     const session = await auth();
     const callerId = session?.user?.id;
@@ -51,7 +72,7 @@ async function requireSession() {
 async function assertCanManageTarget(
     callerId: string,
     callerRole: string,
-    targetUserId: string
+    targetUserId: string,
 ) {
     if (callerRole === 'ADMIN') return;
     if (callerRole === 'USER') {
@@ -68,32 +89,28 @@ async function assertCanManageTarget(
 export async function getUsers() {
     const { callerId, callerRole } = await requireSession();
 
-    if (callerRole === 'ADMIN') {
-        const users = await prisma.user.findMany({
-            orderBy: { createdAt: 'desc' },
-        });
-        return users.map((u) => ({
-            ...u,
-            pass: '*****',
-            joined: u.createdAt.toISOString(),
-            permissions: u.permissions || [],
-        }));
+    if (callerRole !== 'ADMIN' && callerRole !== 'USER') {
+        throw new Error('Unauthorized');
     }
 
-    if (callerRole === 'USER') {
-        const users = await prisma.user.findMany({
-            where: { managedById: callerId },
-            orderBy: { createdAt: 'desc' },
-        });
-        return users.map((u) => ({
-            ...u,
-            pass: '*****',
-            joined: u.createdAt.toISOString(),
-            permissions: u.permissions || [],
-        }));
-    }
+    const users =
+        callerRole === 'ADMIN'
+            ? await prisma.user.findMany({
+                  orderBy: { createdAt: 'desc' },
+                  select: PUBLIC_USER_SELECT,
+              })
+            : await prisma.user.findMany({
+                  where: { managedById: callerId },
+                  orderBy: { createdAt: 'desc' },
+                  select: PUBLIC_USER_SELECT,
+              });
 
-    throw new Error('Unauthorized');
+    return users.map((u) => ({
+        ...u,
+        pass: '*****',
+        joined: u.createdAt.toISOString(),
+        permissions: u.permissions || [],
+    }));
 }
 
 export async function updateUserStatus(userId: string, approved: boolean) {
@@ -124,38 +141,33 @@ export async function updateUserProfile(userId: string, data: unknown) {
         await assertCanManageTarget(callerId, callerRole, userId);
     }
 
-    if (input.role && !isAdmin) {
+    if (input.role !== undefined && !isAdmin) {
         throw new Error('Unauthorized: only ADMIN can change roles');
     }
-    if (input.permissions && !isAdmin && callerRole !== 'USER') {
+    if (input.permissions !== undefined && !isAdmin && callerRole !== 'USER') {
         throw new Error('Unauthorized: cannot change permissions');
     }
 
-    const updateData: {
-        role?: string;
-        firstName?: string;
-        lastName?: string;
-        dni?: string;
-        phone?: string;
-        jobTitle?: string;
-        dob?: Date | null;
-        permissions?: string[];
-        password?: string;
-    } = {
-        firstName: input.firstName,
-        lastName: input.lastName,
-        dni: input.dni,
-        phone: input.phone,
-        jobTitle: input.jobTitle,
-        dob: input.dob ? new Date(input.dob) : null,
-    };
-
-    if (input.role) updateData.role = input.role;
-    if (input.permissions) updateData.permissions = input.permissions;
+    // Build a partial update: only the keys actually present in the input
+    // hit the database. Avoids the previous bug of wiping fields like dob
+    // when the caller only intended to update e.g. phone.
+    const updateData: Record<string, unknown> = {};
+    if (input.firstName !== undefined) updateData.firstName = input.firstName;
+    if (input.lastName !== undefined) updateData.lastName = input.lastName;
+    if (input.dni !== undefined) updateData.dni = input.dni;
+    if (input.phone !== undefined) updateData.phone = input.phone;
+    if (input.jobTitle !== undefined) updateData.jobTitle = input.jobTitle;
+    if (input.dob !== undefined) {
+        updateData.dob = input.dob ? new Date(input.dob) : null;
+    }
+    if (input.role !== undefined) updateData.role = input.role;
+    if (input.permissions !== undefined) updateData.permissions = input.permissions;
 
     if (input.password && input.password !== '*****' && input.password.length >= 6) {
         updateData.password = await bcrypt.hash(input.password, 10);
     }
+
+    if (Object.keys(updateData).length === 0) return;
 
     await prisma.user.update({
         where: { id: userId },
@@ -193,20 +205,32 @@ export async function createUser(data: unknown) {
         throw new Error('Unauthorized to create ADMIN');
     }
 
+    const email = input.email.trim().toLowerCase();
     const hashedPassword = await bcrypt.hash(input.password, 10);
 
-    return prisma.user.create({
-        data: {
-            name: input.name,
-            email: input.email,
-            password: hashedPassword,
-            role: requestedRole,
-            firstName: input.firstName,
-            lastName: input.lastName,
-            jobTitle: input.jobTitle,
-            permissions: input.permissions ?? [],
-            managedById: callerId,
-            approved: true,
-        },
-    });
+    try {
+        const created = await prisma.user.create({
+            data: {
+                name: input.name,
+                email,
+                password: hashedPassword,
+                role: requestedRole,
+                firstName: input.firstName,
+                lastName: input.lastName,
+                jobTitle: input.jobTitle,
+                permissions: input.permissions ?? [],
+                managedById: callerId,
+                approved: true,
+            },
+            select: PUBLIC_USER_SELECT,
+        });
+        revalidatePath('/dashboard');
+        return created;
+    } catch (error) {
+        if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+            throw new Error('El email ya está en uso.');
+        }
+        console.error('createUser error:', error);
+        throw new Error('Error al crear el usuario.');
+    }
 }

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { NutritionEngine } from '../services/nutritionEngine';
+import { NutritionEngine, heatBrahmanGuess } from '../services/nutritionEngine';
 import { CarcassEngine } from '../services/carcassEngine';
 import { LifecycleEngine } from '../services/lifecycleEngine';
 import { BreedManager, type Breed } from '../services/breedManager';
 import { PriceEngine } from '../services/priceEngine';
+import { computeSalesPrice } from '@/app/lib/price-actions';
 import type { AnimalLike, LivestockEvent } from '@/types/livestock';
 
 type CalculatorDietItem = {
@@ -23,9 +24,12 @@ type CalculatorAnimal = AnimalLike & {
     genotype?: { fatherBreedId?: string; motherBreedId?: string };
     fatherBreedId?: string;
     motherBreedId?: string;
+    // Optional explicit Bos indicus fraction (0–1). When absent, we infer
+    // it from the breed's biological_type (Composite → 0.5, Indicus → 1).
+    brahmanPercent?: number;
 };
 
-type FeedingState = 'Cebo' | 'Mantenimiento';
+type FeedingState = 'Cebo' | 'Mantenimiento' | 'Recría' | 'Calidad';
 
 export interface CalculatorResults {
     diet: CalculatorDietItem[];
@@ -39,6 +43,7 @@ export interface CalculatorResults {
         projectedSales: number;
         pricePerKg: number;
         category: string;
+        priceSource: 'exact' | 'class' | 'letter' | 'fallback';
         totalCost: number;
         margin: number;
     };
@@ -51,6 +56,7 @@ export interface CalculatorResults {
     carcass: {
         conformation_est: string;
         marbling_est: number;
+        fat_cover: number;
         is_premium: boolean;
         rc_percent: number;
         weight_est?: number;
@@ -81,7 +87,13 @@ export function useAnimalCalculator() {
         system: string;
         feeds?: CalculatorDietItem[];
         events?: LivestockEvent[];
-        overrideBreed?: Breed; // Support for simulating different breeds/crosses
+        overrideBreed?: Breed;
+        // Live THI from WeatherService (preferred), in NRC dairy units.
+        thi?: number;
+        // Soil / agronomic context. When provided, the diet skeleton uses
+        // feedSelectionEngine to pick locally-adapted forages and concentrates
+        // instead of hard-coded defaults.
+        farmContext?: import('@/services/feedSelectionEngine').FarmAgronomicContext;
     }) => {
         setLoading(true);
         setError(null);
@@ -153,15 +165,41 @@ export function useAnimalCalculator() {
             // Ensure weight is numeric and localized to the most accurate property
             const currentWeight = parseFloat(String(animal.currentWeight ?? animal.weight ?? 0));
 
-            // 1. Calculate Diet Requirements (New API)
+            // 1. Calculate Diet Requirements (objective-aware)
+            //
+            // Map UI objective → physiological state. Recría = moderate
+            // growth (not maintenance!). Engorde/Acabado/Calidad = finishing
+            // (not the same profile as max-growth Cebo).
+            const reqSex: 'Macho' | 'Hembra' | 'Castrado' =
+                (animal.sex === 'Hembra' || animal.sex === 'Castrado') ? animal.sex : 'Macho';
+
             let state: FeedingState = 'Cebo';
             if (params.objective === 'Mantenimiento') state = 'Mantenimiento';
-            if (params.objective.includes('Recría')) state = 'Mantenimiento';
-            if (params.objective.includes('Cebo') || params.objective.includes('Engorde')) state = 'Cebo';
+            else if (params.objective.includes('Recría')) state = 'Recría';
+            else if (
+                params.objective.includes('Acabado') ||
+                params.objective.includes('Calidad') ||
+                params.objective === 'Engorde'
+            ) state = 'Calidad';
+            else if (params.objective.includes('Cebo') || params.objective.includes('Engorde')) state = 'Cebo';
 
-            // Assume weight is current weight
-            const adgTarget = breed.adg_feedlot || 1.2; // Use breed potential as target baseline
-            const reqSex: 'Macho' | 'Hembra' | 'Castrado' = (animal.sex === 'Hembra' || animal.sex === 'Castrado') ? animal.sex : 'Macho';
+            // Use the KPI engine (objective + functional type aware) as the
+            // source of truth for target ADG. Previously we hard-coded
+            // breed.adg_feedlot, which over-stated requirements for
+            // maintenance / efficiency objectives and produced false protein
+            // and energy alerts.
+            const kpiTargets = NutritionEngine.calculateKPITargets(
+                {
+                    breed: animal.breed ?? '',
+                    sex: animal.sex ?? 'Macho',
+                    weight: currentWeight,
+                    ageMonths,
+                    biological_type: breed.biological_type,
+                },
+                params.objective,
+                params.system,
+            );
+            const adgTarget = Math.max(0, kpiTargets.adg);
             const reqs = NutritionEngine.calculateRequirements(currentWeight, adgTarget, ageMonths, state, reqSex);
 
             // 2. Real Diet Calculation
@@ -191,16 +229,71 @@ export function useAnimalCalculator() {
                 totalFDN += kgMS * ((item.fiber_percent || item.ndf_percent || item.fdn_percent || 0) / 100); // Check multiple keys for FDN
             });
 
-            // 3. Performance Prediction (New API)
+            // 3. Performance Prediction (objective-aware)
             // Avg Energy Density
             const dietEnergyDensity = totalDMI > 0 ? (totalEnergyMcal / totalDMI) : 0;
 
-            const predictedADG = NutritionEngine.predictPerformance(breed, dietEnergyDensity, totalDMI, currentWeight);
+            // Detect oleic+protected-lecithin synergies based on Viera et al.
+            // 2024 (ITACyL). The synergy contributes to carcass marbling, not
+            // to ADG — the study does not measure live weight gain.
+            const synergies = NutritionEngine.calculateSynergies(
+                dietToAnalyze.map((d) => ({
+                    feed_name: d.name || '',
+                    // oleic_pct_dm is exposed for FeedItem; calculator entries
+                    // may carry it forward but most legacy paths don't.
+                    oleic_pct_dm: (d as { oleic_pct_dm?: number }).oleic_pct_dm,
+                })),
+                {
+                    sex: animal.sex ?? 'Macho',
+                    ageMonths,
+                    biological_type: breed.biological_type,
+                    breed_code: breed.code,
+                },
+                {
+                    // Default dry-aging plan: 14 d for ternera, 60 d for buey.
+                    // The user can override this when registering a slaughter
+                    // event; for projections we use a conservative estimate.
+                    maturationDays: animal.sex === 'Castrado' && ageMonths >= 36 ? 60 : 14,
+                },
+            );
 
-            // 4. Carcass Estimation (New API)
+            // Bos indicus fraction: explicit field on the animal wins over
+            // the breed-type heuristic. Used by both NEm scaling and HLI
+            // threshold lookup.
+            const brahmanPercent = animal.brahmanPercent ?? heatBrahmanGuess(breed);
+
+            const predictedADG = NutritionEngine.predictPerformance(
+                breed,
+                dietEnergyDensity,
+                totalDMI,
+                currentWeight,
+                {
+                    currentMonth: new Date().getMonth(),
+                    brahmanPercent,
+                    thi: params.thi,
+                    // No synergy passed: predictPerformance no longer applies a
+                    // marbling-derived ADG boost (Viera et al. 2024 doesn't
+                    // measure ADG).
+                },
+            );
+
+            // 4. Carcass Estimation (with oleic+lecithin synergy bonuses)
             const projectedWeight = currentWeight + (predictedADG * 30);
             type AnimalSex = 'Macho' | 'Hembra' | 'Castrado';
             const sex: AnimalSex = (animal.sex === 'Hembra' || animal.sex === 'Castrado') ? animal.sex : 'Macho';
+
+            // Sum up active synergy contributions to feed into CarcassEngine,
+            // which uses them to push marbling and (modestly) yield.
+            const synergyBonuses = synergies
+                .filter((s) => s.active)
+                .reduce(
+                    (acc, s) => ({
+                        marbling: acc.marbling + (s.bonus_marbling || 0),
+                        yield_percent: acc.yield_percent + (s.bonus_yield || 0),
+                    }),
+                    { marbling: 0, yield_percent: 0 },
+                );
+
             const carcass = CarcassEngine.calculateCarcass(
                 projectedWeight,
                 ageMonths + 1,
@@ -211,6 +304,10 @@ export function useAnimalCalculator() {
                     isBellota: system.toLowerCase().includes('montanera') || system.toLowerCase().includes('bellota'),
                     isOx: (sex === 'Macho' || sex === 'Castrado') && ageMonths > 24,
                     sex,
+                    synergyBonuses,
+                    currentMonth: new Date().getMonth(),
+                    thi: params.thi,
+                    brahmanPercent,
                 }
             );
 
@@ -230,17 +327,38 @@ export function useAnimalCalculator() {
             const futureFeedCost = totalCost * 30;
             const totalAccumulatedCost = historicalEventCosts + historicalFeedCosts + futureFeedCost;
 
-            const salesProjection = PriceEngine.calculateSalesPrice(
-                {
+            // Use the server-side SEUROP price (DB-fresh from weekly cron
+            // refresh) for projections. Falls back transparently to the
+            // hardcoded table when the DB has no entry for the code.
+            let salesProjection: Awaited<ReturnType<typeof computeSalesPrice>>;
+            try {
+                salesProjection = await computeSalesPrice({
                     ageMonths: ageMonths + 1,
                     sex: animal.sex ?? 'Macho',
                     isCastrated: animal.sex === 'Castrado',
-                    isParida: animal.status === 'Parto' || animal.category === 'Nodriza'
-                },
-                carcass.carcass_weight,
-                carcass.conformation,
-                Math.round(carcass.marbling_score) // Round to nearest integer for SEUROP lookup (e.g. 3 instead of 3.4)
-            );
+                    isParida: animal.status === 'Parto' || animal.category === 'Nodriza',
+                    carcassWeightKg: carcass.carcass_weight,
+                    conformation: carcass.conformation,
+                    // SEUROP grid is indexed by subcutaneous fat cover (1-5),
+                    // not by intramuscular marbling. Pass the dedicated axis.
+                    fat: carcass.fat_cover,
+                });
+            } catch {
+                // If the action fails (offline, unauthorized, etc.) fall
+                // back to the synchronous client-side projection so the
+                // calculator still produces useful output.
+                salesProjection = PriceEngine.calculateSalesPrice(
+                    {
+                        ageMonths: ageMonths + 1,
+                        sex: animal.sex ?? 'Macho',
+                        isCastrated: animal.sex === 'Castrado',
+                        isParida: animal.status === 'Parto' || animal.category === 'Nodriza',
+                    },
+                    carcass.carcass_weight,
+                    carcass.conformation,
+                    carcass.fat_cover,
+                );
+            }
 
             setResults({
                 diet: dietToAnalyze,
@@ -258,6 +376,7 @@ export function useAnimalCalculator() {
                     projectedSales: salesProjection.totalValue,
                     pricePerKg: salesProjection.pricePerKg,
                     category: salesProjection.categoryCode,
+                    priceSource: salesProjection.priceSource,
                     totalCost: totalAccumulatedCost,
                     margin: salesProjection.totalValue - totalAccumulatedCost
                 },
@@ -292,6 +411,7 @@ export function useAnimalCalculator() {
                 carcass: {
                     conformation_est: carcass.conformation,
                     marbling_est: carcass.marbling_score,
+                    fat_cover: carcass.fat_cover,
                     is_premium: carcass.is_premium,
                     rc_percent: carcass.rc_percent,
                     limitingFactor: (() => {

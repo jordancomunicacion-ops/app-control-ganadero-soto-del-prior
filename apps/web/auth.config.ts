@@ -31,6 +31,8 @@ export const authConfig = {
             const isPublic =
                 nextUrl.pathname === '/login' ||
                 nextUrl.pathname === '/register' ||
+                nextUrl.pathname === '/forgot-password' ||
+                nextUrl.pathname === '/reset-password' ||
                 nextUrl.pathname.startsWith('/_next') ||
                 nextUrl.pathname.startsWith('/api/auth') ||
                 nextUrl.pathname.includes('favicon.ico');

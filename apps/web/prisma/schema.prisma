@@ -50,8 +50,20 @@ model Farm {
   lon                   Float?
   altitude              Float?
   defaultManagementSystem String? // extensivo, intensivo, mixto, ecologico
-  
-  // New Fields from Frontend
+
+  // Tipo y propósito de la finca.
+  //   farmType: define la intensidad productiva
+  //     'extensivo'      → pastoreo libre, baja carga, gran superficie
+  //     'semi_intensivo' → mixto con suplementación reglada
+  //     'intensivo'      → estabulación parcial/total, cebaderos
+  //   purpose: para qué se usa esta finca dentro del conjunto del ganadero
+  //     'livestock' → solo ganado (puede tener corrales/cebadero pero NO produce cultivos)
+  //     'cropland'  → solo cultivo destinado a consumo del ganado o venta
+  //     'mixed'     → ambas cosas (dehesa tradicional, mixto secano)
+  farmType              String?
+  purpose               String?
+
+  // Datos catastrales y geográficos
   municipio             String?
   municipioCode         String?
   provinciaCode         String?
@@ -63,13 +75,17 @@ model Farm {
   license               String?
   maxHeads              Int       @default(0)
   soilId                String?
+
+  // Legacy corral counters — conservados para retro-compatibilidad de UIs
+  // antiguas. La fuente de verdad ahora es la relación `corralRecords`.
   corrals               Int       @default(0)
-  corralNames           String?   // JSON or comma-separated
+  corralNames           String?   // JSON o comma-separated
+
   feedingSystem         String?
   slope                 Float     @default(0)
   irrigationCoef        Float     @default(0)
-  
-  // Analysis & Recommendations (Stored as JSON strings or JSON type if DB supports, keeping as String? for compatibility)
+
+  // Análisis y recomendaciones (JSON serializados)
   climateStudy          String?   // JSON
   cropsRecommendation   String?   // JSON
   breedsRecommendation  String?   // JSON
@@ -78,17 +94,242 @@ model Farm {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  // User Relation
-  userId                String?   // Optional for now to avoid breaking existing data, but should be required in strict mode
+  // Relación con propietario
+  userId                String?
   user                  User?     @relation(fields: [userId], references: [id])
+
+  // ── JERARQUÍA DE FINCAS ──────────────────────────────────────────────
+  //
+  // Una `Farm` con `parentFarmId = null` es una **finca principal**
+  // (típicamente `purpose = livestock` o `mixed` — la dehesa madre donde
+  // viven las vacas). Puede tener N fincas asociadas que la abastecen de
+  // alimento, con `parentFarmId = id-de-la-principal` y normalmente
+  // `purpose = cropland`.
+  //
+  // El sistema de identificación SIGPAC es el mismo en ambos niveles:
+  // cada finca (principal o asociada) tiene su propia referencia (provincia
+  // + municipio + polígono + parcela). Lo que las relaciona es solo este
+  // `parentFarmId` — agrupación lógica del ganadero, no catastral.
+  parentFarmId          String?
+  parentFarm            Farm?     @relation("FarmHierarchy", fields: [parentFarmId], references: [id], onDelete: SetNull)
+  childFarms            Farm[]    @relation("FarmHierarchy")
 
   // Relaciones
   animals               Animal[]
   dailyLogs             FarmDaily[]
   managementEvents      ManagementEvent[]
+  corralRecords         Corral[]
+  cropPlots             CropPlot[]
+  pacDeclarations       PACDeclaration[]
 
   @@index([userId])
   @@index([userId, createdAt])
+  @@index([parentFarmId])
+}
+
+// =============================================================================
+// CORRAL — UNIDAD DE MANEJO DEL GANADO
+// =============================================================================
+//
+// Un Corral representa DÓNDE ESTÁ EL GANADO físicamente. No es la unidad
+// productiva de cultivo (esa es CropPlot — entidad distinta).
+//
+// Si el corral es un cercado de pastoreo sobre una pradera sembrada,
+// usar `linkedPlotId` para vincularlo a la parcela de cultivo correspondiente.
+// El cultivo concreto (alfalfa, ryegrass, mezcla), su rotación, su uso PAC
+// y su histórico de siembras viven en `CropPlot` / `CropRotation`, no aquí.
+//
+// Tipos de corral:
+//   - 'pasto'              → cercado sobre pasto natural (sin siembra)
+//   - 'pasto_mejorado'     → cercado sobre pradera sembrada (usar linkedPlotId)
+//   - 'cementado_silo'     → cebadero cubierto con silo y comedero
+//   - 'cubierto'           → nave cubierta (invernada / parto / lactantes)
+//   - 'cebadero'           → cebadero al aire libre
+//   - 'paritorio'          → corral pequeño para vacas a punto de parir
+//   - 'enfermeria'         → aislamiento sanitario / cuarentena
+//   - 'manejo'             → manga de manejo, embarcadero
+//
+// La capacidad estimada (capacityLU) y la superficie permiten validar la
+// carga ganadera del corral contra el modelo Pulido / SoilEngine.
+model Corral {
+  id            String   @id @default(cuid())
+  farmId        String
+  farm          Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  name          String
+  kind          String   // pasto / pasto_mejorado / cementado_silo / cubierto / cebadero / paritorio / enfermeria / manejo
+  surfaceM2     Float?   // superficie útil
+  capacityLU    Float?   // capacidad estimada (LU)
+
+  hasShade      Boolean  @default(false)
+  hasWater      Boolean  @default(true)
+  hasFeeder     Boolean  @default(false)
+  hasSilo       Boolean  @default(false)
+
+  // Vínculo a la parcela de cultivo que se pastorea en este corral.
+  // Solo aplica si kind = 'pasto_mejorado' (pradera sembrada). Para
+  // pasto natural o cebaderos queda en NULL.
+  linkedPlotId  String?
+  linkedPlot    CropPlot? @relation("CorralPasture", fields: [linkedPlotId], references: [id], onDelete: SetNull)
+
+  // @deprecated — usar linkedPlot.rotations en su lugar. Mantenido como
+  // campo libre durante la transición para no perder datos existentes.
+  currentCrop   String?
+  // Última siega/pastoreo (para programa de descanso)
+  lastGrazedAt  DateTime?
+
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([farmId])
+  @@index([linkedPlotId])
+}
+
+// =============================================================================
+// CROP PLOT — UNIDAD DE PRODUCCIÓN DE ALIMENTO
+// =============================================================================
+//
+// Un CropPlot representa DÓNDE CRECE LA COMIDA. Es distinto del Corral, que
+// es donde está el ganado. Una pradera sembrada puede ser ambas cosas:
+// produce alimento (CropPlot) y se pastorea sobre ella (Corral con
+// linkedPlotId apuntando a este plot).
+//
+// El destino productivo de cada siembra (pastoreo directo, henificación,
+// ensilado, grano, venta, mejora de suelo) se decide por temporada en
+// `CropRotation.destinationFor`, no aquí — porque puede cambiar año a año.
+//
+// Lleva su propia referencia SIGPAC + PAC use code (puede diferir del de
+// la finca-contenedora).
+model CropPlot {
+  id              String   @id @default(cuid())
+  farmId          String
+  farm            Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  name            String
+  surfaceHa       Float    @default(0)
+
+  // Suelo: por defecto hereda del Farm, pero puede ser distinto entre parcelas.
+  soilId          String?
+
+  // Riego
+  irrigated       Boolean  @default(false)
+  irrigationType  String?  // aspersion / goteo / inundacion / pivot
+
+  // Datos catastrales / SIGPAC específicos de la parcela (si difieren de la finca)
+  sigpacPoligono  String?
+  sigpacParcela   String?
+  sigpacRecinto   String?
+
+  // PAC use code (SIGPAC USO):
+  //   TA = Tierras arables
+  //   PR = Pasto arbolado
+  //   PA = Pasto arbustivo
+  //   PS = Pradera permanente
+  //   FO = Forestal
+  //   VI = Viñedo
+  //   OV = Olivar
+  //   etc
+  pacUseCode      String?
+  pacRegime       String?  // 'secano' | 'regadio'
+
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  rotations       CropRotation[]
+  // Corrales que pastorean directamente sobre esta parcela (cuando la
+  // producción se consume in situ en vez de cosecharse).
+  grazingCorrals  Corral[] @relation("CorralPasture")
+
+  @@index([farmId])
+}
+
+// =============================================================================
+// CROP ROTATION — historial y planificación por parcela
+// =============================================================================
+//
+// Cada fila es un cultivo concreto sembrado en una parcela durante una
+// temporada. Permite construir el calendario y la rotación a 3-5 años.
+model CropRotation {
+  id               String   @id @default(cuid())
+  plotId           String
+  plot             CropPlot @relation(fields: [plotId], references: [id], onDelete: Cascade)
+
+  cropName         String   // ej: "Cebada", "Veza", "Maíz Forrajero"
+  cropFamily       String?  // 'Cereal Invierno' | 'Cereal Verano' | 'Leguminosa' | 'Pradera' | 'Barbecho'
+
+  sowDate          DateTime
+  harvestDate      DateTime?
+
+  expectedYieldT   Float?   // toneladas previstas
+  actualYieldT     Float?
+
+  // Destino productivo de esta siembra concreta:
+  //   'pastoreo_directo' → el ganado come la parcela in situ (no se cosecha)
+  //   'henificacion'     → se siega y empaca como heno (silo seco)
+  //   'ensilado'         → se siega y ensila en silo húmedo
+  //   'grano'            → cosecha de grano para almacén o pienso propio
+  //   'venta'            → comercialización fuera de la explotación
+  //   'mejora_suelo'     → abono verde / cubierta sin cosechar
+  //
+  // El valor histórico 'consumo_animal' se mantiene para retro-compatibilidad
+  // con datos antiguos sin distinción fina entre pastoreo y cosecha.
+  destinationFor   String?  @default("pastoreo_directo")
+
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([plotId])
+  @@index([plotId, sowDate])
+}
+
+// =============================================================================
+// PAC DECLARATION — Política Agraria Común (campaña anual)
+// =============================================================================
+//
+// Una declaración por finca y campaña. Refleja las ayudas solicitadas y un
+// estimado de cobro. Nota: no sustituye al SIGA/SGA oficial; solo lleva
+// registro interno para que el ganadero pueda planificar.
+model PACDeclaration {
+  id                String   @id @default(cuid())
+  farmId            String
+  farm              Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  campaignYear      Int      // 2024, 2025, 2026...
+  status            String   @default("borrador") // borrador | presentada | aprobada | rechazada | cobrada
+
+  // Líneas de ayuda solicitadas (campaña 2023-2027 reformada)
+  basePayment       Boolean  @default(false) // pago básico a la renta
+  redistributive    Boolean  @default(false) // complemento redistributivo (primeras 30 ha)
+  youngFarmer       Boolean  @default(false) // joven agricultor
+  organicScheme     Boolean  @default(false) // ayuda producción ecológica
+  coupledLivestock  Boolean  @default(false) // ayuda asociada vacuno cría/cebo/leche
+
+  // Ecorregímenes (P1-P9). Almacenados como array de códigos:
+  //   P1 = Pastoreo extensivo
+  //   P2 = Siega sostenible
+  //   P3 = Pastos húmedos
+  //   P4 = Rotación con especies mejorantes
+  //   P5 = Siembra directa
+  //   P6 = Espacios de biodiversidad cultivo
+  //   P7 = Mantenimiento elementos del paisaje
+  //   P8 = Cubiertas vegetales en cultivo leñoso
+  //   P9 = Cubiertas inertes
+  ecoSchemes        String[] @default([])
+
+  // Agregados (auto-calculables a partir de plots + animals, o introducidos a mano)
+  totalEligibleHa   Float?
+  totalLU           Float?
+  estimatedPayment  Float?   // total estimado € campaña
+
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([farmId, campaignYear])
+  @@index([farmId])
 }
 
 model Breed {
@@ -156,13 +397,37 @@ model Animal {
   father                Animal?   @relation("Father", fields: [fatherId], references: [id])
 
   status                String?    // activo, vendido, muerto, sacrificado
-  
+
   // New Fields
   notes                 String?
   corral                String?
   category              String?
   breedName             String?   // For simple string storage if strict relation not used
   currentWeight         Float?
+
+  // Genetic composition for heat-tolerance modelling. Stored explicitly so
+  // F1 / composite animals where the breed string is "Cruzado" can still be
+  // resolved against Gaughan/Mader HLI thresholds and Mateescu et al.
+  // (2020) Brahman-gene body-temperature plasticity slopes.
+  //   brahmanPercent: 0–1 (0=pure taurus, 1=pure Bos indicus)
+  //   biotypeOverride: free-form override ("British" | "Continental" |
+  //     "Rustic_European" | "Dairy" | "Indicus" | "Composite") to skip the
+  //     name-based heuristic when the user knows better.
+  brahmanPercent        Float?
+  biotypeOverride       String?
+
+  // Slaughter / Sale outcome (filled when status moves to vendido/sacrificado/muerto).
+  // Persisted at the Animal level so reports can be generated without re-walking events.
+  exitDate              DateTime?
+  actualLiveWeight      Float?
+  actualCarcassWeight   Float?
+  actualYield           Float?   // rendimiento canal real (0–1)
+  actualPrice           Float?   // total € paid
+  actualPricePerKg      Float?   // €/kg canal
+  actualSeuropConf      String?  // P / O / R / U / E / S
+  actualSeuropFat       Int?     // 1–5
+  actualCategory        String?  // V, Z, A, B, C, D, E (MAPA)
+  deathReason           String?
 
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
@@ -368,8 +633,32 @@ model TraceabilityReport {
   id                    String    @id @default(cuid())
   animalId              String
   animal                Animal    @relation(fields: [animalId], references: [id])
-  
+
   issueDate             DateTime
   summaryJson           String    // JSON string
   qrToken               String    @unique
+}
+
+// Weekly SEUROP / MAPA reference prices.
+//
+// `code` is the lookup key used by PriceEngine: either the full grid cell
+// (e.g. "AR3", "CU3") or the class ("AR", "CU") or just the MAPA letter
+// ("A", "C") as a coarser fallback. The latest non-null entry for a given
+// code wins — `week` lets us audit history and keep multiple weeks for
+// trend analysis.
+//
+// Refreshed by `app/api/cron/refresh-prices` (configurable feed via
+// PRICES_FEED_URL) or by a manual admin action.
+model Price {
+  id            String   @id @default(cuid())
+  code          String
+  pricePer100Kg Float
+  week          String   // ISO week key, e.g. "2026-W20"
+  source        String   @default("custom") // lonja_salamanca, mapa, eu_observatory, manual, custom
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([code, week])
+  @@index([code])
+  @@index([week])
 }

@@ -1,3 +1,4 @@
+import { auth } from '@/auth';
 import { prisma } from './prisma';
 
 /**
@@ -14,6 +15,61 @@ export async function getEffectiveUserId(userId: string): Promise<string> {
         return user.managedById;
     }
     return userId;
+}
+
+/**
+ * Reads the current session, throws if missing, and returns the *effective*
+ * userId (the manager's id for WORKER, otherwise the user's own id) along
+ * with the caller identity. All data-access server actions must use this
+ * helper instead of trusting a userId argument from the client.
+ */
+export async function requireEffectiveUserId(): Promise<{
+    callerId: string;
+    callerRole: string;
+    effectiveUserId: string;
+}> {
+    const session = await auth();
+    const callerId = session?.user?.id;
+    if (!session || !callerId) {
+        throw new Error('Unauthorized');
+    }
+    const effectiveUserId = await getEffectiveUserId(callerId);
+    const callerRole = (session.user?.role || 'WORKER').toUpperCase();
+    return { callerId, callerRole, effectiveUserId };
+}
+
+/**
+ * Verifies the given farm belongs to the effective user (or that the user is
+ * ADMIN). Throws on mismatch. Returns the farm row when found.
+ */
+export async function assertFarmOwnership(farmId: string, effectiveUserId: string, callerRole: string) {
+    if (!farmId) throw new Error('Farm id required');
+    const farm = await prisma.farm.findUnique({
+        where: { id: farmId },
+        select: { id: true, userId: true },
+    });
+    if (!farm) throw new Error('Farm not found');
+    if (callerRole !== 'ADMIN' && farm.userId !== effectiveUserId) {
+        throw new Error('Forbidden: farm does not belong to user');
+    }
+    return farm;
+}
+
+/**
+ * Verifies the given animal lives in a farm owned by the effective user
+ * (or that the caller is ADMIN). Throws on mismatch.
+ */
+export async function assertAnimalOwnership(animalId: string, effectiveUserId: string, callerRole: string) {
+    if (!animalId) throw new Error('Animal id required');
+    const animal = await prisma.animal.findUnique({
+        where: { id: animalId },
+        select: { id: true, farmId: true, farm: { select: { userId: true } } },
+    });
+    if (!animal) throw new Error('Animal not found');
+    if (callerRole !== 'ADMIN' && animal.farm.userId !== effectiveUserId) {
+        throw new Error('Forbidden: animal does not belong to user');
+    }
+    return animal;
 }
 
 /**

@@ -21,11 +21,21 @@ export async function authenticate(
     const password = formData.get('password');
 
     try {
-        await signIn('credentials', {
+        const result = await signIn('credentials', {
             redirect: false,
             email,
             password,
         });
+
+        // With redirect:false NextAuth may surface failures either by throwing
+        // or by returning an object with an `error` field. Handle both shapes.
+        if (result && typeof result === 'object' && 'error' in result && result.error) {
+            const code = String(result.error);
+            if (code === 'CredentialsSignin') return 'Credenciales inválidas.';
+            if (code === 'AccessDenied') return 'Cuenta pendiente de aprobación.';
+            return 'Error de autenticación.';
+        }
+
         return { success: true, message: 'Login exitoso' };
     } catch (error) {
         if (error instanceof AuthError) {

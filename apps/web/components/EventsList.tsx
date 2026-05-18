@@ -6,7 +6,17 @@ import { LifecycleEngine } from '@/services/lifecycleEngine';
 import { createEvent, getEvents } from '@/app/lib/event-actions';
 import { getFarms } from '@/app/lib/farm-actions';
 import { getAnimals } from '@/app/lib/animal-actions';
+import { glossary } from '@/lib/glossary';
 import type { AnimalLike, FarmLike, LivestockEvent } from '@/types/livestock';
+
+// Mapeo de tipo de evento (visible en el dropdown) → clave del glosario.
+const EVENT_TYPE_GLOSSARY: Record<string, string> = {
+    'Saneamiento': 'event_saneamiento',
+    'Pesaje': 'event_pesaje',
+    'Inseminación': 'event_inseminacion',
+    'Parto': 'event_parto',
+    'Diagnóstico Gestación': 'event_diagnostico',
+};
 
 type LifecycleAlert = ReturnType<typeof LifecycleEngine.getLifecycleAlerts>[number] & {
     crotal?: string;
@@ -290,6 +300,11 @@ export function EventsList({ userId }: { userId?: string }) {
                                         <option key={type} value={type}>{type}</option>
                                     ))}
                                 </select>
+                                {EVENT_TYPE_GLOSSARY[newEvent.type] && (
+                                    <p className="text-[11px] italic text-gray-400 mt-1 leading-snug">
+                                        {glossary(EVENT_TYPE_GLOSSARY[newEvent.type])?.plain}
+                                    </p>
+                                )}
                             </div>
 
                             <div>

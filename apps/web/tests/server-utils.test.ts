@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { safeJsonParse, getEffectiveUserId } from '@/lib/server-utils';
+
+// Avoid pulling in next-auth (and therefore next/server) from server-utils.
+vi.mock('@/auth', () => ({ auth: vi.fn() }));
 
 // Mock Prisma singleton
 vi.mock('@/lib/prisma', () => ({
@@ -10,6 +12,7 @@ vi.mock('@/lib/prisma', () => ({
     },
 }));
 
+import { safeJsonParse, getEffectiveUserId } from '@/lib/server-utils';
 import { prisma } from '@/lib/prisma';
 
 // ─── safeJsonParse ────────────────────────────────────────────────────────────

@@ -7,6 +7,9 @@ import { useAnimalCalculator } from '@/hooks/useAnimalCalculator';
 import { FEED_DATABASE, FeedItem } from '../services/feedDatabase';
 import { NutritionEngine } from '../services/nutritionEngine';
 import { BreedManager, Breed } from '../services/breedManager';
+import { WeatherService } from '../services/weatherService';
+import { InfoTip } from '@/components/InfoTip';
+import { glossary } from '@/lib/glossary';
 import type { AnimalLike, LivestockEvent } from '@/types/livestock';
 
 
@@ -139,15 +142,43 @@ export function Calculator({ userId }: { userId?: string }) {
         if (!selectedAnimal || !targets) return;
         const weight = parseFloat(String(selectedAnimal.weight ?? '')) || 400;
 
-        // Call Engine
-        const generated = NutritionEngine.generateSmartDiet(
-            targets,
-            { weight },
-            effectiveSystem,
-            availableFeeds
+        const a = selectedAnimal as unknown as {
+            farmSoilId?: string;
+            farmSlopePct?: number;
+            farmFeedingSystem?: string;
+            farmAvgTempC?: number;
+            farmAnnualPrecipMm?: number;
+        };
+        const effectiveBreed = getEffectiveBreed(selectedAnimal);
+        const ageMonths = calculateAgeInMonths(
+            selectedAnimal.birth ??
+            (typeof selectedAnimal.birthDate === 'string' ? selectedAnimal.birthDate : ''),
         );
 
-        // Map to UI State (Convert DM to Fresh)
+        // Inject farm + animal context so the diet skeleton is built from
+        // locally-suggested feeds (feedSelectionEngine) instead of fixed IDs.
+        const generated = NutritionEngine.generateSmartDiet(
+            targets,
+            { weight, ageMonths, sex: selectedAnimal.sex },
+            effectiveSystem,
+            availableFeeds,
+            {
+                farm: {
+                    soil_id: a.farmSoilId,
+                    slope_pct: a.farmSlopePct,
+                    avg_annual_temp_c: a.farmAvgTempC,
+                    annual_precip_mm: a.farmAnnualPrecipMm,
+                    feeding_system: a.farmFeedingSystem,
+                },
+                animal: {
+                    biological_type: effectiveBreed?.biological_type,
+                    age_months: ageMonths,
+                    sex: selectedAnimal.sex,
+                    objective,
+                },
+            },
+        );
+
         const uiDiet = generated.map(g => {
             const feed = availableFeeds.find(f => f.id === g.feed_id);
             if (!feed) return null;
@@ -172,20 +203,54 @@ export function Calculator({ userId }: { userId?: string }) {
     }
 
     // Manual Calculation Handler
-    const handleSimulate = () => {
-        if (selectedAnimal) {
-            calculate({
-                animal: selectedAnimal,
-                objective,
-                system: effectiveSystem,
-                feeds: diet.map(d => ({
-                    ...d.item,
-                    amount: d.amount
-                })),
-                events: events.filter(e => e.animalId === selectedAnimal.id || e.animalCrotal === selectedAnimal.id)
-            });
-            setHasCalculated(true);
+    const handleSimulate = async () => {
+        if (!selectedAnimal) return;
+
+        // Live THI from the farm coordinates (preferred) or skip.
+        const a = selectedAnimal as unknown as {
+            farmCoords?: { lat?: number; lon?: number };
+            coords?: { lat?: number; lng?: number; lon?: number };
+            farmSoilId?: string;
+            farmSlopePct?: number;
+            farmFeedingSystem?: string;
+            farmAvgTempC?: number;
+            farmAnnualPrecipMm?: number;
+        };
+        let thi: number | undefined;
+        const farmCoords = a.farmCoords ?? a.coords;
+        const lat = farmCoords?.lat;
+        const lon =
+            farmCoords && 'lon' in farmCoords ? farmCoords.lon
+            : farmCoords && 'lng' in farmCoords ? (farmCoords as { lng?: number }).lng
+            : undefined;
+        if (typeof lat === 'number' && typeof lon === 'number') {
+            try {
+                const v = await WeatherService.getCurrentTHI(lat, lon);
+                if (v !== null) thi = v;
+            } catch {
+                // Network failure: silently fall back to month heuristic.
+            }
         }
+
+        await calculate({
+            animal: selectedAnimal,
+            objective,
+            system: effectiveSystem,
+            feeds: diet.map(d => ({
+                ...d.item,
+                amount: d.amount,
+            })),
+            events: events.filter(e => e.animalId === selectedAnimal.id || e.animalCrotal === selectedAnimal.id),
+            thi,
+            farmContext: {
+                soil_id: a.farmSoilId,
+                slope_pct: a.farmSlopePct,
+                avg_annual_temp_c: a.farmAvgTempC,
+                annual_precip_mm: a.farmAnnualPrecipMm,
+                feeding_system: a.farmFeedingSystem,
+            },
+        });
+        setHasCalculated(true);
     };
 
     // Helper: Calculate Age in Months
@@ -217,21 +282,9 @@ export function Calculator({ userId }: { userId?: string }) {
         );
     })();
 
-    // Dynamic Conformation Helper
-    const getDynamicConformation = () => {
-        if (!results || !targets) return 'R';
-        const base = results.carcass?.conformation_est || 'R';
-        const gainRatio = results.projectedGain / (targets.adg || 1);
-
-        const grades = ['P', 'O', 'R', 'U', 'E', 'S'];
-        let idx = grades.indexOf(base);
-        if (idx === -1) idx = 2; // Default R
-
-        if (gainRatio < 0.90 && idx > 0) idx--; // Downgrade if underfed (<90% of target)
-        if (gainRatio > 1.10 && idx < grades.length - 1) idx++; // Upgrade if overperforming (>110% of target)
-
-        return grades[idx];
-    };
+    // The SEUROP conformation already reflects diet energy inside CarcassEngine
+    // — we surface it directly so what the user sees matches what the price
+    // grid was indexed by.
 
     const filteredAnimals = Array.from(new Map(animals.filter(a => a.crotal || a.id).map(a => [a.crotal || a.id, a])).values())
         .filter(a => {
@@ -486,7 +539,9 @@ export function Calculator({ userId }: { userId?: string }) {
                             {/* KPIs */}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom-4">
                                 <div className={`p-4 rounded-xl shadow-sm border ${results.projectedGain >= (targets?.adg || 0) ? 'bg-green-50 border-green-200' : 'bg-white border-gray-100'}`}>
-                                    <p className="text-gray-500 text-xs uppercase font-bold">GMD Estimada</p>
+                                    <p className="text-gray-500 text-xs uppercase font-bold flex items-center gap-1">
+                                        GMD Estimada <InfoTip termKey="adg" />
+                                    </p>
                                     <p className={`text-3xl font-bold ${results.projectedGain >= (targets?.adg || 0) ? 'text-green-700' : 'text-gray-900'} mt-1`}>
                                         {(results.projectedGain || 0).toFixed(2)} <span className="text-sm text-gray-400">kg/d</span>
                                     </p>
@@ -496,14 +551,24 @@ export function Calculator({ userId }: { userId?: string }) {
                                             {results.projectedGain >= (targets?.adg || 0) ? 'Objetivo Cumplido' : 'Bajo Rendimiento'}
                                         </span>
                                     </div>
+                                    <p className="text-[10px] italic text-gray-400 mt-2 leading-tight">
+                                        Kilos que gana el animal al día.
+                                    </p>
                                 </div>
                                 <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                                    <p className="text-gray-500 text-xs uppercase font-bold">Ingesta (MS)</p>
+                                    <p className="text-gray-500 text-xs uppercase font-bold flex items-center gap-1">
+                                        Ingesta (MS) <InfoTip termKey="dmi" />
+                                    </p>
                                     <p className="text-3xl font-bold text-gray-900 mt-1">{(results.dmiTarget || 0).toFixed(1)} <span className="text-sm text-gray-400">kg</span></p>
                                     <p className="text-xs text-gray-400 mt-2">Capacidad Máx. (Est.)</p>
+                                    <p className="text-[10px] italic text-gray-400 mt-1 leading-tight">
+                                        Comida real al día sin contar el agua.
+                                    </p>
                                 </div>
                                 <div className={`p-4 rounded-xl shadow-sm border ${Number(results.fcr) <= (targets?.fcr || 10) ? 'bg-green-50 border-green-200' : 'bg-white border-gray-100'}`}>
-                                    <p className="text-gray-500 text-xs uppercase font-bold">Eficiencia (FCR)</p>
+                                    <p className="text-gray-500 text-xs uppercase font-bold flex items-center gap-1">
+                                        Eficiencia (FCR) <InfoTip termKey="fcr" />
+                                    </p>
                                     <p className={`text-3xl font-bold ${Number(results.fcr) <= (targets?.fcr || 10) ? 'text-green-700' : 'text-gray-900'} mt-1`}>
                                         {Number(results.fcr || 0).toFixed(2)}
                                     </p>
@@ -513,10 +578,16 @@ export function Calculator({ userId }: { userId?: string }) {
                                             {Number(results.fcr) <= (targets?.fcr || 10) ? 'Excelente Conversión' : 'Mejorable'}
                                         </span>
                                     </div>
+                                    <p className="text-[10px] italic text-gray-400 mt-2 leading-tight">
+                                        Kilos de pienso para ganar 1 kg.
+                                    </p>
                                 </div>
                                 <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                                     <p className="text-gray-500 text-xs uppercase font-bold">Coste Diario</p>
                                     <p className="text-3xl font-bold text-gray-900 mt-1">{Number(results.totalCost || 0).toFixed(2)} <span className="text-sm text-gray-400">€</span></p>
+                                    <p className="text-[10px] italic text-gray-400 mt-2 leading-tight">
+                                        Coste estimado de la ración por animal y día.
+                                    </p>
                                 </div>
                             </div>
 
@@ -563,10 +634,26 @@ export function Calculator({ userId }: { userId?: string }) {
                                                         'LOW_N_EFF': 'DÉFICIT PROTEICO',
                                                         'HIGH_POLLUTION': 'EXCESO NITRÓGENO'
                                                     };
+                                                    // Glosario por código de alerta — explicación en cristiano.
+                                                    const glossaryKeyByAlert: Record<string, string> = {
+                                                        'ACIDOSIS': 'alert_acidosis',
+                                                        'LOW_FIBER': 'alert_acidosis',
+                                                        'BLOAT': 'alert_bloat',
+                                                        'BELLOTA_FIBER': 'alert_bellota_fiber',
+                                                        'BELLOTA_PROTEIN': 'alert_bellota_protein',
+                                                        'LOW_N_EFF': 'alert_low_n_eff',
+                                                        'HIGH_POLLUTION': 'alert_high_pollution',
+                                                    };
+                                                    const plain = glossary(glossaryKeyByAlert[alert.code] ?? '')?.plain;
                                                     return (
                                                         <div key={idx} className={`p-4 rounded-2xl text-xs transition-all hover:shadow-md ${alert.level === 'critical' ? 'bg-red-50 text-red-700' : 'bg-orange-50 text-orange-800'}`}>
                                                             <p className="font-black uppercase mb-1 tracking-widest">{translations[alert.code] || alert.code.replace('_', ' ')}</p>
                                                             <p className="font-medium opacity-90">{alert.message}</p>
+                                                            {plain && (
+                                                                <p className="text-[11px] italic mt-2 opacity-80 leading-snug">
+                                                                    {plain}
+                                                                </p>
+                                                            )}
                                                             {alert.action && (
                                                                 <div className="mt-2 pt-2 border-t border-current border-opacity-10 flex items-start gap-1.5">
                                                                     <span className="text-[10px]">💡</span>
@@ -590,16 +677,34 @@ export function Calculator({ userId }: { userId?: string }) {
                                             <div className="bg-white border border-gray-100 rounded-[2.5rem] shadow-sm px-4 py-8">
                                                 <div className="grid grid-cols-4 gap-0 text-center items-end">
                                                     <div className="border-r border-gray-100 h-10 flex flex-col justify-center px-1">
-                                                        <p className="text-gray-400 text-[7px] font-black uppercase tracking-[0.2em] mb-1">Clasificación</p>
-                                                        <span className="text-4xl font-black text-gray-900 leading-none tracking-tighter">{getDynamicConformation()}</span>
+                                                        <p className="text-gray-400 text-[7px] font-black uppercase tracking-[0.2em] mb-1 flex items-center justify-center gap-1">
+                                                            SEUROP <InfoTip termKey="seurop_conformation" />
+                                                        </p>
+                                                        <span
+                                                            className="text-4xl font-black text-gray-900 leading-none tracking-tighter cursor-help"
+                                                            title={`${glossary('seurop_conformation')?.plain} — Engrasamiento: ${glossary('seurop_fat')?.plain}`}
+                                                        >
+                                                            {results.carcass?.conformation_est || 'R'}
+                                                            <span className="text-xl text-gray-500 ml-1">{results.carcass?.fat_cover ?? 3}</span>
+                                                        </span>
                                                     </div>
                                                     <div className="border-r border-gray-100 h-10 flex flex-col justify-center px-1">
-                                                        <p className="text-gray-400 text-[7px] font-black uppercase tracking-[0.2em] mb-1">Infiltración</p>
-                                                        <span className="text-4xl font-black text-gray-900 leading-none tracking-tighter">{Math.round(results.carcass?.marbling_est || 1)}</span>
+                                                        <p className="text-gray-400 text-[7px] font-black uppercase tracking-[0.2em] mb-1 flex items-center justify-center gap-1">
+                                                            Infiltración <InfoTip termKey="marbling" />
+                                                        </p>
+                                                        <span
+                                                            className="text-4xl font-black text-gray-900 leading-none tracking-tighter cursor-help"
+                                                            title={glossary('marbling')?.plain}
+                                                        >
+                                                            {Math.round(results.carcass?.marbling_est || 1)}
+                                                        </span>
                                                     </div>
                                                     <div className="border-r border-gray-100 h-10 flex flex-col justify-center px-1">
                                                         <p className="text-gray-400 text-[7px] font-black uppercase tracking-[0.2em] mb-1">Kg Canal (Est.)</p>
-                                                        <div className="flex items-baseline justify-center gap-0.5">
+                                                        <div
+                                                            className="flex items-baseline justify-center gap-0.5 cursor-help"
+                                                            title="Kilos que dará la canal después del sacrificio, estimados a 30 días vista"
+                                                        >
                                                             <span className="text-3xl font-black text-gray-900 leading-none tracking-tighter">
                                                                 {results.carcass?.weight_est?.toFixed(0) || results.carcass?.rc_percent
                                                                     ? ((parseFloat(String(selectedAnimal?.currentWeight ?? selectedAnimal?.weight ?? 0)) + results.projectedGain * 30) * (results.carcass.rc_percent / 100)).toFixed(0)
@@ -609,13 +714,21 @@ export function Calculator({ userId }: { userId?: string }) {
                                                         </div>
                                                     </div>
                                                     <div className="h-10 flex flex-col justify-center px-1">
-                                                        <p className="text-gray-400 text-[7px] font-black uppercase tracking-[0.2em] mb-1">Rendimiento</p>
-                                                        <div className="flex items-baseline justify-center gap-0.5">
+                                                        <p className="text-gray-400 text-[7px] font-black uppercase tracking-[0.2em] mb-1 flex items-center justify-center gap-1">
+                                                            Rendimiento <InfoTip termKey="carcass_yield" />
+                                                        </p>
+                                                        <div
+                                                            className="flex items-baseline justify-center gap-0.5 cursor-help"
+                                                            title={glossary('carcass_yield')?.plain}
+                                                        >
                                                             <span className="text-3xl font-black text-gray-900 leading-none tracking-tighter">{results.carcass?.rc_percent || 0}</span>
                                                             <span className="text-xs font-black text-gray-400 uppercase">%</span>
                                                         </div>
                                                     </div>
                                                 </div>
+                                                <p className="text-[11px] italic text-gray-400 text-center mt-3 px-2">
+                                                    Conformación (S=súper, P=magro) y engrasamiento (1-5). Infiltración: grasa entre las fibras que da sabor. Rendimiento: % del peso vivo que queda como canal.
+                                                </p>
                                             </div>
 
                                             <div className="bg-gray-50/50 p-6 rounded-[2rem] border border-gray-100">

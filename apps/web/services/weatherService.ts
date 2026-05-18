@@ -28,7 +28,7 @@ export const WeatherService = {
             case 48: return 'Niebla';
             case 51: case 53: case 55: return 'Llovizna';
             case 61: case 63: case 65: return 'Lluvia';
-            case 71: case 73: case 75: return 'Nueve';
+            case 71: case 73: case 75: return 'Nieve';
             case 95: case 96: case 99: return 'Tormenta';
             default: return 'Desconocido';
         }
@@ -112,6 +112,26 @@ export const WeatherService = {
         if (code < 60) return '🌧️';
         if (code < 80) return '⛈️';
         return '🌨️';
+    },
+
+    /**
+     * Temperature-Humidity Index (NRC dairy formula).
+     *   THI = 1.8·T + 32 − (0.55 − 0.0055·RH) · (1.8·T − 26)
+     * Where T is dry-bulb temperature in °C and RH is relative humidity %.
+     */
+    computeTHI(tempC: number, rhPercent: number): number {
+        const t = 1.8 * tempC + 32;
+        return parseFloat((t - (0.55 - 0.0055 * rhPercent) * (1.8 * tempC - 26)).toFixed(1));
+    },
+
+    /**
+     * Average THI over the next 24 h of forecast. Useful when projecting
+     * heat-stress impact on imminent fattening / slaughter decisions.
+     */
+    async getCurrentTHI(lat: number, lon: number): Promise<number | null> {
+        const current = await this.getCurrentWeather(lat, lon);
+        if (!current) return null;
+        return this.computeTHI(current.temperature, current.humidity);
     },
 
     async analyzeClimate(lat: number, lon: number): Promise<{ avgTemp: number; classification: string; annualPrecip: number } | null> {

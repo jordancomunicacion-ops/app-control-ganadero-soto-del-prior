@@ -10,8 +10,13 @@ export default auth((req) => {
     const isPublic =
         nextUrl.pathname === '/login' ||
         nextUrl.pathname === '/register' ||
+        nextUrl.pathname === '/forgot-password' ||
+        nextUrl.pathname === '/reset-password' ||
         nextUrl.pathname.startsWith('/_next') ||
         nextUrl.pathname.startsWith('/api/auth') ||
+        // Cron endpoints: protected by their own bearer token, not the
+        // user session middleware.
+        nextUrl.pathname.startsWith('/api/cron/') ||
         nextUrl.pathname.startsWith('/.well-known/') ||
         nextUrl.pathname.includes('favicon.ico');
 

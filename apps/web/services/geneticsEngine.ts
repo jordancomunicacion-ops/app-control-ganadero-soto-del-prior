@@ -30,14 +30,15 @@ export const GeneticsEngine = {
         }
 
         // 5. Rústica Adaptada (Brahman, Morucha pura)
-        // High Heat Tolerance OR High Rusticity traits
-        if (breed.heatTolerance >= 0.8 || breed.code === 'MOR') {
+        // High Heat Tolerance OR High Rusticity traits.
+        // heatTolerance is on a 1-10 scale (see BreedManager).
+        if (breed.heatTolerance >= 8 || breed.code === 'MOR') {
             return 'rustica_adaptada';
         }
 
         // 6. Doble Propósito (Retinta, Avileña, Simmental Mix)
         // Balance of traits
-        if (breed.adgFeedlot > 1.0 && breed.heatTolerance < 0.8) {
+        if (breed.adgFeedlot > 1.0 && breed.heatTolerance < 8) {
             return 'doble_proposito';
         }
 
