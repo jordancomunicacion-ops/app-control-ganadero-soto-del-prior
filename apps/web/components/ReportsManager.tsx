@@ -144,19 +144,45 @@ function ReportCard({ icon, title, subtitle, longHelp, onClick }: {
 function ReportModal({ title, subtitle, onClose, children }: {
     title: string; subtitle?: string; onClose: () => void; children: React.ReactNode;
 }) {
+    // Cerrar con Escape para mejorar accesibilidad.
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
     return (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-start md:items-center justify-center p-2 md:p-6 overflow-y-auto">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl my-4 md:my-0">
-                <div className="flex justify-between items-start p-6 border-b border-gray-100 sticky top-0 bg-white rounded-t-xl">
-                    <div>
-                        <h2 className="text-xl font-bold text-gray-800">{title}</h2>
-                        {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
+        <div
+            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-4 md:p-6"
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        >
+            {/* Tarjeta: altura acotada con dvh (mejor en móvil con barras dinámicas)
+                + fallback a vh. flex-col para separar header/body y que solo el body
+                tenga scroll — así el botón X queda siempre visible. */}
+            <div
+                className="bg-white rounded-xl shadow-2xl w-full max-w-5xl flex flex-col"
+                style={{ maxHeight: 'min(95dvh, 95vh)' }}
+            >
+                {/* Header fijo (no se desplaza con el scroll del body) */}
+                <div className="flex justify-between items-start gap-4 px-4 sm:px-6 py-4 border-b border-gray-100 rounded-t-xl shrink-0">
+                    <div className="min-w-0 flex-1">
+                        <h2 className="text-lg sm:text-xl font-bold text-gray-800 truncate">{title}</h2>
+                        {subtitle && (
+                            <p className="text-xs sm:text-sm text-gray-500 mt-0.5 break-words line-clamp-2">{subtitle}</p>
+                        )}
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-900">
+                    <button
+                        onClick={onClose}
+                        aria-label="Cerrar"
+                        className="shrink-0 text-gray-400 hover:text-gray-900 p-1 -m-1 rounded hover:bg-gray-100"
+                    >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
-                <div className="p-6 space-y-6">{children}</div>
+                {/* Body con scroll propio */}
+                <div className="overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-6 grow">
+                    {children}
+                </div>
             </div>
         </div>
     );
