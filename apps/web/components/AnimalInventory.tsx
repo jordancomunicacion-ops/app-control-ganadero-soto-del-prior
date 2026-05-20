@@ -196,7 +196,10 @@ export function AnimalInventory({ userId }: { userId?: string }) {
             });
 
 
-            // Load data from DB
+            // Load data from DB. Cuando hay userId, la BD es la fuente de
+            // verdad: NO se hace fallback a localStorage abajo porque
+            // sobrescribir con datos antiguos crea race conditions
+            // (animal recién creado desaparece del listado).
             if (userId) {
                 getAnimals(userId, { page, pageSize: PAGE_SIZE }).then(({ data: serverAnimals, total }) => {
                     if (cancelled) return;
@@ -208,6 +211,9 @@ export function AnimalInventory({ userId }: { userId?: string }) {
                     if (cancelled) return;
                     setFarms(serverFarms as any[]);
                 }).catch(() => { /* noop */ });
+                // Eventos siguen viniendo de localStorage hasta que se migren a BD.
+                setEvents(read<any[]>('events', []));
+                return () => { cancelled = true; };
             }
 
             // Legacy/Sync logic (simplified for now to avoid conflicts)
