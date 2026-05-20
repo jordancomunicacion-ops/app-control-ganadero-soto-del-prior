@@ -330,7 +330,11 @@ export function EventsList({ userId }: { userId?: string }) {
                                         className="w-full border rounded-lg px-3 py-2 text-sm"
                                     >
                                         <option value="">Selecciona Animal...</option>
-                                        {animals.map(a => <option key={a.id} value={a.id}>{a.crotal} ({a.breed || '?'})</option>)}
+                                        {animals.map(a => (
+                                            <option key={a.id} value={a.id}>
+                                                {a.crotal || a.id}{a.breed ? ` · ${a.breed}` : ''}
+                                            </option>
+                                        ))}
                                     </select>
                                 )}
                             </div>
