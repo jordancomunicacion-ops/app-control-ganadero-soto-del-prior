@@ -66,7 +66,6 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole, mobileOpen
                 { id: 'grazing', label: 'Pastoreo', icon: Sprout },
                 { id: 'forage', label: 'Calendario', icon: CalendarDays },
                 { id: 'events', label: 'Eventos', icon: Calendar },
-                { id: 'alerts', label: 'Alertas', icon: Bell },
                 { id: 'calculator', label: 'Nutrición', icon: Wheat },
             ],
         },
@@ -78,6 +77,12 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole, mobileOpen
                 { id: 'welfare', label: 'Bienestar', icon: Award },
                 { id: 'simulate', label: 'Simulación', icon: Sparkles },
                 { id: 'import', label: 'Importar', icon: Upload },
+            ],
+        },
+        {
+            label: 'Configuración',
+            items: [
+                { id: 'alerts', label: 'Avisos', icon: Bell },
             ],
         },
         {
