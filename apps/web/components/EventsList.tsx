@@ -236,27 +236,6 @@ export function EventsList({ userId }: { userId?: string }) {
                         </div>
 
                         <div className="p-6 space-y-4">
-                            <div className="bg-sky-50 border border-sky-100 rounded-lg p-3 text-xs text-sky-800">
-                                <p className="font-bold mb-1">¿Qué tipo de evento es?</p>
-                                <p>
-                                    <strong>Inseminaciones, partos, diagnósticos y abortos</strong> →
-                                    pestaña <strong>Reproducción</strong> (los hitos futuros se programan en
-                                    cascada automática: diagnóstico +45 d, parto previsto +283 d, destete +210 d).
-                                </p>
-                                <p className="mt-1">
-                                    <strong>Tratamientos, vacunas y saneamientos</strong> →
-                                    pestaña <strong>Sanidad</strong> (retirada automática + kardex + libro de costes).
-                                </p>
-                                <p className="mt-1">
-                                    <strong>Cambios de ubicación / mover lote a otra parcela o corral</strong> →
-                                    pestaña <strong>Pastoreo</strong> (trazabilidad georreferenciada animal × parcela).
-                                </p>
-                                <p className="mt-1">
-                                    Aquí se registran <strong>movimientos administrativos del ciclo de vida</strong>
-                                    (entrada, salida, venta, baja) y <strong>productividad básica</strong> (pesaje,
-                                    condición corporal).
-                                </p>
-                            </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fecha</label>
