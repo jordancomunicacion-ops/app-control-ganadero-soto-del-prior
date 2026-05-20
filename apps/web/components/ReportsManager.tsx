@@ -20,6 +20,10 @@ import {
     LineChart as LineChartSVG,
     ScatterChart,
 } from './charts';
+import {
+    revenueAtWeaning,
+    COW_DEFAULTS,
+} from '@/services/cowProductivityEngine';
 
 type ReportKind = 'economic' | 'reproductive' | 'fcr';
 type FarmOption = { id: string; name: string };
@@ -804,26 +808,39 @@ function ReproductiveReportModal({ farms, onClose }: { farms: FarmOption[]; onCl
                                             <th className="pb-2 text-right">Intervalo</th>
                                             <th className="pb-2 text-right">IA periodo</th>
                                             <th className="pb-2">Estado</th>
+                                            <th className="pb-2 text-right">€/año</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {data.cows.map((c) => (
-                                            <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
-                                                <td className="py-2 font-mono text-xs">{c.id.slice(-8)}</td>
-                                                <td className="py-2">
-                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${c.isNurseCow ? 'bg-green-50 text-green-700 border-green-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
-                                                        {c.isNurseCow ? 'Nodriza' : 'Novilla'}
-                                                    </span>
-                                                </td>
-                                                <td className="py-2 text-right">{c.ageMonths.toFixed(0)} m</td>
-                                                <td className="py-2 text-right">{c.parityCount}</td>
-                                                <td className="py-2">{c.lastBirthDate ?? '—'}</td>
-                                                <td className="py-2 text-right">{c.daysSinceLastBirth ?? '—'}</td>
-                                                <td className={`py-2 text-right ${c.intervalDays && c.intervalDays > 450 ? 'text-amber-700' : ''}`}>{c.intervalDays ?? '—'}</td>
-                                                <td className="py-2 text-right">{c.inseminationsInPeriod}</td>
-                                                <td className="py-2"><StatusBadge status={c.currentStatus} /></td>
-                                            </tr>
-                                        ))}
+                                        {data.cows.map((c) => {
+                                            // Productividad €/vaca/año al destete usando el IEP real
+                                            // de cada vaca si está disponible, o el default sectorial.
+                                            const eurYear = c.isNurseCow
+                                                ? revenueAtWeaning({
+                                                      iepDays: c.intervalDays ?? COW_DEFAULTS.iepDays,
+                                                  }).grossRevenueEur
+                                                : null;
+                                            return (
+                                                <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
+                                                    <td className="py-2 font-mono text-xs">{c.id.slice(-8)}</td>
+                                                    <td className="py-2">
+                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${c.isNurseCow ? 'bg-green-50 text-green-700 border-green-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
+                                                            {c.isNurseCow ? 'Nodriza' : 'Novilla'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-2 text-right">{c.ageMonths.toFixed(0)} m</td>
+                                                    <td className="py-2 text-right">{c.parityCount}</td>
+                                                    <td className="py-2">{c.lastBirthDate ?? '—'}</td>
+                                                    <td className="py-2 text-right">{c.daysSinceLastBirth ?? '—'}</td>
+                                                    <td className={`py-2 text-right ${c.intervalDays && c.intervalDays > 450 ? 'text-amber-700' : ''}`}>{c.intervalDays ?? '—'}</td>
+                                                    <td className="py-2 text-right">{c.inseminationsInPeriod}</td>
+                                                    <td className="py-2"><StatusBadge status={c.currentStatus} /></td>
+                                                    <td className={`py-2 text-right tabular-nums ${eurYear && eurYear > 700 ? 'text-emerald-700 font-bold' : eurYear && eurYear < 500 ? 'text-amber-700' : ''}`}>
+                                                        {eurYear != null ? `${eurYear.toFixed(0)} €` : '—'}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
