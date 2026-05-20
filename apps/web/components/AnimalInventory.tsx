@@ -15,7 +15,10 @@ import { useUi } from '@/components/Toast';
 
 import { createAnimal, getAnimals } from '@/app/lib/animal-actions';
 import { getFarms } from '@/app/lib/farm-actions';
-import { ArrowDownToLine, ArrowUpFromLine, Beef, ChevronRight, FlaskConical, PlusCircle, Printer, Scale, Wheat } from 'lucide-react';
+import { findAnimalByDibOrCrotal } from '@/app/lib/animal-detail-actions';
+import { AnimalDetail } from './AnimalDetail';
+import { DIBScanner } from './DIBScanner';
+import { ArrowDownToLine, ArrowUpFromLine, Beef, Camera, ChevronRight, FlaskConical, NotebookPen, PlusCircle, Printer, Scale, Wheat } from 'lucide-react';
 
 export function AnimalInventory({ userId }: { userId?: string }) {
     const { read, write } = useStorage(); // Keep read for other things/legacy logic if needed
@@ -426,6 +429,11 @@ export function AnimalInventory({ userId }: { userId?: string }) {
 
     // Detail Modal State
     const [selectedAnimal, setSelectedAnimal] = useState<any>(null);
+    // Si se establece, sustituye toda la vista del inventario por la hoja de
+    // vida completa del animal (timeline + adjuntos + sanidad). Volver al
+    // listado desde el botón "Volver" del componente AnimalDetail.
+    const [fullDetailAnimalId, setFullDetailAnimalId] = useState<string | null>(null);
+    const [showScanner, setShowScanner] = useState(false);
 
     // Helper to find castration date from events or estimate
     const _getCastrationInfo = (animal: any) => {
@@ -444,6 +452,17 @@ export function AnimalInventory({ userId }: { userId?: string }) {
 
 
 
+    // Sub-vista: hoja de vida completa de un animal. Reemplaza el listado
+    // mientras esté seleccionada; "Volver" la cierra.
+    if (fullDetailAnimalId) {
+        return (
+            <AnimalDetail
+                animalId={fullDetailAnimalId}
+                onBack={() => setFullDetailAnimalId(null)}
+            />
+        );
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -452,7 +471,14 @@ export function AnimalInventory({ userId }: { userId?: string }) {
                     <h2 className="text-2xl font-bold text-gray-800">Inventario de Animales</h2>
                     <p className="text-gray-600">Registro y monitoreo individual</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                    <button
+                        onClick={() => setShowScanner(true)}
+                        className="bg-sky-50 text-sky-700 hover:bg-sky-100 font-medium py-2 px-4 rounded-lg transition-colors text-sm inline-flex items-center gap-2"
+                        title="Lee el código de barras o QR del crotal/DIB"
+                    >
+                        <Camera className="w-4 h-4" /> Escanear DIB
+                    </button>
                     <button
                         onClick={handleDownloadCSV}
                         className="bg-green-50 text-green-700 hover:bg-green-100 font-medium py-2 px-4 rounded-lg transition-colors text-sm inline-flex items-center gap-2"
@@ -782,6 +808,17 @@ export function AnimalInventory({ userId }: { userId?: string }) {
                                     </div>
                                     <div className="flex gap-2 z-10 items-center">
                                         <button
+                                            onClick={() => {
+                                                setFullDetailAnimalId(selectedAnimal.id);
+                                                setSelectedAnimal(null);
+                                                setShowDiet(false);
+                                            }}
+                                            className="bg-white/15 hover:bg-white/25 text-white px-3 py-2 rounded-lg font-medium text-sm backdrop-blur-sm transition-colors flex items-center gap-2"
+                                            title="Hoja de vida completa con timeline, fotos y sanidad"
+                                        >
+                                            <NotebookPen className="w-4 h-4" /> Hoja de vida
+                                        </button>
+                                        <button
                                             onClick={() => setShowDiet(true)}
                                             className="bg-amber-400 hover:bg-amber-300 text-amber-900 px-4 py-2 rounded-lg font-bold text-sm shadow-lg transform hover:scale-105 transition-all flex items-center gap-2"
                                             title="Simular dieta científica"
@@ -906,6 +943,27 @@ export function AnimalInventory({ userId }: { userId?: string }) {
                         )}
                     </div>
                 </div>
+            )}
+
+            {showScanner && (
+                <DIBScanner
+                    onClose={() => setShowScanner(false)}
+                    onLookup={async (code) => findAnimalByDibOrCrotal(code)}
+                    onResult={(code) => {
+                        setShowScanner(false);
+                        // Si el animal existe en inventario, abre la hoja de
+                        // vida. Si no, pre-rellena el alta con el crotal y
+                        // abre el formulario.
+                        findAnimalByDibOrCrotal(code).then((r) => {
+                            if (r.exists && r.animalId) {
+                                setFullDetailAnimalId(r.animalId);
+                            } else {
+                                setNewAnimal((prev: any) => ({ ...prev, id: code }));
+                                setShowForm(true);
+                            }
+                        });
+                    }}
+                />
             )}
         </div>
     );

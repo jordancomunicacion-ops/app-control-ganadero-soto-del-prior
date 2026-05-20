@@ -12,6 +12,14 @@ import { AnimalInventory } from '@/components/AnimalInventory';
 import { Calculator } from '@/components/Calculator';
 import { EventsList } from '@/components/EventsList';
 import { ReportsManager } from '@/components/ReportsManager';
+import { AlertRulesManager } from '@/components/AlertRulesManager';
+import { HealthManager } from '@/components/HealthManager';
+import { GrazingManager } from '@/components/GrazingManager';
+import { ForageCalendarManager } from '@/components/ForageCalendarManager';
+import { ReproductionManager } from '@/components/ReproductionManager';
+import { WelfareManager } from '@/components/WelfareManager';
+import { SimulationManager } from '@/components/SimulationManager';
+import { ImportManager } from '@/components/ImportManager';
 import { UsersManager } from '@/components/UsersManager';
 import { UserProfile } from '@/components/UserProfile';
 import { DataSeeder } from '@/components/DataSeeder';
@@ -90,6 +98,14 @@ export function LivestockApp({ session }: { session: Session | null }) {
             {activeTab === 'farms' && <FarmsManager userId={session?.user?.id} />}
             {activeTab === 'animals' && <AnimalInventory userId={session?.user?.id} />}
             {activeTab === 'events' && <EventsList userId={session?.user?.id} />}
+            {activeTab === 'health' && <HealthManager userId={session?.user?.id} />}
+            {activeTab === 'reproduction' && <ReproductionManager userId={session?.user?.id} />}
+            {activeTab === 'grazing' && <GrazingManager userId={session?.user?.id} />}
+            {activeTab === 'forage' && <ForageCalendarManager userId={session?.user?.id} />}
+            {activeTab === 'welfare' && <WelfareManager userId={session?.user?.id} />}
+            {activeTab === 'alerts' && <AlertRulesManager userId={session?.user?.id} />}
+            {activeTab === 'simulate' && <SimulationManager userId={session?.user?.id} />}
+            {activeTab === 'import' && <ImportManager userId={session?.user?.id} />}
             {activeTab === 'users' && <UsersManager userId={session?.user?.id} currentUserRole={serverRole} />}
             {activeTab === 'calculator' && <Calculator userId={session?.user?.id} />}
             {activeTab === 'reports' && <ReportsManager />}

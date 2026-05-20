@@ -985,13 +985,23 @@ export function FarmsManager({ userId }: { userId?: string }) {
                     {editingId && (
                         <div className="space-y-4 pt-4 border-t">
                             <CorralEditor farmId={editingId} />
-                            {(purpose === 'cropland' || purpose === 'mixed') && (
-                                <CropPlotEditor
-                                    farmId={editingId}
-                                    farmSoilId={soilId}
-                                    farmProvinciaCode={provincia}
-                                    farmMunicipioCode={municipio}
-                                />
+                            {/* Parcelas de cultivo: disponibles en cualquier tipo de finca.
+                                En una finca ganadera (purpose=livestock) sirven para registrar
+                                las parcelas internas que abastecen al rebaño (alfalfa, cebada,
+                                pradera permanente). En cropland/mixed son el uso principal. */}
+                            <CropPlotEditor
+                                farmId={editingId}
+                                farmSoilId={soilId}
+                                farmProvinciaCode={provincia}
+                                farmMunicipioCode={municipio}
+                            />
+                            {purpose === 'livestock' && (
+                                <p className="text-[11px] italic text-gray-500 -mt-2 px-1">
+                                    En una finca ganadera puedes añadir aquí las parcelas internas
+                                    que cultivan alimento (cereales, leguminosas, praderas) para
+                                    el rebaño. El calendario forrajero usa estas parcelas para
+                                    avisarte si te falta producción.
+                                </p>
                             )}
                             <PACSection farmId={editingId} />
                         </div>
