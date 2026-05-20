@@ -19,15 +19,17 @@ const EVENT_TYPE_GLOSSARY: Record<string, string> = {
     'Diagnóstico Gestación': 'event_diagnostico',
 };
 
-// Eventos creables desde EventsList. Los tipos REPRODUCTIVOS y SANITARIOS
-// se gestionan exclusivamente desde sus módulos dedicados (Reproducción y
-// Sanidad) para evitar duplicidad de datos y para activar la lógica
-// específica de cada uno (programación en cascada, retirada automática,
-// kardex…). EventsList queda como timeline histórico + altas para los
-// movimientos genéricos y la productividad básica.
+// Eventos creables desde EventsList. Los tipos REPRODUCTIVOS, SANITARIOS
+// y los CAMBIOS DE UBICACIÓN se gestionan exclusivamente desde sus módulos
+// dedicados (Reproducción, Sanidad y Pastoreo) para evitar duplicidad de
+// datos y para activar la lógica específica de cada uno (programación en
+// cascada, retirada automática, kardex, trazabilidad georreferenciada).
+// EventsList queda como timeline histórico + altas para los movimientos
+// administrativos del animal (entrada/salida/venta/baja) y la productividad
+// básica que aún no tiene módulo propio.
 const EVENT_TYPES = {
     'Productivo': ['Pesaje', 'Condición Corporal'],
-    'Movimientos': ['Cambio de Corral', 'Entrada', 'Salida', 'Venta', 'Muerte/Sacrificio'],
+    'Ciclo de vida': ['Entrada', 'Salida', 'Venta', 'Muerte/Sacrificio'],
     'Otros': ['Observación', 'Manejo'],
 };
 
@@ -235,17 +237,24 @@ export function EventsList({ userId }: { userId?: string }) {
 
                         <div className="p-6 space-y-4">
                             <div className="bg-sky-50 border border-sky-100 rounded-lg p-3 text-xs text-sky-800">
-                                <p className="font-bold mb-1">¿Es un evento reproductivo o sanitario?</p>
+                                <p className="font-bold mb-1">¿Qué tipo de evento es?</p>
                                 <p>
-                                    Las <strong>inseminaciones, partos, diagnósticos y abortos</strong> se registran
-                                    desde la pestaña <strong>Reproducción</strong> — al crearlos allí, los hitos
-                                    futuros (diagnóstico a +45 días, parto previsto a +283, destete a +210) se
-                                    programan en cascada automáticamente.
+                                    <strong>Inseminaciones, partos, diagnósticos y abortos</strong> →
+                                    pestaña <strong>Reproducción</strong> (los hitos futuros se programan en
+                                    cascada automática: diagnóstico +45 d, parto previsto +283 d, destete +210 d).
                                 </p>
                                 <p className="mt-1">
-                                    Los <strong>tratamientos, vacunas y saneamientos</strong> se registran desde
-                                    la pestaña <strong>Sanidad</strong> — así se calcula la retirada de carne
-                                    automáticamente y alimenta el kardex y el libro de costes.
+                                    <strong>Tratamientos, vacunas y saneamientos</strong> →
+                                    pestaña <strong>Sanidad</strong> (retirada automática + kardex + libro de costes).
+                                </p>
+                                <p className="mt-1">
+                                    <strong>Cambios de ubicación / mover lote a otra parcela o corral</strong> →
+                                    pestaña <strong>Pastoreo</strong> (trazabilidad georreferenciada animal × parcela).
+                                </p>
+                                <p className="mt-1">
+                                    Aquí se registran <strong>movimientos administrativos del ciclo de vida</strong>
+                                    (entrada, salida, venta, baja) y <strong>productividad básica</strong> (pesaje,
+                                    condición corporal).
                                 </p>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
