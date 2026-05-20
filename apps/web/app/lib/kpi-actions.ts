@@ -10,6 +10,7 @@ import {
 } from '@/services/emissionEngine';
 import { estimateCarryingCapacity } from '@/services/soilEngine';
 import { getFarmCosts } from './cost-actions';
+import { getFarmProductivitySummary } from './productivity-actions';
 
 /**
  * Calcula el cuadro de KPIs ejecutivos para todas las fincas del usuario
@@ -249,6 +250,31 @@ export async function getDashboardKPIs(farmId?: string): Promise<KPI[]> {
         }
     }
 
+    // ── Productividad media por vaca nodriza (€/vaca/año al destete) ──────────
+    //
+    // Sumamos los márgenes netos de cada finca pesados por su número de
+    // hembras reproductoras. Si la finca aún no tiene hembras adultas, queda null.
+    let productividadVacaEur: number | null = null;
+    {
+        let weightedNet = 0;
+        let totalCows = 0;
+        for (const fId of farmIds) {
+            try {
+                const p = await getFarmProductivitySummary(fId);
+                if (p.breedingFemalesCount > 0) {
+                    weightedNet +=
+                        p.avgNetWeaningEur * p.breedingFemalesCount;
+                    totalCows += p.breedingFemalesCount;
+                }
+            } catch {
+                /* finca sin acceso o sin datos */
+            }
+        }
+        if (totalCows > 0) {
+            productividadVacaEur = weightedNet / totalCows;
+        }
+    }
+
     const inputs: KPIInputs = {
         activeHeadcount: activeAnimals.length,
         gmdAverage,
@@ -259,6 +285,7 @@ export async function getDashboardKPIs(farmId?: string): Promise<KPI[]> {
         margenEuroPorKgCanal,
         cargaRatio,
         alertasActivas,
+        productividadVacaEur,
     };
 
     return buildKPIBoard(inputs);
@@ -275,6 +302,7 @@ function emptyInputs(): KPIInputs {
         margenEuroPorKgCanal: null,
         cargaRatio: null,
         alertasActivas: 0,
+        productividadVacaEur: null,
     };
 }
 

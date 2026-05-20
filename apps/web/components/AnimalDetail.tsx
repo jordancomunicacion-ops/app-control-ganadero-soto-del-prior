@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import {
     ArrowLeft,
     Camera,
+    Coins,
     FileText,
     Image as ImageIcon,
     Loader2,
@@ -22,6 +23,7 @@ import {
     addAnimalNote,
     deleteAnimalAttachment,
 } from '@/app/lib/animal-detail-actions';
+import { getCowProductivity } from '@/app/lib/productivity-actions';
 
 interface AnimalDetailProps {
     animalId: string;
@@ -163,15 +165,23 @@ export function AnimalDetail({ animalId, onBack }: AnimalDetailProps) {
             </div>
 
             {activeTab === 'resumen' && (
-                <ResumenTab
-                    lastWeight={lastWeight}
-                    weightsCount={weights.length}
-                    eventsCount={events.length}
-                    healthCount={healthRecords.length}
-                    photosCount={photos.length}
-                    alertsCount={alerts.length}
-                    activeWithdrawal={activeWithdrawal}
-                />
+                <>
+                    <ResumenTab
+                        lastWeight={lastWeight}
+                        weightsCount={weights.length}
+                        eventsCount={events.length}
+                        healthCount={healthRecords.length}
+                        photosCount={photos.length}
+                        alertsCount={alerts.length}
+                        activeWithdrawal={activeWithdrawal}
+                    />
+                    {/* Productividad económica — solo aplica a hembras adultas (≥ 18 m).
+                        Calcula €/vaca/año a partir del historial real de partos y
+                        del peso al destete de su descendencia. */}
+                    {animal.sex === 'H' && ageMonths >= 18 && (
+                        <CowProductivityCard animalId={animal.id} />
+                    )}
+                </>
             )}
 
             {activeTab === 'timeline' && (
@@ -751,6 +761,155 @@ function NotasTab({
                     ))}
                 </ul>
             )}
+        </div>
+    );
+}
+
+// ─── PRODUCTIVIDAD ECONÓMICA (VACAS NODRIZAS) ──────────────────────────────────
+
+type Productivity = Awaited<ReturnType<typeof getCowProductivity>>;
+
+function CowProductivityCard({ animalId }: { animalId: string }) {
+    const [data, setData] = useState<Productivity | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        getCowProductivity(animalId)
+            .then((r) => {
+                if (!cancelled) setData(r);
+            })
+            .catch(() => { /* noop */ })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [animalId]);
+
+    if (loading) {
+        return (
+            <div className="bg-white rounded-xl border border-gray-100 p-4 text-sm text-gray-500 flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Calculando productividad económica…
+            </div>
+        );
+    }
+
+    if (!data || 'error' in data) return null;
+
+    const usedRealIep = data.actualIepDays != null;
+    const usedRealWeight = data.averageWeaningWeightKg != null;
+    const fmtEur = (v: number) =>
+        v.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+
+    return (
+        <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+                <div>
+                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        <Coins className="w-5 h-5 text-amber-500" />
+                        Productividad económica
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                        Cuánto produce esta vaca al año vía su descendencia.
+                    </p>
+                </div>
+                <div className="text-right">
+                    <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">
+                        Partos registrados
+                    </p>
+                    <p className="text-xl font-bold text-gray-900">{data.partosCount}</p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Stat
+                    label="IEP"
+                    value={
+                        usedRealIep
+                            ? `${data.actualIepDays!.toFixed(0)} d`
+                            : 'sectorial 390 d'
+                    }
+                    hint={usedRealIep ? 'medido' : 'sin datos'}
+                />
+                <Stat
+                    label="Peso destete medio"
+                    value={
+                        usedRealWeight
+                            ? `${data.averageWeaningWeightKg!.toFixed(0)} kg`
+                            : 'sectorial 220 kg'
+                    }
+                    hint={usedRealWeight ? 'medido' : 'sin datos'}
+                />
+                <Stat
+                    label="Terneros/año"
+                    value={data.biological.weanedPerYear.toFixed(2)}
+                />
+                <Stat
+                    label="Kg/año"
+                    value={`${data.biological.kgWeanedPerYear.toFixed(0)} kg`}
+                />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3">
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-emerald-700">
+                        Escenario A · Venta al destete
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">
+                        {fmtEur(data.atWeaning.grossRevenueEur)}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                        bruto · {data.atWeaning.pricePerKg.toFixed(2)} €/kg vivo
+                    </p>
+                    {data.netAtWeaningEur != null && (
+                        <p className={`text-xs mt-1 font-bold ${data.netAtWeaningEur > 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                            {fmtEur(data.netAtWeaningEur)} neto tras costes
+                        </p>
+                    )}
+                </div>
+                <div className="bg-sky-50 border border-sky-100 rounded-lg p-3">
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-sky-700">
+                        Escenario B · Cebo y SEUROP
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">
+                        {fmtEur(data.atSlaughter.netRevenueEur)}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                        tras cebo · cat. MAPA {data.atSlaughter.mapaCategory} · {data.atSlaughter.pricePerKgCarcass.toFixed(2)} €/kg canal
+                    </p>
+                    {data.netAtSlaughterEur != null && (
+                        <p className={`text-xs mt-1 font-bold ${data.netAtSlaughterEur > 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                            {fmtEur(data.netAtSlaughterEur)} neto tras costes anuales
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            <details className="text-xs text-gray-500">
+                <summary className="cursor-pointer hover:text-gray-700">
+                    Cómo se calcula
+                </summary>
+                <p className="mt-1 leading-relaxed">{data.explanation}</p>
+                <p className="mt-1 italic">
+                    Costes anuales por vaca asumidos (sectorial): alimentación 280 €,
+                    sanidad 40 €, amortización vientre 75 €, mano de obra 90 €,
+                    otros 25 € · total 510 €.
+                </p>
+            </details>
+        </div>
+    );
+}
+
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+    return (
+        <div className="bg-white border border-gray-100 rounded-lg p-2">
+            <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">
+                {label}
+            </p>
+            <p className="text-sm font-bold text-gray-900 mt-0.5">{value}</p>
+            {hint && <p className="text-[10px] text-gray-400">{hint}</p>}
         </div>
     );
 }

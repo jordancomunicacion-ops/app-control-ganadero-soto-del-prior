@@ -56,6 +56,11 @@ export const KPI_THRESHOLDS = {
     carga: { verde: 1.0, ambar: 1.2 },
     /** Alertas activas: verde 0, ámbar ≤ 3, rojo > 3. */
     alertas: { verde: 0, ambar: 3 },
+    /**
+     * €/vaca/año (margen neto al destete tras costes anuales): verde ≥250 €,
+     * ámbar ≥100 €, rojo <100 €. Referencias vacuno carne extensivo español.
+     */
+    productividadVaca: { verde: 250, ambar: 100 },
 } as const;
 
 // ─── HELPERS DE CLASIFICACIÓN ──────────────────────────────────────────────────
@@ -109,6 +114,12 @@ export interface KPIInputs {
     cargaRatio: number | null;
     /** Nº de alertas activas en el rebaño. */
     alertasActivas: number;
+    /**
+     * Margen neto medio de la vaca nodriza al destete (€/vaca/año) calculado
+     * con `cowProductivityEngine` y los costes default sectoriales. Null si
+     * la finca no tiene hembras reproductoras (≥18 m).
+     */
+    productividadVacaEur: number | null;
 }
 
 /**
@@ -234,6 +245,20 @@ export function buildKPIBoard(inputs: KPIInputs): KPI[] {
             direction: 'lower_better',
             drilldownTab: 'events',
             hint: 'Alertas no resueltas generadas por el motor de reglas.',
+        },
+        {
+            id: 'productividad_vaca',
+            label: '€/vaca/año',
+            valueText: fmtNumber(inputs.productividadVacaEur, 0, '€'),
+            rawValue: inputs.productividadVacaEur,
+            status: classify(
+                inputs.productividadVacaEur,
+                KPI_THRESHOLDS.productividadVaca,
+                'higher_better',
+            ),
+            direction: 'higher_better',
+            drilldownTab: 'animals',
+            hint: 'Margen neto medio de la vaca nodriza tras costes anuales y venta del ternero al destete.',
         },
     ];
 }

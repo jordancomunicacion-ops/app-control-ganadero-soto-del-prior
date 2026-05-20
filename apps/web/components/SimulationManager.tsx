@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from 'react';
 import {
     BarChart3,
+    Coins,
     Loader2,
     Play,
     RotateCcw,
@@ -19,6 +20,7 @@ import {
     deleteSimulation,
     type ScenarioRun,
 } from '@/app/lib/simulation-actions';
+import { simulateCowProductivity } from '@/app/lib/productivity-actions';
 import type { ScenarioDeltas } from '@/services/simulationEngine';
 import type { FarmLike } from '@/types/livestock';
 
@@ -240,6 +242,196 @@ export function SimulationManager({ userId }: { userId?: string }) {
                     </ul>
                 </div>
             )}
+
+            {/* Simulador específico de productividad por vaca nodriza */}
+            <CowSimulator />
+        </div>
+    );
+}
+
+// ─── SIMULADOR DE PRODUCTIVIDAD POR VACA NODRIZA ───────────────────────────────
+
+function CowSimulator() {
+    const [iep, setIep] = useState(390);
+    const [weaningRate, setWeaningRate] = useState(0.85);
+    const [weaningWeightKg, setWeaningWeightKg] = useState(220);
+    const [weaningPrice, setWeaningPrice] = useState(4.2);
+    const [result, setResult] = useState<Awaited<ReturnType<typeof simulateCowProductivity>> | null>(null);
+    const [running, startRun] = useTransition();
+
+    const doRun = () => {
+        startRun(async () => {
+            const r = await simulateCowProductivity({
+                iepDays: iep,
+                weaningRate,
+                weaningWeightKg,
+                weaningPricePerKg: weaningPrice,
+            });
+            setResult(r);
+        });
+    };
+
+    return (
+        <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
+            <div>
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <Coins className="w-5 h-5 text-amber-500" />
+                    Productividad por vaca nodriza
+                </h3>
+                <p className="text-sm text-gray-600 mt-0.5">
+                    Mueve las palancas reproductivas y de mercado para ver cuánto
+                    produce una vaca al año en cada escenario (venta al destete vs cebo).
+                </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+                <NumSlider
+                    label="Intervalo entre partos (IEP)"
+                    suffix="días"
+                    min={365}
+                    max={500}
+                    step={5}
+                    value={iep}
+                    onChange={setIep}
+                    hint="365 = óptimo · >420 = malo"
+                />
+                <NumSlider
+                    label="Tasa de destete"
+                    suffix="%"
+                    min={60}
+                    max={100}
+                    step={1}
+                    value={Math.round(weaningRate * 100)}
+                    onChange={(v) => setWeaningRate(v / 100)}
+                    hint="terneros destetados / partos"
+                />
+                <NumSlider
+                    label="Peso al destete"
+                    suffix="kg"
+                    min={150}
+                    max={300}
+                    step={5}
+                    value={weaningWeightKg}
+                    onChange={setWeaningWeightKg}
+                    hint="depende raza + manejo"
+                />
+                <NumSlider
+                    label="Precio destete"
+                    suffix="€/kg vivo"
+                    min={3}
+                    max={6}
+                    step={0.1}
+                    value={weaningPrice}
+                    onChange={setWeaningPrice}
+                    hint="ternero pasto, lonja"
+                />
+            </div>
+
+            <button
+                onClick={doRun}
+                disabled={running}
+                className="inline-flex items-center gap-1 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white text-sm font-medium px-4 py-2 rounded-lg"
+            >
+                {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                Calcular productividad
+            </button>
+
+            {result && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-gray-100">
+                    <StatBox
+                        label="Kg/vaca/año"
+                        value={`${result.biological.kgWeanedPerYear.toFixed(0)} kg`}
+                        sub={`${result.biological.weanedPerYear.toFixed(2)} terneros/año`}
+                    />
+                    <StatBox
+                        label="Venta destete"
+                        value={`${result.atWeaning.grossRevenueEur.toFixed(0)} €`}
+                        sub={result.netAtWeaningEur != null
+                            ? `${result.netAtWeaningEur.toFixed(0)} € neto`
+                            : 'bruto'}
+                        tone={result.netAtWeaningEur && result.netAtWeaningEur > 250 ? 'ok' : result.netAtWeaningEur && result.netAtWeaningEur > 100 ? 'warn' : 'danger'}
+                    />
+                    <StatBox
+                        label="Cebo SEUROP"
+                        value={`${result.atSlaughter.netRevenueEur.toFixed(0)} €`}
+                        sub={result.netAtSlaughterEur != null
+                            ? `${result.netAtSlaughterEur.toFixed(0)} € neto`
+                            : 'tras cebo'}
+                        tone={result.netAtSlaughterEur && result.netAtSlaughterEur > 250 ? 'ok' : result.netAtSlaughterEur && result.netAtSlaughterEur > 100 ? 'warn' : 'danger'}
+                    />
+                </div>
+            )}
+        </div>
+    );
+}
+
+function NumSlider({
+    label,
+    suffix,
+    min,
+    max,
+    step,
+    value,
+    onChange,
+    hint,
+}: {
+    label: string;
+    suffix: string;
+    min: number;
+    max: number;
+    step: number;
+    value: number;
+    onChange: (v: number) => void;
+    hint?: string;
+}) {
+    return (
+        <label className="block">
+            <div className="flex items-baseline justify-between">
+                <span className="text-sm font-medium text-gray-700">{label}</span>
+                <span className="text-xs font-bold tabular-nums text-amber-700">
+                    {value} {suffix}
+                </span>
+            </div>
+            <input
+                type="range"
+                min={min}
+                max={max}
+                step={step}
+                value={value}
+                onChange={(e) => onChange(Number(e.target.value))}
+                className="w-full accent-amber-500"
+            />
+            {hint && <p className="text-[11px] text-gray-400">{hint}</p>}
+        </label>
+    );
+}
+
+function StatBox({
+    label,
+    value,
+    sub,
+    tone,
+}: {
+    label: string;
+    value: string;
+    sub?: string;
+    tone?: 'ok' | 'warn' | 'danger';
+}) {
+    const ring =
+        tone === 'ok'
+            ? 'bg-emerald-50 border-emerald-100'
+            : tone === 'warn'
+              ? 'bg-amber-50 border-amber-100'
+              : tone === 'danger'
+                ? 'bg-red-50 border-red-100'
+                : 'bg-white border-gray-100';
+    return (
+        <div className={`rounded-lg border p-3 ${ring}`}>
+            <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">
+                {label}
+            </p>
+            <p className="text-xl font-bold text-gray-900 mt-1">{value}</p>
+            {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
         </div>
     );
 }
