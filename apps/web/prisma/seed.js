@@ -2,6 +2,7 @@
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const { seedVetProducts } = require('./seed-vet-products');
 
 const prisma = new PrismaClient();
 
@@ -48,6 +49,9 @@ async function main() {
         console.log(password);
         console.log('==================================================');
     }
+
+    const vetReport = await seedVetProducts(prisma);
+    console.log(`Vet vademécum: ${vetReport.created} creados, ${vetReport.updated} actualizados (total ${vetReport.total}).`);
 }
 
 main()

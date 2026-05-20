@@ -121,6 +121,14 @@ model Farm {
   corralRecords         Corral[]
   cropPlots             CropPlot[]
   pacDeclarations       PACDeclaration[]
+  vetStockMovements     VetStockMovement[]
+  campaignSchedules     CampaignSchedule[]
+  grazingEvents         GrazingEvent[]
+  emissionRecords       EmissionRecord[]
+  simulations           Simulation[]
+  costEntries           CostEntry[]
+  alertRules            AlertRule[]
+  welfareAssessments    WelfareAssessment[]
 
   @@index([userId])
   @@index([userId, createdAt])
@@ -384,10 +392,15 @@ model Animal {
   id                    String    @id // Crotal ES...
   farmId                String
   farm                  Farm      @relation(fields: [farmId], references: [id])
-  
+
   sex                   String    // M, H
   birthDate             DateTime
-  
+
+  // Documento Identificación Bovina (España): suele coincidir con el crotal
+  // pero se guarda aparte porque puede llegar por escaneo OCR/QR antes de
+  // que el animal exista en el sistema (alta rápida desde móvil).
+  dibCode               String?   @unique
+
   genotypeId            String
   genotype              Genotype  @relation(fields: [genotypeId], references: [id])
 
@@ -404,6 +417,10 @@ model Animal {
   category              String?
   breedName             String?   // For simple string storage if strict relation not used
   currentWeight         Float?
+
+  // Foto principal (cara/perfil). El resto de fotos/eco/docs viven en
+  // AnimalAttachment con type discriminado.
+  photoUrl              String?
 
   // Genetic composition for heat-tolerance modelling. Stored explicitly so
   // F1 / composite animals where the breed string is "Cruzado" can still be
@@ -443,6 +460,10 @@ model Animal {
   alerts                Alert[]
   qualityPredictions    QualityPrediction[]
   traceabilityReports   TraceabilityReport[]
+  attachments           AnimalAttachment[]
+  healthRecords         HealthRecord[]
+  grazingEvents         GrazingEvent[]
+  costEntries           CostEntry[]
 
   @@index([farmId])
   @@index([farmId, createdAt])
@@ -661,4 +682,403 @@ model Price {
   @@unique([code, week])
   @@index([code])
   @@index([week])
+}
+
+// =============================================================================
+// SPRINT 0 — Cimientos para campo, sanidad, costes, huella y pastoreo
+// =============================================================================
+//
+// Los modelos a continuación dan soporte a las funcionalidades nuevas
+// derivadas del análisis competitivo (softwareganadero, VacApp). Todo
+// queda detrás del mismo permiso de finca/usuario que ya rige Animal,
+// sin abrir suscripciones ni módulos de pago.
+
+// --- HOJA DE VIDA DEL ANIMAL --------------------------------------------------
+//
+// Cualquier archivo adjunto a un animal: foto, ecografía, documento PDF
+// (guía de origen, factura de compra, certificado), nota libre con fecha.
+// El campo `url` puede apuntar a almacenamiento local (public/uploads/...)
+// o a S3 cuando se conecte; no asumimos backend concreto aún.
+model AnimalAttachment {
+  id          String   @id @default(cuid())
+  animalId    String
+  animal      Animal   @relation(fields: [animalId], references: [id], onDelete: Cascade)
+
+  type        String   // photo | ultrasound | document | note
+  url         String?  // null si type=note (solo texto)
+  caption     String?
+  takenAt     DateTime @default(now())
+  uploadedBy  String?  // userId que subió
+
+  createdAt   DateTime @default(now())
+
+  @@index([animalId])
+  @@index([animalId, type])
+}
+
+// --- SANIDAD: CATÁLOGO DE PRODUCTOS VETERINARIOS ------------------------------
+//
+// Vademécum local de medicamentos veterinarios. Se siembra con un núcleo
+// de productos AEMPS más frecuentes en vacuno; el usuario puede añadir
+// los suyos. Los tiempos de retiro carne/leche son la fuente de verdad
+// para bloquear ventas/lecheo durante el periodo.
+model VetProduct {
+  id                  String   @id @default(cuid())
+  name                String   // nombre comercial
+  activeIngredient    String?  // principio activo
+  category            String   // antibiotico | antiparasitario | vacuna | hormonal | antiinflamatorio | otro
+  presentation        String?  // inyectable / oral / pour-on / intramamario / intrauterino
+  withdrawalMeatDays  Int      @default(0) // días de retiro en carne
+  withdrawalMilkDays  Int      @default(0) // días de retiro en leche
+  aemspCode           String?  // código nacional AEMPS si se conoce
+  presvetCode         String?  // código PRESVET cuando exista
+  unit                String   @default("ml") // unidad de dosis: ml, mg, dosis, comprimido
+  defaultDosePerKg    Float?   // mg o ml por kg PV (orientativo)
+  notes               String?
+
+  records             HealthRecord[]
+  stockMovements      VetStockMovement[]
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([category])
+  @@index([name])
+}
+
+// --- SANIDAD: REGISTRO DE EVENTOS SANITARIOS ----------------------------------
+//
+// Cada tratamiento, vacunación, saneamiento (TB/brucelosis) o diagnóstico
+// genera una fila aquí. Las fechas `withdrawalMeatUntil` y
+// `withdrawalMilkUntil` se calculan a partir del producto en el momento
+// del alta y bloquean ventas/lecheo desde la UI hasta esa fecha.
+model HealthRecord {
+  id                    String      @id @default(cuid())
+  animalId              String
+  animal                Animal      @relation(fields: [animalId], references: [id], onDelete: Cascade)
+
+  type                  String      // treatment | vaccine | sanitation | diagnosis | deworming | other
+  productId             String?
+  product               VetProduct? @relation(fields: [productId], references: [id])
+
+  diagnosis             String?     // si type=diagnosis: descripción
+  dose                  Float?
+  doseUnit              String?     // ml, mg, dosis...
+  route                 String?     // IM, SC, IV, oral, pour-on, intramamaria
+  vetName               String?     // veterinario responsable
+  prescriptionRef       String?     // nº receta electrónica (futura integración PRESVET)
+  campaignId            String?     // si pertenece a saneamiento oficial
+  campaign              CampaignSchedule? @relation(fields: [campaignId], references: [id])
+
+  appliedAt             DateTime
+  withdrawalMeatUntil   DateTime?   // fecha hasta la que NO se puede sacrificar
+  withdrawalMilkUntil   DateTime?   // fecha hasta la que NO se puede ordeñar
+
+  cost                  Float?      // € total del tratamiento (alimenta CostEngine)
+  notes                 String?
+
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@index([animalId])
+  @@index([animalId, appliedAt])
+  @@index([productId])
+  @@index([campaignId])
+  @@index([withdrawalMeatUntil])
+}
+
+// --- SANIDAD: KARDEX DE STOCK VETERINARIO -------------------------------------
+//
+// Entradas (compras), salidas (uso clínico) y ajustes de inventario.
+// El stock actual se calcula sumando deltas para no perder histórico.
+model VetStockMovement {
+  id          String     @id @default(cuid())
+  farmId      String
+  farm        Farm       @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  productId   String
+  product     VetProduct @relation(fields: [productId], references: [id])
+
+  kind        String     // entrada | salida | ajuste
+  quantity    Float      // positivo siempre; el sentido lo da `kind`
+  unit        String     // ml, mg, dosis, vial...
+  unitCost    Float?     // €/unidad si entrada (compra)
+  totalCost   Float?     // €/total movimiento
+  reference   String?    // nº albarán, lote, motivo ajuste
+  occurredAt  DateTime   @default(now())
+
+  createdAt   DateTime   @default(now())
+
+  @@index([farmId])
+  @@index([farmId, productId])
+  @@index([occurredAt])
+}
+
+// --- SANIDAD: CAMPAÑAS / SANEAMIENTOS OFICIALES -------------------------------
+//
+// TB, brucelosis, lengua azul, IBR... — campañas obligatorias por
+// Comunidad Autónoma. Cada CampaignSchedule es un saneamiento concreto
+// con su fecha objetivo. Los HealthRecord generados (uno por animal)
+// quedan referenciados por `campaignId` para auditoría.
+model CampaignSchedule {
+  id              String   @id @default(cuid())
+  farmId          String
+  farm            Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  kind            String   // tuberculosis | brucelosis | lengua_azul | ibr | otro
+  scheduledFor    DateTime
+  completedAt     DateTime?
+  result          String?  // pendiente | favorable | sospechoso | positivo
+  vetName         String?
+  notes           String?
+
+  records         HealthRecord[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([farmId])
+  @@index([farmId, scheduledFor])
+}
+
+// --- PASTOREO POR ANIMAL × PARCELA SIGPAC -------------------------------------
+//
+// Trazabilidad fina del pastoreo. Cada fila es un periodo en que un
+// animal (o lote — futuro `herdId`) ha estado en una parcela concreta.
+// Une nuestro SoilEngine (carga ganadera por suelo/recinto) con la idea
+// de "dónde ha pastado cada vaca" tomada de VacApp.
+//
+// Tres formas de referenciar la parcela:
+//   - corralId  → cuando el animal está en un corral nuestro
+//   - cropPlotId → cuando pastorea una parcela de cultivo registrada
+//   - sigpacRef  → solo string (provincia/municipio/polígono/parcela/recinto)
+//     para parcelas no registradas en la app (campos ajenos, arriendos)
+model GrazingEvent {
+  id            String    @id @default(cuid())
+  farmId        String
+  farm          Farm      @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  animalId      String?   // si null, aplica al lote/corral entero
+  animal        Animal?   @relation(fields: [animalId], references: [id], onDelete: SetNull)
+
+  corralId      String?   // referencia opcional al corral nuestro
+  cropPlotId    String?   // referencia opcional a parcela de cultivo
+  sigpacRef     String?   // ej. "31/099/5/142/3" — provincia/muni/polig/parc/recinto
+
+  startAt       DateTime
+  endAt         DateTime?
+  areaHa        Float?    // hectáreas ocupadas (auto desde corral/plot si no se introduce)
+  lu            Float?    // unidades ganaderas asignadas (auto)
+
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([farmId])
+  @@index([farmId, startAt])
+  @@index([animalId])
+  @@index([corralId])
+  @@index([cropPlotId])
+}
+
+// --- HUELLA DE CARBONO IPCC ---------------------------------------------------
+//
+// Calculado por EmissionEngine (Sprint 1.1) por finca y grupo (categoría
+// animal + periodo). Se guarda para histórico/dashboard y para alimentar
+// la narrativa PAC + ecorregímenes.
+//
+// Unidades:
+//   - ch4Enteric, ch4Manure, n2oManure, n2oSoil: kg gas en el periodo
+//   - co2eqTotal: kg CO2 equivalente (GWP100 AR6: CH4=27.9 no-fossil, N2O=273)
+//   - intensityPerKgCarcass: kg CO2eq / kg canal producido en el periodo
+//   - intensityPerKgLive:    kg CO2eq / kg vivo producido en el periodo
+model EmissionRecord {
+  id                      String   @id @default(cuid())
+  farmId                  String
+  farm                    Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  groupKey                String   // ej. "vaca_seca" | "ternero" | "novilla" | "toro" | "total"
+  periodFrom              DateTime
+  periodTo                DateTime
+
+  headcount               Float    // nº cabezas equivalentes en el periodo
+  lu                      Float    // unidades ganaderas equivalentes
+
+  ch4Enteric              Float    // kg CH4 fermentación entérica
+  ch4Manure               Float    // kg CH4 gestión estiércol
+  n2oManure               Float    // kg N2O directo + indirecto estiércol
+  n2oSoil                 Float    // kg N2O deposiciones directas pastoreo
+  co2eqTotal              Float    // kg CO2eq (GWP100 AR6)
+
+  liveWeightKg            Float?   // kg vivo producido en el periodo
+  carcassKg               Float?   // kg canal producido en el periodo
+  intensityPerKgLive      Float?   // kg CO2eq / kg vivo
+  intensityPerKgCarcass   Float?   // kg CO2eq / kg canal
+
+  methodology             String   @default("IPCC2019_Tier1") // IPCC2019_Tier1 | IPCC2019_Tier2
+  notes                   String?
+
+  createdAt               DateTime @default(now())
+
+  @@index([farmId])
+  @@index([farmId, periodFrom])
+}
+
+// --- SIMULACIÓN "¿QUÉ PASARÍA SI?" --------------------------------------------
+//
+// Almacena escenarios para comparar. baseline y scenario son snapshots
+// JSON con los parámetros (precios, GMD, mortalidad, IEP, coste alim).
+// result es el output que renderiza el dashboard sin recalcular.
+model Simulation {
+  id              String   @id @default(cuid())
+  farmId          String
+  farm            Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  createdBy       String?  // userId
+
+  name            String
+  baselineJson    String   // snapshot variables actuales
+  scenarioJson    String   // overrides (deltas o valores absolutos)
+  resultJson      String?  // output cacheado del motor
+  notes           String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([farmId])
+  @@index([farmId, createdAt])
+}
+
+// --- COSTES DE PRODUCCIÓN (€/kg) ----------------------------------------------
+//
+// Diario libro de costes. Cada fila imputa un coste real o estimado a
+// una finca y, opcionalmente, a un animal concreto. Las fuentes
+// automáticas (ración, evento sanitario, mortalidad) generan filas con
+// `source` distinto a "manual" para que el motor pueda recalcular sin
+// pisar entradas manuales.
+model CostEntry {
+  id          String    @id @default(cuid())
+  farmId      String
+  farm        Farm      @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  animalId    String?
+  animal      Animal?   @relation(fields: [animalId], references: [id], onDelete: SetNull)
+
+  category    String    // alimentacion | sanidad | mano_obra | amortizacion | servicios | otros
+  amount      Float     // €
+  date        DateTime
+  source      String    @default("manual") // manual | ration | health | event | depreciation
+  reference   String?   // ID del registro origen si aplica
+  notes       String?
+
+  createdAt   DateTime  @default(now())
+
+  @@index([farmId])
+  @@index([farmId, date])
+  @@index([animalId])
+}
+
+// --- BIENESTAR ANIMAL (Welfare Quality® / Welfair / B+ PAWS) ------------------
+//
+// Una `WelfareAssessment` es una sesión de evaluación interna que el
+// ganadero usa para preparar la auditoría externa (SGS, Bureau Veritas)
+// o para autocontrol periódico. Cada sesión tiene N `WelfareIndicator`,
+// uno por cada criterio Welfare Quality que se mide.
+//
+// Modelo común a Welfair (IRTA + NEIKER) y PAWS (PROVACUNO). Se
+// diferencian en el `protocol` y en algunos pesos al puntuar, pero la
+// estructura de 4 principios × 12 criterios es la misma porque ambos
+// están construidos sobre Welfare Quality®.
+model WelfareAssessment {
+    id            String   @id @default(cuid())
+    farmId        String
+    farm          Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+    date          DateTime @default(now())
+    protocol      String   // 'welfair' | 'paws'
+    status        String   @default("preparando") // preparando | lista | auditada | aprobada | rechazada
+    auditorName   String?
+    /// Score 0-100 global agregado por el motor.
+    overallScore  Float?
+    notes         String?
+    createdBy     String?  // userId
+
+    createdAt     DateTime @default(now())
+    updatedAt     DateTime @updatedAt
+
+    indicators    WelfareIndicator[]
+
+    @@index([farmId])
+    @@index([farmId, date])
+}
+
+// Una fila por (assessment, indicatorCode). Cada indicador pertenece a
+// un criterio (C1-C12) que a su vez pertenece a un principio (1-4).
+//
+// El valor se guarda en uno de los tres campos según el tipo:
+//   - valueNumeric: BCS, % cojeras, m² por cabeza, etc.
+//   - valueText: respuestas categóricas ("sí/no", "diario/semanal", QBA…)
+//   - valueBool: tests pasa/no-pasa.
+//
+// `source` distingue lo que viene auto-precomputado por motor (`auto`)
+// vs lo introducido manualmente por el ganadero (`manual`). El motor
+// nunca pisa valores manuales.
+//
+// `score` (0-100) lo asigna `welfareEngine.scoreAssessment()` tras la
+// evaluación; se persiste para no recalcular en cada lectura.
+model WelfareIndicator {
+    id              String   @id @default(cuid())
+    assessmentId    String
+    assessment      WelfareAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+    principle       Int      // 1..4
+    criterion       String   // 'C1' ... 'C12'
+    indicatorCode   String   // ej. 'BCS_HERD', 'WATER_FLOW', 'LAMENESS_PCT', 'QBA'
+
+    valueNumeric    Float?
+    valueText       String?
+    valueBool       Boolean?
+    score           Float?   // 0-100
+    /// Estado de cumplimiento: 'excelente' | 'aceptable' | 'mejorable' | 'alarmante' | 'sin_dato'
+    status          String   @default("sin_dato")
+    /// Origen del valor — 'auto' (motor) o 'manual' (introducido).
+    source          String   @default("manual")
+    notes           String?
+    /// Fotos / documentos como evidencia (URLs en /uploads).
+    evidenceUrls    String[] @default([])
+
+    createdAt       DateTime @default(now())
+    updatedAt       DateTime @updatedAt
+
+    @@unique([assessmentId, indicatorCode])
+    @@index([assessmentId])
+    @@index([assessmentId, principle])
+}
+
+// --- REGLAS DE ALERTA CONFIGURABLES -------------------------------------------
+//
+// El AlertEngine evalúa estas reglas en un cron nocturno y genera filas
+// en el modelo `Alert` existente. Cada AlertRule tiene un `kind` que el
+// motor entiende y `params` JSON con los umbrales.
+//
+// kinds soportados (Sprint 1.3):
+//   - hembras_a_parir       → params: { daysAhead: 7 }
+//   - sin_pesar             → params: { daysSince: 60 }
+//   - perdiendo_peso        → params: { weeksOfLoss: 2, thresholdPct: 5 }
+//   - retiro_vencido        → params: { warnDaysBefore: 3 }
+//   - saneamiento_proximo   → params: { daysAhead: 14 }
+//   - carga_excedida        → params: { tolerancePct: 10 }
+model AlertRule {
+  id          String   @id @default(cuid())
+  farmId      String
+  farm        Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  kind        String
+  enabled     Boolean  @default(true)
+  paramsJson  String   @default("{}")
+  severity    String   @default("warning") // info | warning | critical
+  channels    String[] @default(["app"])   // app | email (futuro)
+
+  lastEvalAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([farmId, kind])
+  @@index([farmId])
 }
