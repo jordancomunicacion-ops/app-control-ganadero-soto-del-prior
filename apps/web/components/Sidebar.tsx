@@ -7,8 +7,16 @@ import {
     MapPin,
     Beef,
     Calendar,
+    CalendarDays,
     Wheat,
     BarChart3,
+    Bell,
+    Heart,
+    Award,
+    Stethoscope,
+    Sparkles,
+    Sprout,
+    Upload,
     User,
     Users,
     LogOut,
@@ -53,7 +61,12 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole, mobileOpen
             items: [
                 { id: 'home', label: 'Inicio', icon: Home },
                 { id: 'animals', label: 'Animales', icon: Beef },
+                { id: 'health', label: 'Sanidad', icon: Stethoscope },
+                { id: 'reproduction', label: 'Reproducción', icon: Heart },
+                { id: 'grazing', label: 'Pastoreo', icon: Sprout },
+                { id: 'forage', label: 'Calendario', icon: CalendarDays },
                 { id: 'events', label: 'Eventos', icon: Calendar },
+                { id: 'alerts', label: 'Alertas', icon: Bell },
                 { id: 'calculator', label: 'Nutrición', icon: Wheat },
             ],
         },
@@ -62,6 +75,9 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole, mobileOpen
             items: [
                 { id: 'farms', label: 'Fincas', icon: MapPin },
                 { id: 'reports', label: 'Reportes', icon: BarChart3 },
+                { id: 'welfare', label: 'Bienestar', icon: Award },
+                { id: 'simulate', label: 'Simulación', icon: Sparkles },
+                { id: 'import', label: 'Importar', icon: Upload },
             ],
         },
         {
@@ -86,7 +102,7 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole, mobileOpen
         }
 
         // Fallback for users without permissions set yet (allow basics)
-        return ['home', 'farms', 'animals', 'events', 'calculator'].includes(id);
+        return ['home', 'farms', 'animals', 'events', 'calculator', 'alerts', 'health', 'simulate', 'import', 'grazing', 'reproduction', 'welfare', 'forage'].includes(id);
     };
 
     const visibleGroups = navGroups

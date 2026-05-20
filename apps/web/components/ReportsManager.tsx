@@ -14,6 +14,12 @@ import {
 } from '@/app/lib/reports-actions';
 import { getFarms } from '@/app/lib/farm-actions';
 import { Download, X, Loader2, ChevronDown, ChevronUp, Coins, LineChart, Dna, AlertTriangle } from 'lucide-react';
+import {
+    BarChart,
+    DonutChart,
+    LineChart as LineChartSVG,
+    ScatterChart,
+} from './charts';
 
 type ReportKind = 'economic' | 'reproductive' | 'fcr';
 type FarmOption = { id: string; name: string };
@@ -480,6 +486,51 @@ function EconomicReportModal({ farms, onClose }: { farms: FarmOption[]; onClose:
                         <Kpi label="Inventario" value={eur(data.inventory.totalEstValueEur)} sub={`${data.inventory.totalCount} cabezas activas`} />
                     </div>
 
+                    {/* Gráficas: comparación ingresos/costes y composición */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                        <Section title="Ingresos vs Costes">
+                            <BarChart
+                                categories={['Animales', 'Cultivos', 'PAC', 'Eventos', 'Mortalidad']}
+                                series={[
+                                    {
+                                        label: 'Ingresos',
+                                        color: '#16a34a',
+                                        values: [
+                                            data.income.animalSales.totalEur,
+                                            data.income.cropSales.totalEur,
+                                            data.income.pacAids.totalEur,
+                                            0,
+                                            0,
+                                        ],
+                                    },
+                                    {
+                                        label: 'Costes',
+                                        color: '#dc2626',
+                                        values: [
+                                            0,
+                                            0,
+                                            0,
+                                            data.costs.events.reduce((a, e) => a + e.totalEur, 0),
+                                            data.costs.mortality.estimatedLossEur,
+                                        ],
+                                    },
+                                ]}
+                                formatValue={(v) => eur(v)}
+                            />
+                        </Section>
+                        <Section title="Composición de ingresos">
+                            <DonutChart
+                                slices={[
+                                    { label: 'Ventas animales', value: data.income.animalSales.totalEur, color: '#16a34a' },
+                                    { label: 'Cultivos', value: data.income.cropSales.totalEur, color: '#f59e0b' },
+                                    { label: 'PAC', value: data.income.pacAids.totalEur, color: '#0ea5e9' },
+                                ]}
+                                centerLabel={eur(data.income.total)}
+                                formatValue={(v) => eur(v)}
+                            />
+                        </Section>
+                    </div>
+
                     {/* Ingresos detalle */}
                     <Section title="Ingresos">
                         <DetailTable rows={[
@@ -686,6 +737,37 @@ function ReproductiveReportModal({ farms, onClose }: { farms: FarmOption[]; onCl
                         <Kpi label="Abortos" value={data.summary.abortions} color={data.summary.abortions > 0 ? 'red' : 'gray'} />
                     </div>
 
+                    {/* Gráficas reproductivas */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                        <Section title="Composición del rebaño reproductor">
+                            <DonutChart
+                                slices={[
+                                    { label: 'Vacas nodrizas', value: data.summary.nurseCows, color: '#16a34a' },
+                                    { label: 'Novillas', value: data.summary.heifers, color: '#f59e0b' },
+                                ]}
+                                centerLabel={String(data.summary.activeFemales)}
+                            />
+                        </Section>
+                        <Section title="Resultados de inseminaciones">
+                            <BarChart
+                                categories={['Diag. +', 'Diag. -', 'Partos', 'Abortos']}
+                                series={[
+                                    {
+                                        label: 'Casos',
+                                        color: '#0ea5e9',
+                                        values: [
+                                            data.summary.diagnosesPositive,
+                                            data.summary.diagnosesNegative,
+                                            data.summary.births,
+                                            data.summary.abortions,
+                                        ],
+                                    },
+                                ]}
+                                formatValue={(v) => v.toFixed(0)}
+                            />
+                        </Section>
+                    </div>
+
                     {/* Saneamiento */}
                     <Section title="Estado sanitario">
                         {data.sanitary.lastSaneamiento ? (
@@ -848,6 +930,32 @@ function FCRReportModal({ farms, onClose }: { farms: FarmOption[]; onClose: () =
                     <p className="text-[11px] italic text-gray-500 leading-snug">
                         El GMD se calcula con los pesajes reales registrados en los últimos 6 meses (precisión <em>pesajes</em>). Si no hay historial, se usa una estimación por edad (<em>estimado_breed</em>) — para mejorar, registra pesajes mensuales en cada animal.
                     </p>
+
+                    {/* Gráficas: peso vs GMD para detectar atípicos */}
+                    {data.animals.some((a) => a.gmdKgDay != null && a.currentWeightKg != null) && (
+                        <Section title="Peso actual vs GMD (cada punto = un animal)">
+                            <ScatterChart
+                                points={data.animals
+                                    .filter((a) => a.gmdKgDay != null && a.currentWeightKg != null)
+                                    .map((a) => ({
+                                        x: a.currentWeightKg ?? 0,
+                                        y: a.gmdKgDay ?? 0,
+                                        label: a.id,
+                                        color:
+                                            a.gmdSource === 'pesajes'
+                                                ? '#16a34a'
+                                                : '#94a3b8',
+                                    }))}
+                                xLabel="Peso (kg)"
+                                yLabel="GMD (kg/día)"
+                                formatX={(v) => `${v.toFixed(0)} kg`}
+                                formatY={(v) => `${v.toFixed(2)}`}
+                            />
+                            <p className="text-[11px] italic text-gray-500 mt-1">
+                                Verde = GMD con pesajes reales · Gris = estimado por raza/edad.
+                            </p>
+                        </Section>
+                    )}
 
                     <Section title="Detalle por animal">
                         {data.animals.length === 0 ? (

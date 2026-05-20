@@ -2,14 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useStorage } from '@/context/StorageContext';
-import { LifecycleEngine } from '@/services/lifecycleEngine';
 import { createEvent, getEvents } from '@/app/lib/event-actions';
 import { getFarms } from '@/app/lib/farm-actions';
 import { getAnimals } from '@/app/lib/animal-actions';
 import { glossary } from '@/lib/glossary';
 import type { AnimalLike, FarmLike, LivestockEvent } from '@/types/livestock';
 import { useUi } from '@/components/Toast';
-import { Bell, Plus, Calendar, PlusCircle } from 'lucide-react';
+import { Plus, Calendar, PlusCircle } from 'lucide-react';
 
 // Mapeo de tipo de evento (visible en el dropdown) → clave del glosario.
 const EVENT_TYPE_GLOSSARY: Record<string, string> = {
@@ -20,16 +19,16 @@ const EVENT_TYPE_GLOSSARY: Record<string, string> = {
     'Diagnóstico Gestación': 'event_diagnostico',
 };
 
-type LifecycleAlert = ReturnType<typeof LifecycleEngine.getLifecycleAlerts>[number] & {
-    crotal?: string;
-    farm?: string;
-};
-
+// Eventos creables desde EventsList. Los tipos REPRODUCTIVOS y SANITARIOS
+// se gestionan exclusivamente desde sus módulos dedicados (Reproducción y
+// Sanidad) para evitar duplicidad de datos y para activar la lógica
+// específica de cada uno (programación en cascada, retirada automática,
+// kardex…). EventsList queda como timeline histórico + altas para los
+// movimientos genéricos y la productividad básica.
 const EVENT_TYPES = {
-    'Sanitario': ['Saneamiento', 'Tratamiento', 'Vacunación', 'Desparasitación', 'Consulta Vet'],
-    'Reproductivo': ['Celo', 'Inseminación', 'Diagnóstico Gestación', 'Parto', 'Aborto', 'Secado'],
-    'Productivo': ['Pesaje', 'Condición Corporal', 'Ordeño (Pendiente)'],
-    'Movimientos': ['Cambio de Corral', 'Entrada', 'Salida', 'Venta', 'Muerte/Sacrificio']
+    'Productivo': ['Pesaje', 'Condición Corporal'],
+    'Movimientos': ['Cambio de Corral', 'Entrada', 'Salida', 'Venta', 'Muerte/Sacrificio'],
+    'Otros': ['Observación', 'Manejo'],
 };
 
 export function EventsList({ userId }: { userId?: string }) {
@@ -43,8 +42,8 @@ export function EventsList({ userId }: { userId?: string }) {
 
     const [showModal, setShowModal] = useState(false);
     const [newEvent, setNewEvent] = useState({
-        category: 'Sanitario',
-        type: 'Saneamiento',
+        category: 'Productivo',
+        type: 'Pesaje',
         date: new Date().toISOString().split('T')[0],
         formattedDate: new Date().toISOString().split('T')[0], // For input
         notes: '',
@@ -66,7 +65,6 @@ export function EventsList({ userId }: { userId?: string }) {
     const [animals, setAnimals] = useState<AnimalLike[]>([]);
     const [sessionUser, setSessionUser] = useState('');
 
-    const [alerts, setAlerts] = useState<LifecycleAlert[]>([]);
 
     // Initial fetch on mount / page change. setState inside an effect is the
     // standard React pattern for data-fetching when not using SWR / TanStack Query.
@@ -91,21 +89,9 @@ export function EventsList({ userId }: { userId?: string }) {
                 if (cancelled) return;
                 const animalsAsLike = dbAnimals as unknown as AnimalLike[];
                 setAnimals(animalsAsLike);
-
-                const newAlerts: LifecycleAlert[] = [];
-                animalsAsLike.forEach((animal) => {
-                    // LifecycleEngine requires a well-formed Animal; fall back to any[] for the
-                    // legacy localStorage payloads that drift from the strict shape.
-                    const animalAlerts = LifecycleEngine.getLifecycleAlerts({
-                        ...animal,
-                        birthDate: animal.birth,
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    } as any);
-                    if (animalAlerts.length > 0) {
-                        newAlerts.push(...animalAlerts.map(a => ({ ...a, crotal: animal.crotal, farm: animal.farm })));
-                    }
-                });
-                setAlerts(newAlerts);
+                // Las alertas de ciclo de vida (destete, castración) viven
+                // ahora en la pestaña Alertas — AlertEngine las evalúa con
+                // reglas configurables (`destete_proximo`, `castracion_decision`).
             }).catch(() => { /* noop */ });
         }
 
@@ -195,8 +181,8 @@ export function EventsList({ userId }: { userId?: string }) {
 
             // Reset form
             setNewEvent({
-                category: 'Sanitario',
-                type: 'Saneamiento',
+                category: 'Productivo',
+                type: 'Pesaje',
                 date: new Date().toISOString().split('T')[0],
                 formattedDate: new Date().toISOString().split('T')[0],
                 notes: '',
@@ -219,28 +205,10 @@ export function EventsList({ userId }: { userId?: string }) {
 
     return (
         <div className="space-y-6">
-            {alerts.length > 0 && (
-                <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 animate-in slide-in-from-top-2">
-                    <h3 className="text-orange-800 font-bold flex items-center gap-2 text-sm mb-3">
-                        <Bell className="w-5 h-5" /> Alertas del ciclo de vida
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {alerts.map((alert, i) => (
-                            <div key={i} className="bg-white p-3 rounded-lg border border-orange-100 shadow-sm flex justify-between items-center text-sm">
-                                <div>
-                                    <span className="font-bold text-gray-800">{alert.desc}</span>
-                                    <p className="text-xs text-gray-500">Animal: {alert.crotal} ({alert.farm})</p>
-                                </div>
-                                <div className="text-right">
-                                    <span className={`text-xs font-bold px-2 py-1 rounded ${alert.isDue ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
-                                        {alert.date}
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+            {/* El panel de "Alertas del ciclo de vida" se ha unificado con
+                el motor general de alertas (pestaña Alertas). Las reglas
+                `destete_proximo` y `castracion_decision` cubren los avisos
+                de edad que antes estaban duplicados aquí. */}
 
             <div className="flex justify-between items-center">
 
@@ -266,6 +234,20 @@ export function EventsList({ userId }: { userId?: string }) {
                         </div>
 
                         <div className="p-6 space-y-4">
+                            <div className="bg-sky-50 border border-sky-100 rounded-lg p-3 text-xs text-sky-800">
+                                <p className="font-bold mb-1">¿Es un evento reproductivo o sanitario?</p>
+                                <p>
+                                    Las <strong>inseminaciones, partos, diagnósticos y abortos</strong> se registran
+                                    desde la pestaña <strong>Reproducción</strong> — al crearlos allí, los hitos
+                                    futuros (diagnóstico a +45 días, parto previsto a +283, destete a +210) se
+                                    programan en cascada automáticamente.
+                                </p>
+                                <p className="mt-1">
+                                    Los <strong>tratamientos, vacunas y saneamientos</strong> se registran desde
+                                    la pestaña <strong>Sanidad</strong> — así se calcula la retirada de carne
+                                    automáticamente y alimenta el kardex y el libro de costes.
+                                </p>
+                            </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fecha</label>

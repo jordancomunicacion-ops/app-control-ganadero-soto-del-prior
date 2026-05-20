@@ -1,0 +1,44 @@
+{
+    "name": "Soto del Prior — Control Ganadero",
+    "short_name": "SOTO Ganadero",
+    "description": "Gestión avanzada de ganadería: PAC, SIGPAC, huella IPCC, sanidad, hoja de vida y bienestar animal.",
+    "id": "/dashboard",
+    "start_url": "/dashboard",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "any",
+    "lang": "es",
+    "theme_color": "#16a34a",
+    "background_color": "#ffffff",
+    "icons": [
+        {
+            "src": "/logo-icon.png",
+            "sizes": "any",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/logo-full.png",
+            "sizes": "any",
+            "type": "image/png"
+        }
+    ],
+    "categories": ["productivity", "business", "utilities"],
+    "shortcuts": [
+        {
+            "name": "Animales",
+            "url": "/dashboard?tab=animals",
+            "description": "Inventario animal"
+        },
+        {
+            "name": "Sanidad",
+            "url": "/dashboard?tab=health",
+            "description": "Registro sanitario"
+        },
+        {
+            "name": "Alertas",
+            "url": "/dashboard?tab=alerts",
+            "description": "Alertas del rebaño"
+        }
+    ]
+}

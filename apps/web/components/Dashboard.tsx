@@ -6,6 +6,7 @@ import { WeatherService, type DailyForecast } from '@/services/weatherService';
 import { EventManager } from '@/services/eventManager';
 import { SoilEngine, estimateCarryingCapacity } from '@/services/soilEngine';
 import { InfoTip } from '@/components/InfoTip';
+import { KPIScoreboard } from '@/components/KPIScoreboard';
 import { getFarms } from '@/app/lib/farm-actions';
 import { getAnimals } from '@/app/lib/animal-actions';
 import { getCorralStocking, type CorralStockingRow } from '@/app/lib/corral-actions';
@@ -271,10 +272,6 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
         Object.values(animalStats.males).reduce((a, b) => a + b, 0) +
         Object.values(animalStats.females).reduce((a, b) => a + b, 0);
 
-    const criticalCount = stocking.filter((s) => s.status === 'critical').length;
-    const warningCount = stocking.filter((s) => s.status === 'warning').length;
-    const alertCount = criticalCount + warningCount;
-
     const isEmpty = farmsList.length === 0 && totalActiveAnimals === 0;
 
     return (
@@ -308,15 +305,11 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
                 </div>
             )}
 
-            {/* KPI strip — solo cuando hay datos */}
-            {!isEmpty && (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    <KpiCard label="Fincas" value={farmsList.length} Icon={MapPin} accent="text-emerald-600 bg-emerald-50" onClick={() => onNavigate?.('farms')} />
-                    <KpiCard label="Cabezas activas" value={totalActiveAnimals} Icon={Beef} accent="text-sky-600 bg-sky-50" onClick={() => onNavigate?.('animals')} />
-                    <KpiCard label="Eventos próximos" value={upcomingEvents.length} Icon={Calendar} accent="text-violet-600 bg-violet-50" onClick={() => onNavigate?.('events')} />
-                    <KpiCard label="Avisos de carga" value={alertCount} Icon={Bell} accent={alertCount > 0 ? 'text-amber-600 bg-amber-50' : 'text-gray-400 bg-gray-50'} />
-                </div>
-            )}
+            {/* Cuadro de mando ejecutivo con semáforo (rojo/ámbar/verde).
+                Sustituye al strip de 4 cards básicas anterior — éste ya
+                cubre cabezas, alertas activas y muchos más KPIs con
+                drill-down y umbrales operativos. */}
+            {!isEmpty && <KPIScoreboard onDrilldown={onNavigate} />}
 
             {/* 1. CARGA GANADERA + alertas — prioridad operativa */}
             {stocking.length > 0 && (
