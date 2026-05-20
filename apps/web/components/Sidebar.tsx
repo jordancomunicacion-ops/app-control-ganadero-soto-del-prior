@@ -64,7 +64,6 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole, mobileOpen
                 { id: 'health', label: 'Sanidad', icon: Stethoscope },
                 { id: 'reproduction', label: 'Reproducción', icon: Heart },
                 { id: 'grazing', label: 'Pastoreo', icon: Sprout },
-                { id: 'forage', label: 'Calendario', icon: CalendarDays },
                 { id: 'events', label: 'Eventos', icon: Calendar },
                 { id: 'calculator', label: 'Nutrición', icon: Wheat },
             ],
@@ -74,20 +73,16 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userRole, mobileOpen
             items: [
                 { id: 'farms', label: 'Fincas', icon: MapPin },
                 { id: 'reports', label: 'Reportes', icon: BarChart3 },
+                { id: 'forage', label: 'Calendario', icon: CalendarDays },
                 { id: 'welfare', label: 'Bienestar', icon: Award },
                 { id: 'simulate', label: 'Simulación', icon: Sparkles },
                 { id: 'import', label: 'Importar', icon: Upload },
             ],
         },
         {
-            label: 'Configuración',
-            items: [
-                { id: 'alerts', label: 'Avisos', icon: Bell },
-            ],
-        },
-        {
             label: 'Administración',
             items: [
+                { id: 'alerts', label: 'Avisos', icon: Bell },
                 { id: 'users', label: 'Equipo', icon: Users },
             ],
         },
