@@ -305,12 +305,6 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
                 </div>
             )}
 
-            {/* Cuadro de mando ejecutivo con semáforo (rojo/ámbar/verde).
-                Sustituye al strip de 4 cards básicas anterior — éste ya
-                cubre cabezas, alertas activas y muchos más KPIs con
-                drill-down y umbrales operativos. */}
-            {!isEmpty && <KPIScoreboard onDrilldown={onNavigate} />}
-
             {/* 1. CARGA GANADERA + alertas — prioridad operativa */}
             {stocking.length > 0 && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
@@ -452,7 +446,13 @@ export function Dashboard({ onNavigate, userId }: { onNavigate?: (tab: string) =
                 </div>
             )}
 
-            {/* 2. Acciones rápidas + próximos eventos */}
+            {/* 2. Cuadro de mando ejecutivo con semáforo (rojo/ámbar/verde).
+                Sustituye al strip de 4 cards básicas anterior — éste ya
+                cubre cabezas, alertas activas y muchos más KPIs con
+                drill-down y umbrales operativos. */}
+            {!isEmpty && <KPIScoreboard onDrilldown={onNavigate} />}
+
+            {/* 3. Acciones rápidas + próximos eventos */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Quick Actions */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
